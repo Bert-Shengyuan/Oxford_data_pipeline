@@ -1067,29 +1067,42 @@ def create_oxford_configuration():
     """Create configuration for Oxford analysis pipeline."""
     config = {
         'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_cued_hit_long_results",
-        'session_name': "yp021_220405",  # yp013_220211  yp014_220212 yp021_220405
+        #'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_spont_short_results",
+
+
+        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_cued',
+        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_spont',
+        'session_name': "yp021_220405",  # yp013_220211  yp014_220212 yp021_220405 yp021_220331
+
         'region_pairs': [
-            ('ORB', 'mPFC'),
-            ('ORB', 'MOp'),
-            ('ORB', 'MOs'),
             ('ORB', 'STR'),
-            ('ORB', 'OLF'),
-            ('mPFC', 'MOp'),
-            ('mPFC', 'MOs'),
-            ('mPFC', 'OLF'),
             ('mPFC', 'STR'),
-            ('MOp', 'MOs'),
-            ('MOp', 'OLF'),
             ('MOp', 'STR'),
-            ('MOs', 'OLF'),
             ('MOs', 'STR'),
-            ('OLF', 'STR'),
-            ('MOs', 'fiber'),
-            ('MOp', 'fiber'),
-            ('OLF', 'fiber'),
-            ('ORB', 'fiber'),
-            ('STR', 'fiber')
+            ('MOp', 'MOs')
         ],
+        # 'region_pairs': [
+        #     ('ORB', 'mPFC'),
+        #     ('ORB', 'MOp'),
+        #     ('ORB', 'MOs'),
+        #     ('ORB', 'STR'),
+        #     ('ORB', 'OLF'),
+        #     ('mPFC', 'MOp'),
+        #     ('mPFC', 'MOs'),
+        #     ('mPFC', 'OLF'),
+        #     ('mPFC', 'STR'),
+        #     ('MOp', 'MOs'),
+        #     ('MOp', 'OLF'),
+        #     ('MOp', 'STR'),
+        #     ('MOs', 'OLF'),
+        #     ('MOs', 'STR'),
+        #     ('OLF', 'STR'),
+        #     ('MOs', 'fiber'),
+        #     ('MOp', 'fiber'),
+        #     ('OLF', 'fiber'),
+        #     ('ORB', 'fiber'),
+        #     ('STR', 'fiber')
+        # ],
         # 'region_pairs': [
         #     ('ORB', 'STR')
         # ],
@@ -1097,7 +1110,7 @@ def create_oxford_configuration():
         #     ('ORB', 'mPFC')
         # ],
         'n_components_visualize': 3,
-        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis',
+
     }
 
     return config
