@@ -54,7 +54,8 @@ class OxfordMultiComponentVisualizer:
                  region_order: Optional[List[str]] = None,
                  analysis_type: str = 'CCA'):
         self.base_results_dir = Path(base_results_dir)
-        self.cca_results_dir = self.base_results_dir / "sessions_cued_hit_long_results"
+        self.cca_results_dir = self.base_results_dir / "sessions_cued_hit_long_results" #cued state
+        self.cca_results_dir = self.base_results_dir / "sessions_spont_short_results" #spont state
         self.pca_results_dir = self.cca_results_dir
         self.n_components = n_components
         self.analysis_type = analysis_type.upper()
@@ -68,7 +69,7 @@ class OxfordMultiComponentVisualizer:
         if self.analysis_type not in ['CCA', 'PCA']:
             raise ValueError("analysis_type must be either 'CCA' or 'PCA'")
 
-    def load_oxford_session_data(self, min_sessions: int = 5):
+    def load_oxford_session_data(self):
         """Load analysis results with proper handling of structural differences."""
         print(f"Loading Oxford {self.analysis_type} results...")
 
@@ -233,11 +234,11 @@ class OxfordMultiComponentVisualizer:
                         self.region_data[pair_key]['projections'][comp_idx].append(projection_data)
 
                         # Use explained variance as R² proxy for PCA
-                        if 'explained' in region1_data and 'explained' in region2_data:
-                            exp1 = region1_data['explained']
-                            exp2 = region2_data['explained']
+                        if 'explained_variance' in region1_data and 'explained_variance' in region2_data:
+                            exp1 = region1_data['explained_variance']
+                            exp2 = region2_data['explained_variance']
                             avg_exp = (float(exp1[comp_idx]) + float(exp2[comp_idx])) / 2.0
-                            self.region_data[pair_key]['R2_values'][comp_idx].append(avg_exp / 100.0)
+                            self.region_data[pair_key]['R2_values'][comp_idx].append(avg_exp/100)
                         else:
                             self.region_data[pair_key]['R2_values'][comp_idx].append(0.0)
 
@@ -454,7 +455,8 @@ class OxfordMultiComponentVisualizer:
 def main():
     """Demonstration of corrected CCA and PCA visualization."""
     base_dir = '/Users/shengyuancai/Downloads/Oxford_dataset'
-    output_dir = Path(base_dir) / 'Paper_output' / 'figures'
+    output_dir = Path(base_dir) / 'Paper_output' / 'figures_spontaneous'
+    output_dir = Path(base_dir) / 'Paper_output' / 'figures_cued'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Corrected CCA/PCA Visualization")
@@ -467,24 +469,24 @@ def main():
         n_components=5,
         analysis_type='CCA'
     )
-    cca_viz.load_oxford_session_data(min_sessions=2)
+    cca_viz.load_oxford_session_data()
     cca_viz.create_component_figures(
-        figsize=(60, 24),
+        figsize=(40, 40),
         save_path=str(output_dir / "oxford_merged")
     )
 
-    # PCA
-    # print("\nGenerating PCA...")
-    # pca_viz = OxfordMultiComponentVisualizer(
-    #     base_results_dir=base_dir,
-    #     n_components=5,
-    #     analysis_type='PCA'
-    # )
-    # pca_viz.load_oxford_session_data(min_sessions=1)
-    # pca_viz.create_component_figures(
-    #     figsize=(40, 40),
-    #     save_path=str(output_dir / "oxford_merged")
-    # )
+    #PCA
+    print("\nGenerating PCA...")
+    pca_viz = OxfordMultiComponentVisualizer(
+        base_results_dir=base_dir,
+        n_components=5,
+        analysis_type='PCA'
+    )
+    pca_viz.load_oxford_session_data()
+    pca_viz.create_component_figures(
+        figsize=(40, 40),
+        save_path=str(output_dir / "oxford_merged")
+    )
 
     print("\nComplete!")
 
