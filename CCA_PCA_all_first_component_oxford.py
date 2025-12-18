@@ -84,11 +84,11 @@ class OxfordMultiComponentVisualizer:
         if not self.cca_results_dir.exists():
             raise ValueError(f"CCA results directory not found: {self.cca_results_dir}")
 
-        cca_files = list(self.cca_results_dir.glob("*_cca_results.mat"))
+        cca_files = list(self.cca_results_dir.glob("*_analysis_results.mat"))
         print(f"Found {len(cca_files)} session CCA result files")
 
         for cca_file in cca_files:
-            session_name = cca_file.stem.replace("_cca_results", "")
+            session_name = cca_file.stem.replace("_analysis_results", "")
             print(f"Processing CCA session: {session_name}")
 
             try:
@@ -249,10 +249,10 @@ class OxfordMultiComponentVisualizer:
     def _extract_cca_projections(self, pair_data, pair_key, session_name):
         """Extract CCA canonical projections."""
         try:
-            if 'canonical_projections' not in pair_data:
+            if 'projections' not in pair_data:
                 return
 
-            projections = pair_data['canonical_projections']
+            projections = pair_data['projections']['components']
 
             if 'cv_results' in pair_data:
                 cv_results = pair_data['cv_results']
@@ -268,23 +268,19 @@ class OxfordMultiComponentVisualizer:
                         )
 
             for comp_idx in range(min(self.n_components, len(projections))):
-                comp_proj = projections[comp_idx]
+                comp_proj = projections[comp_idx][0]
 
                 if isinstance(comp_proj, dict):
-                    region1_proj = self._extract_projection(comp_proj, 'region1_projection')
-                    region2_proj = self._extract_projection(comp_proj, 'region2_projection')
+                    region1_proj = self._extract_projection(comp_proj, 'region_i_mean')
+                    region2_proj = self._extract_projection(comp_proj, 'region_j_mean')
 
-                    if region1_proj is not None and region2_proj is not None:
-                        region1_mean = np.mean(region1_proj, axis=0)
-                        region2_mean = np.mean(region2_proj, axis=0)
+                    projection_data = {
+                        'region1_mean': region1_proj,
+                        'region2_mean': region2_proj,
+                        'session': session_name
+                    }
 
-                        projection_data = {
-                            'region1_mean': region1_mean,
-                            'region2_mean': region2_mean,
-                            'session': session_name
-                        }
-
-                        self.region_data[pair_key]['projections'][comp_idx].append(projection_data)
+                    self.region_data[pair_key]['projections'][comp_idx].append(projection_data)
 
             self.region_data[pair_key]['session_info'].append(session_name)
 
@@ -465,30 +461,30 @@ def main():
     print("=" * 60)
 
     # CCA
-    # print("\nGenerating CCA...")
-    # cca_viz = OxfordMultiComponentVisualizer(
-    #     base_results_dir=base_dir,
-    #     n_components=5,
-    #     analysis_type='CCA'
-    # )
-    # cca_viz.load_oxford_session_data(min_sessions=2)
-    # cca_viz.create_component_figures(
-    #     figsize=(60, 24),
-    #     save_path=str(output_dir / "oxford_merged")
-    # )
-
-    # PCA
-    print("\nGenerating PCA...")
-    pca_viz = OxfordMultiComponentVisualizer(
+    print("\nGenerating CCA...")
+    cca_viz = OxfordMultiComponentVisualizer(
         base_results_dir=base_dir,
         n_components=5,
-        analysis_type='PCA'
+        analysis_type='CCA'
     )
-    pca_viz.load_oxford_session_data(min_sessions=1)
-    pca_viz.create_component_figures(
-        figsize=(40, 40),
+    cca_viz.load_oxford_session_data(min_sessions=2)
+    cca_viz.create_component_figures(
+        figsize=(60, 24),
         save_path=str(output_dir / "oxford_merged")
     )
+
+    # PCA
+    # print("\nGenerating PCA...")
+    # pca_viz = OxfordMultiComponentVisualizer(
+    #     base_results_dir=base_dir,
+    #     n_components=5,
+    #     analysis_type='PCA'
+    # )
+    # pca_viz.load_oxford_session_data(min_sessions=1)
+    # pca_viz.create_component_figures(
+    #     figsize=(40, 40),
+    #     save_path=str(output_dir / "oxford_merged")
+    # )
 
     print("\nComplete!")
 
