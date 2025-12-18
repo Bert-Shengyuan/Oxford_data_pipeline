@@ -113,7 +113,7 @@ class OxfordIntegratedAnalysisPipeline:
 
         try:
             # Load the session analysis results file
-            results_file = Path(self.config['base_results_dir']) / "sessions_analysis_results" / \
+            results_file = Path(self.config['base_results_dir']) / \
                            f"{self.config['session_name']}_analysis_results.mat"
 
             if not results_file.exists():
@@ -452,7 +452,10 @@ class OxfordIntegratedAnalysisPipeline:
                     elif isinstance(std_data, (list, tuple)):
                         std_proj = np.array(std_data).flatten()
 
-            return mean_proj, std_proj / 36
+            if 'components' in projections:
+                trial_size = projections['components'][0][0].shape[0]
+                std_proj =  std_proj / np.sqrt(trial_size)
+            return mean_proj, std_proj
 
         except Exception as e:
             print(f"  Error extracting PCA projection for {region_name}, comp {component_idx}: {e}")
@@ -499,8 +502,8 @@ class OxfordIntegratedAnalysisPipeline:
                             # cca_region1_mean = comp_data['region_i_mean'].flatten()
                             # cca_region2_mean = comp_data['region_j_mean'].flatten()
 
-                            cca_region1_std = comp_data['region_i_std'].flatten()
-                            cca_region2_std = comp_data['region_j_std'].flatten()
+                            cca_region1_std = comp_data['region_i_std'].flatten()/ np.sqrt(comp_data['region_i_trials'].shape[0])
+                            cca_region2_std = comp_data['region_j_std'].flatten()/ np.sqrt(comp_data['region_i_trials'].shape[0])
 
                             cca_r2 = comp_data['R2'].flatten()[0]
 
@@ -551,39 +554,57 @@ class OxfordIntegratedAnalysisPipeline:
 
                         # test = min(pca_abs1.min(), pca_abs2.min())
                         # Then, apply min-max normalization
-                        pca_normalized1 = (pca_abs1 - min(pca_abs1.min(), pca_abs2.min())) / (
-                                    max(pca_abs1.max(), pca_abs2.max()) - min(pca_abs1.min(), pca_abs2.min()))
-
-                        # Then, apply min-max normalization
-                        pca_normalized2 = (pca_abs2 - min(pca_abs1.min(), pca_abs2.min())) / (
-                                    max(pca_abs1.max(), pca_abs2.max()) - min(pca_abs1.min(), pca_abs2.min()))
+                        # pca_normalized1 = (pca_abs1 - min(pca_abs1.min(), pca_abs2.min())) / (
+                        #             max(pca_abs1.max(), pca_abs2.max()) - min(pca_abs1.min(), pca_abs2.min()))
+                        #
+                        # # Then, apply min-max normalization
+                        # pca_normalized2 = (pca_abs2 - min(pca_abs1.min(), pca_abs2.min())) / (
+                        #             max(pca_abs1.max(), pca_abs2.max()) - min(pca_abs1.min(), pca_abs2.min()))
 
                         if pca_region1_mean is not None:
-                            ax.plot(time_bins, pca_normalized1, 'b--', linewidth=2,
+                            ax.plot(time_bins, pca_abs1, 'b--', linewidth=2,
                                     label=f'{region1_name} (PCA)', alpha=0.7)
                             if pca_region1_std is not None:
                                 ax.fill_between(time_bins,
-                                                pca_normalized1 - pca_region1_std / 2.5,
-                                                pca_normalized1 + pca_region1_std / 2.5,
+                                                pca_abs1 - pca_region1_std,
+                                                pca_abs1 + pca_region1_std,
                                                 alpha=0.1, color='blue')
 
                         if pca_region2_mean is not None:
-                            ax.plot(time_bins, pca_normalized2, 'r--', linewidth=2,
+                            ax.plot(time_bins, pca_abs2, 'r--', linewidth=2,
                                     label=f'{region2_name} (PCA)', alpha=0.7)
                             if pca_region2_std is not None:
                                 ax.fill_between(time_bins,
-                                                pca_normalized2 - pca_region2_std / 2.5,
-                                                pca_normalized2 + pca_region2_std / 2.5,
+                                                pca_abs2 - pca_region2_std,
+                                                pca_abs2 + pca_region2_std,
                                                 alpha=0.1, color='red')
+
+                        # if pca_region1_mean is not None:
+                        #     ax.plot(time_bins, pca_normalized1, 'b--', linewidth=2,
+                        #             label=f'{region1_name} (PCA)', alpha=0.7)
+                        #     if pca_region1_std is not None:
+                        #         ax.fill_between(time_bins,
+                        #                         pca_normalized1 - pca_region1_std / 2.5,
+                        #                         pca_normalized1 + pca_region1_std / 2.5,
+                        #                         alpha=0.1, color='blue')
+                        #
+                        # if pca_region2_mean is not None:
+                        #     ax.plot(time_bins, pca_normalized2, 'r--', linewidth=2,
+                        #             label=f'{region2_name} (PCA)', alpha=0.7)
+                        #     if pca_region2_std is not None:
+                        #         ax.fill_between(time_bins,
+                        #                         pca_normalized2 - pca_region2_std / 2.5,
+                        #                         pca_normalized2 + pca_region2_std / 2.5,
+                        #                         alpha=0.1, color='red')
 
                     except Exception as e:
                         print(f"  Error extracting PCA data for {pair_key}: {e}")
 
                 # Behavioral markers
-                ax.axvline(x=0, color='green', linestyle='--', alpha=0.6, linewidth=2,
-                           label='Bar off')
-                ax.axvspan(0, 0.5, alpha=0.1, color='red', label='Reward Presence')
-                ax.axvspan(0.5, 1.5, alpha=0.1, color='blue', label='Reward Consumption')
+                ax.axvline(x=0, color='black', linestyle='--', alpha=0.6, linewidth=2)
+                ax.axvspan(0, 3, alpha=0.1, color='grey')
+                #ax.axvspan(0, 3, alpha=0.1, color='grey', label='After bar off')
+                #ax.axvspan(0.5, 1.5, alpha=0.1, color='blue', label='Reward Consumption')
 
                 # Formatting
                 ax.set_ylabel('Projection Magnitude', fontsize=foresize)
@@ -599,7 +620,7 @@ class OxfordIntegratedAnalysisPipeline:
                 ax.grid(True, alpha=0.3)
                 ax.set_xlim(-1.5, 3)
 
-                ax.set_ylim(-1, 5)
+                # ax.set_ylim(-1, 10)
                 # ax.set_ylim(-5, 5)
 
                 ax.tick_params(axis='both', labelsize=foresize)
@@ -1045,32 +1066,37 @@ class OxfordIntegratedAnalysisPipeline:
 def create_oxford_configuration():
     """Create configuration for Oxford analysis pipeline."""
     config = {
-        'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset",
-        'session_name': "yp013_220211",  # yp013_220211  yp014_220212
-        # 'region_pairs': [
-        #     ('ORB', 'MOp'),
-        #     ('ORB', 'MOs'),
-        #     ('ORB', 'STR'),
-        #     ('ORB', 'OLF'),
-        #     ('MOp', 'MOs'),
-        #     ('MOp', 'OLF'),
-        #     ('MOp', 'STR'),
-        #     ('MOs', 'OLF'),
-        #     ('MOs', 'STR'),
-        #     ('OLF', 'STR'),
-        #     ('MOs', 'fiber'),
-        #     ('MOp', 'fiber'),
-        #     ('OLF', 'fiber'),
-        #     ('ORB', 'fiber'),
-        #     ('STR', 'fiber')
-        # ],
+        'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_cued_hit_long_results",
+        'session_name': "yp021_220405",  # yp013_220211  yp014_220212 yp021_220405
         'region_pairs': [
-            ('ORB', 'STR')
+            ('ORB', 'mPFC'),
+            ('ORB', 'MOp'),
+            ('ORB', 'MOs'),
+            ('ORB', 'STR'),
+            ('ORB', 'OLF'),
+            ('mPFC', 'MOp'),
+            ('mPFC', 'MOs'),
+            ('mPFC', 'OLF'),
+            ('mPFC', 'STR'),
+            ('MOp', 'MOs'),
+            ('MOp', 'OLF'),
+            ('MOp', 'STR'),
+            ('MOs', 'OLF'),
+            ('MOs', 'STR'),
+            ('OLF', 'STR'),
+            ('MOs', 'fiber'),
+            ('MOp', 'fiber'),
+            ('OLF', 'fiber'),
+            ('ORB', 'fiber'),
+            ('STR', 'fiber')
         ],
+        # 'region_pairs': [
+        #     ('ORB', 'STR')
+        # ],
         # 'region_pairs': [
         #     ('ORB', 'mPFC')
         # ],
-        'n_components_visualize': 5,
+        'n_components_visualize': 3,
         'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis',
     }
 

@@ -54,8 +54,8 @@ class OxfordMultiComponentVisualizer:
                  region_order: Optional[List[str]] = None,
                  analysis_type: str = 'CCA'):
         self.base_results_dir = Path(base_results_dir)
-        self.cca_results_dir = self.base_results_dir / "sessions_analysis_results"
-        self.pca_results_dir = self.base_results_dir / "sessions_analysis_results"#Test_folder
+        self.cca_results_dir = self.base_results_dir / "sessions_cued_hit_long_results"
+        self.pca_results_dir = self.cca_results_dir
         self.n_components = n_components
         self.analysis_type = analysis_type.upper()
         self.region_data = {}
@@ -63,7 +63,7 @@ class OxfordMultiComponentVisualizer:
         self.time_vec = np.linspace(-1.5, 3.0, 226)
         self.region_order = region_order
         self.filtered_stats = {}
-        self.threshold = 7
+        self.threshold = 3
 
         if self.analysis_type not in ['CCA', 'PCA']:
             raise ValueError("analysis_type must be either 'CCA' or 'PCA'")
@@ -438,7 +438,7 @@ class OxfordMultiComponentVisualizer:
 
         ax.set_yticks(np.arange(0, 1, 1))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 150])
+        #ax.set_ylim([0, 150])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)

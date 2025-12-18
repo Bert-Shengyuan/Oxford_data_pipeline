@@ -270,7 +270,8 @@ class OxfordSingleSessionAnalyzer:
     #     print(f"\nGlobal rastermap complete: {len(model.isort)} neurons sorted")
     #     return self.global_rastermap_results
 
-    def perform_rastermap_analysis(self, n_clusters=10, n_PCs=200, locality=0.3):
+    # def perform_rastermap_analysis(self, n_clusters=10, n_PCs=200, locality=0.3):
+    def perform_rastermap_analysis(self):
         """
         Extract region-specific rastermap data from global sorting.
         For each region in the current pair, extracts the relevant indices
@@ -570,8 +571,8 @@ class OxfordSingleSessionAnalyzer:
             region1_name = self.region_pair[0]
             region2_name = self.region_pair[1]
 
-            weights[region1_name] = np.abs(comp_weights_A)
-            weights[region2_name] = np.abs(comp_weights_B)
+            # weights[region1_name] = np.abs(comp_weights_A)
+            # weights[region2_name] = np.abs(comp_weights_B)
 
             weights[region1_name] = comp_weights_A
             weights[region2_name] = comp_weights_B
@@ -614,7 +615,7 @@ class OxfordSingleSessionAnalyzer:
                     print(f"Component {component_idx} not available in PCA for {region_name}")
                     continue
 
-                weights[region_name]  = np.abs(components[:,component_idx].flatten())
+                # weights[region_name]  = np.abs(components[:,component_idx].flatten())
                 weights[region_name] = components[:, component_idx].flatten()
 
         except Exception as e:
@@ -773,7 +774,7 @@ def main_enhanced_oxford_analysis():
         # analyzer.compute_global_rastermap(n_clusters=10, n_PCs=200, locality=0.3)
 
         print("\nComputing region-specific rastermap...")
-        analyzer.perform_rastermap_analysis(n_clusters=10, n_PCs=200, locality=0.3)
+        analyzer.perform_rastermap_analysis()
 
         print("\nCreating dual CCA/PCA visualization...")
         for comp_idx in range(3):
