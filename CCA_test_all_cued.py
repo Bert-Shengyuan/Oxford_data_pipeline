@@ -50,13 +50,20 @@ sns.set_context("paper", font_scale=1.0)
 # =============================================================================
 # CANONICAL ANATOMICAL ORDERING
 # =============================================================================
+# ANATOMICAL_ORDER = [
+#     'mPFC', 'ORB', 'MOp', 'MOs', 'OLF',   # Cortical regions
+#     'STR', 'STRv', 'HIPP',  # Striatal & limbic
+#     'MD', 'LP', 'VALVM', 'VPMPO', 'ILM',  # Thalamic nuclei
+#     'HY',  # Hypothalamic
+#     'fiber',  # Fiber tracts
+#     'other'  # Catch-all category
+# ]
+
 ANATOMICAL_ORDER = [
     'mPFC', 'ORB', 'MOp', 'MOs', 'OLF',  # Cortical regions
-    'STR', 'STRv', 'HIPP',  # Striatal & limbic
+    'STR', 'STRv',  # Striatal & limbic
     'MD', 'LP', 'VALVM', 'VPMPO', 'ILM',  # Thalamic nuclei
-    'HY',  # Hypothalamic
-    'fiber',  # Fiber tracts
-    'other'  # Catch-all category
+    'HY'
 ]
 
 
@@ -390,7 +397,7 @@ class OxfordCCAVisualizer:
                 ax_mean, mean_matrix, ordered_regions,
                 title=f'Mean CV-$R^2$ [Comp {comp_idx + 1}]',
                 cmap='viridis',
-                vmin=0, vmax=None
+                vmin=0, vmax=0.6
             )
 
             # Plot std matrix (bottom row)
@@ -399,7 +406,7 @@ class OxfordCCAVisualizer:
                 ax_std, std_matrix, ordered_regions,
                 title=f'Std CV-$R^2$ [Comp {comp_idx + 1}]',
                 cmap='plasma',
-                vmin=0, vmax=None
+                vmin=0, vmax=0.2
             )
 
         # Add row labels
@@ -407,13 +414,13 @@ class OxfordCCAVisualizer:
         axes[1, 0].set_ylabel('Std Across Sessions', fontsize=12, fontweight='bold')
 
         # Overall title
-        fig.suptitle(
-            'CCA Cross-Regional Connectivity Matrices\n'
-            f'(n ≥ {self.min_sessions} sessions per pair)',
-            fontsize=14,
-            fontweight='bold',
-            y=0.98
-        )
+        # fig.suptitle(
+        #     'CCA Cross-Regional Connectivity Matrices\n'
+        #     f'(n ≥ {self.min_sessions} sessions per pair)',
+        #     fontsize=14,
+        #     fontweight='bold',
+        #     y=0.98
+        # )
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
@@ -481,7 +488,6 @@ class OxfordCCAVisualizer:
                         ranked_comp_idx = rank_order[component_idx]
                         r2_values.append(mean_cv_R2[ranked_comp_idx])
 
-
                 if r2_values:
                     mean_matrix[i, j] = np.mean(r2_values)
                     std_matrix[i, j] = np.std(r2_values)
@@ -537,7 +543,7 @@ class OxfordCCAVisualizer:
                 if not np.isnan(matrix[i, j]):
                     val = matrix[i, j]
                     # Choose text color based on background
-                    text_color = 'white' if val < (vmax * 0.3) else 'black'
+                    text_color = 'white' if val < (vmax * 0.35) else 'black'
                     ax.text(j, i, f'{val:.2f}', ha='center', va='center',
                             fontsize=7, color=text_color)
 
@@ -677,7 +683,7 @@ class OxfordCCAVisualizer:
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 10])
+        ax.set_ylim([0, 5])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
@@ -707,7 +713,7 @@ class OxfordCCAVisualizer:
         print("\nCreating population summary figure...")
 
         fig = plt.figure(figsize=figsize)
-        gs = fig.add_gridspec(2, 2, width_ratios=[1, 2], height_ratios=[1, 1],
+        gs = fig.add_gridspec(2, 2, width_ratios=[1, 4], height_ratios=[1, 1],
                               hspace=0.3, wspace=0.3)
 
         ax1 = fig.add_subplot(gs[:, 0])  # Population sizes (full left column)
@@ -759,7 +765,7 @@ class OxfordCCAVisualizer:
                     max_r2_per_session = [np.max(s['mean_cv_R2']) for s in sessions]
                     max_r2_matrix[i, j] = np.mean(max_r2_per_session)
 
-        im = ax2.imshow(max_r2_matrix, cmap='viridis', vmin=0, aspect='equal')
+        im = ax2.imshow(max_r2_matrix, cmap='viridis', vmin=0, vmax=0.6,aspect='equal')
         ax2.set_xticks(np.arange(n_regions))
         ax2.set_yticks(np.arange(n_regions))
         ax2.set_xticklabels(ordered_regions, rotation=45, ha='right', fontsize=9)
@@ -808,7 +814,7 @@ class OxfordCCAVisualizer:
         if all_r2_values:
             r2_matrix = np.array(all_r2_values).T  # Components × Pairs
 
-            im3 = ax3.imshow(r2_matrix, aspect='auto', cmap='plasma', vmin=0)
+            im3 = ax3.imshow(r2_matrix, aspect='auto', cmap='plasma', vmin=0,vmax=0.6)
 
             ax3.set_xticks(np.arange(len(pair_labels)))
             ax3.set_xticklabels(pair_labels, rotation=45, ha='right', fontsize=8)
@@ -821,13 +827,13 @@ class OxfordCCAVisualizer:
             cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
             cbar3.set_label('$R^2$', fontsize=10)
 
-            # Add annotations
-            for i in range(r2_matrix.shape[0]):
-                for j in range(r2_matrix.shape[1]):
-                    if r2_matrix[i, j] > 0:
-                        text_color = 'white' if r2_matrix[i, j] < 0.3 else 'black'
-                        ax3.text(j, i, f'{r2_matrix[i, j]:.2f}',
-                                 ha='center', va='center', fontsize=6, color=text_color)
+            # # Add annotations
+            # for i in range(r2_matrix.shape[0]):
+            #     for j in range(r2_matrix.shape[1]):
+            #         if r2_matrix[i, j] > 0:
+            #             text_color = 'white' if r2_matrix[i, j] < 0.3 else 'black'
+            #             ax3.text(j, i, f'{r2_matrix[i, j]:.2f}',
+            #                      ha='center', va='center', fontsize=6, color=text_color)
 
         fig.suptitle('CCA Population Summary with Component Analysis',
                      fontsize=16, fontweight='bold', y=0.98)
@@ -891,39 +897,74 @@ def main():
     cca_viz_cued.generate_report()
     cca_viz_cued.create_connectivity_matrices_figure(
         figsize=(20, 12),
-        save_path=str(output_dir / "cued")
+        save_path=str(output_dir / "cued_long")
     )
     cca_viz_cued.create_population_summary_figure(
         figsize=(18, 10),
-        save_path=str(output_dir / "cued")
+        save_path=str(output_dir / "cued_long")
     )
     # Optional: Create temporal projection figures for each component
     for comp_idx in range(min(3, cca_viz_cued.n_components)):
         cca_viz_cued.create_temporal_projection_figure(
             figsize=(40, 40),
             component_idx=comp_idx,
-            save_path=str(output_dir / "cued")
+            save_path=str(output_dir / "cued_long")
         )
 
 
     # Option 2: Spontaneous state analysis
     print("\n[2] Processing SPONTANEOUS state sessions...")
-    cca_viz_spont = OxfordCCAVisualizer(
+    cca_viz_spont_long = OxfordCCAVisualizer(
+        base_results_dir=base_dir,
+        results_subdir="sessions_spont_miss_long_results",
+        n_components=5,
+        min_sessions_threshold=3
+    )
+    cca_viz_spont_long.load_all_sessions()
+    cca_viz_spont_long.generate_report()
+    cca_viz_spont_long.create_connectivity_matrices_figure(
+        figsize=(20, 12),
+        save_path=str(output_dir / "spont_long")
+    )
+    cca_viz_spont_long.create_population_summary_figure(
+        figsize=(18, 10),
+        save_path=str(output_dir / "spont_long")
+    )
+
+    for comp_idx in range(min(3, cca_viz_spont_long.n_components)):
+        cca_viz_spont_long.create_temporal_projection_figure(
+            figsize=(40, 40),
+            component_idx=comp_idx,
+            save_path=str(output_dir / "spont_long")
+        )
+
+
+
+    # Option 3: Spontaneous state analysis
+    print("\n[2] Processing SPONTANEOUS state sessions...")
+    cca_viz_spont_short = OxfordCCAVisualizer(
         base_results_dir=base_dir,
         results_subdir="sessions_spont_short_results",
         n_components=5,
         min_sessions_threshold=3
     )
-    cca_viz_spont.load_all_sessions()
-    cca_viz_spont.generate_report()
-    cca_viz_spont.create_connectivity_matrices_figure(
+    cca_viz_spont_short.load_all_sessions()
+    cca_viz_spont_short.generate_report()
+    cca_viz_spont_short.create_connectivity_matrices_figure(
         figsize=(20, 12),
-        save_path=str(output_dir / "spont")
+        save_path=str(output_dir / "spont_short")
     )
-    cca_viz_spont.create_population_summary_figure(
+    cca_viz_spont_short.create_population_summary_figure(
         figsize=(18, 10),
-        save_path=str(output_dir / "spont")
+        save_path=str(output_dir / "spont_short")
     )
+
+    for comp_idx in range(min(3, cca_viz_spont_short.n_components)):
+        cca_viz_spont_short.create_temporal_projection_figure(
+            figsize=(40, 40),
+            component_idx=comp_idx,
+            save_path=str(output_dir / "spont_short")
+        )
 
 
     print("\n" + "=" * 70)

@@ -1,0 +1,464 @@
+function cca_results = perform_session_cca(region_data, session_name, config)
+% PERFORM_SESSION_CCA - Execute canonical correlation analysis for all region pairs
+%
+% This function implements the core CCA methodology adapted for single-session processing.
+% The analysis maintains the statistical rigor of your original approach while
+% adapting to the dynamic nature of session-specific data structures.
+%
+% METHODOLOGICAL CONSIDERATIONS:
+% 1. Adaptive neuron sampling ensures fair comparison across regions
+% 2. Cross-validation provides robust estimates of canonical correlations
+% 3. Significance testing identifies meaningful neural relationships
+% 4. Regularization handles rank-deficient cases common in neural data
+
+    fprintf('  Executing canonical correlation analysis...\n');
+    
+    cca_results = struct();
+    cca_results.session_name = session_name;
+    cca_results.analysis_timestamp = datestr(now);
+    cca_results.config = config;
+    cca_results.region_pairs = {};
+    cca_results.pair_results = {};
+    
+    n_pairs = size(region_data.region_pairs, 1);
+    
+    if n_pairs == 0
+        fprintf('  No valid region pairs for CCA analysis\n');
+        return;
+    end
+    
+    % Resample all regions once before pairwise analysis
+    fprintf('  Resampling neurons across all regions...\n');
+    sampled_region_data = region_data;
+    sampled_region_data.sampled_neurons = struct();
+    
+    % for region_idx = 1:length(region_data.valid_regions)
+    %     region_name = region_data.valid_regions{region_idx};
+    %     spike_data = region_data.regions.(region_name).spike_data;
+    %     n_neurons = size(spike_data, 2);
+    % 
+    %     % Determine target neurons for this region
+    %     target_neurons = min(config.target_neurons, n_neurons);
+    % 
+    %     if target_neurons < config.min_neurons_per_region
+    %         fprintf('    Warning: %s has insufficient neurons (%d < %d)\n', ...
+    %                 region_name, target_neurons, config.min_neurons_per_region);
+    %         sampled_region_data.regions.(region_name).spike_data_sampled = [];
+    %         sampled_region_data.regions.(region_name).selected_neurons = [];
+    %         sampled_region_data.regions.(region_name).target_neurons = 0;
+    %         sampled_region_data.regions.(region_name).original_neurons = n_neurons;
+    %         continue;
+    %     end
+    % 
+    %     % Randomly sample neurons once for this region
+    %     rng('shuffle');
+    %     selected_neurons = randperm(n_neurons, target_neurons);
+    % 
+    %     % Store sampled data and metadata
+    %     sampled_region_data.regions.(region_name).spike_data_sampled = spike_data(:, selected_neurons, :);
+    %     sampled_region_data.regions.(region_name).selected_neurons = selected_neurons;
+    %     sampled_region_data.regions.(region_name).target_neurons = target_neurons;
+    %     sampled_region_data.regions.(region_name).original_neurons = n_neurons;
+    % 
+    %     fprintf('    %s: %d → %d neurons\n', region_name, n_neurons, target_neurons);
+    % end
+    
+    % Process each region pair independently
+    for pair_idx = 1:n_pairs
+        region_i_idx = region_data.region_pairs(pair_idx, 1);
+        region_j_idx = region_data.region_pairs(pair_idx, 2);
+        
+        region_i_name = region_data.valid_regions{region_i_idx};
+        region_j_name = region_data.valid_regions{region_j_idx};
+        
+        fprintf('    Analyzing pair %d/%d: %s - %s\n', ...
+                pair_idx, n_pairs, region_i_name, region_j_name);
+        
+        % Perform CCA for this region pair using pre-sampled data
+        pair_result = analyze_region_pair_cca(sampled_region_data, region_i_name, region_j_name, config);
+        
+        if ~isempty(pair_result)
+            cca_results.region_pairs{end+1} = sprintf('%s_%s', region_i_name, region_j_name);
+            cca_results.pair_results{end+1} = pair_result;
+            
+            fprintf('   CCA completed - %d significant components found\n', ...
+                    length(pair_result.significant_components));
+        else
+            fprintf('   CCA failed for this pair\n');
+        end
+    end
+    
+    fprintf('  CCA analysis completed for %d/%d region pairs\n', ...
+            length(cca_results.pair_results), n_pairs);
+end
+
+function pair_result = analyze_region_pair_cca(region_data, region_i_name, region_j_name, config)
+% ANALYZE_REGION_PAIR_CCA - Perform CCA between two specific brain regions
+% This function implements the detailed CCA methodology with adaptive sampling and validation
+
+    try
+        % Extract pre-sampled spike data for both regions
+        selected_neurons_i = region_data.regions.(region_i_name).selected_neurons;
+        selected_neurons_j = region_data.regions.(region_j_name).selected_neurons;
+        region_i_data = region_data.regions.(region_i_name).spike_data(:, selected_neurons_i, :);
+        region_j_data = region_data.regions.(region_j_name).spike_data(:, selected_neurons_j, :);
+        
+        % Check if both regions have valid sampled data
+        if isempty(region_i_data) || isempty(region_j_data)
+            fprintf('      Insufficient neurons in one or both regions\n');
+            pair_result = [];
+            return;
+        end
+        
+        % Retrieve sampling metadata
+        target_neurons = region_data.regions.(region_i_name).target_neurons;
+        % selected_neurons_i = region_data.regions.(region_i_name).selected_neurons;
+        % selected_neurons_j = region_data.regions.(region_j_name).selected_neurons;
+        original_neurons_i = region_data.regions.(region_i_name).original_neurons;
+        original_neurons_j = region_data.regions.(region_j_name).original_neurons;
+        
+        fprintf('Using pre-sampled neurons: %s=%d, %s=%d (from %d, %d original)\n', ...
+                region_i_name, target_neurons, region_j_name, target_neurons, ...
+                original_neurons_i, original_neurons_j);
+        
+        % Reshape data for CCA: (trials×timepoints) × neurons
+        n_trials = size(region_i_data, 1);
+        n_timepoints = size(region_i_data, 3);
+
+        rng(12345, 'twister');
+        shuffled_trials = randperm(n_trials, n_trials);
+
+        region_i_sampled_p = permute(region_i_data,[2,3,1]);
+        region_j_sampled_p = permute(region_j_data,[2,3,1]);
+        region_j_sampled_p = region_j_sampled_p(:,:,shuffled_trials);
+
+        X = reshape(region_i_sampled_p, target_neurons,n_trials * n_timepoints);
+        Y = reshape(region_j_sampled_p, target_neurons,n_trials * n_timepoints);
+        X = X';
+        Y = Y';
+        
+        % Mean center the data (critical for CCA)
+        X = X - mean(X);
+        Y = Y - mean(Y);
+        
+        fprintf('Data matrices prepared: %d—%d each\n', size(X, 1), size(X, 2));
+        
+        % Perform cross-validated CCA analysis
+        cv_results = perform_cv_cca(X, Y, config);
+        
+        if isempty(cv_results)
+            pair_result = [];
+            return;
+        end
+        
+        % Identify significant components
+        significant_components = find(cv_results.mean_cv_R2 >= ...
+                                    prctile(cv_results.mean_cv_R2, config.significance_threshold));
+        
+        % total_components = size(cv_results.mean_A_matrix, 2);
+        % first_ten_percent_count = floor(0.5 * total_components);
+        % 
+        % % Create indices for the first 10% of components
+        % first_ten_percent_indices = 1:first_ten_percent_count;
+        % 
+        % % Find intersection: significant components that are also in first 10%
+        % significant_in_first_ten_percent = intersect(significant_components, first_ten_percent_indices);
+        % 
+        % % Extract the matrices using this refined selection
+        % mean_A_matrix = cv_results.mean_A_matrix(:, significant_in_first_ten_percent);
+        % mean_B_matrix = cv_results.mean_B_matrix(:, significant_in_first_ten_percent);
+        % 
+        % 
+        % combined_matrix = [mean_A_matrix(:); mean_B_matrix(:)];
+        % 
+        % mean_A_matrix = cv_results.mean_A_matrix(:,significant_components);
+        % mean_B_matrix = cv_results.mean_B_matrix(:,significant_components);
+        % 
+        % combined_matrix = [mean_A_matrix(:); mean_B_matrix(:)];
+        % 
+        % % Now compute the true global minimum and maximum across both matrices
+        % min_global = min(abs(combined_matrix));  % Single scalar value
+        % max_global = max(abs(combined_matrix));  % Single scalar value
+        % 
+        % % Calculate the range (denominator in our normalization formula)
+        % data_range = max_global - min_global;
+        % 
+        % % Apply the min-max normalization transformation
+        % % Each element is shifted by the minimum and scaled by the range
+        % cv_results.mean_A_matrix(:,significant_components) = (mean_A_matrix - min_global) / data_range;
+        % cv_results.mean_B_matrix(:,significant_components) = (mean_B_matrix - min_global) / data_range;
+
+
+        % [cv_results.mean_A_matrix,mean_A,~] = zscore(cv_results.mean_A_matrix,0,1);
+        % [cv_results.mean_B_matrix,mean_B,~] = zscore(cv_results.mean_B_matrix,0,1);
+
+
+        % Extract the significant components for processing
+        mean_A_matrix = cv_results.mean_A_matrix(:, significant_components);
+        mean_B_matrix = cv_results.mean_B_matrix(:, significant_components);
+        
+        % Initialize normalized matrices
+        normalized_A = zeros(size(mean_A_matrix));
+        normalized_B = zeros(size(mean_B_matrix));
+        
+        % Perform column-wise normalization
+        for col = 1:size(mean_A_matrix, 2)
+            % For matrix A: find min/max of this specific column
+            value_A = mean_A_matrix(:, col);
+            col_A = abs(mean_A_matrix(:, col));
+            min_A = min(col_A);
+            max_A = max(col_A);
+            range_A = max_A - min_A;
+            
+            % For matrix B: find min/max of this specific column  
+            value_B = mean_B_matrix(:, col);
+            col_B = abs(mean_B_matrix(:, col));
+            min_B = min(col_B);
+            max_B = max(col_B);
+            range_B = max_B - min_B;
+            
+            % Apply column-specific normalization
+            if range_A > 0  % Avoid division by zero
+                normalized_A(:, col) = (value_A- min_A) / range_A;
+            else
+                normalized_A(:, col) = value_A;  % Keep original if no variation
+            end
+            
+            if range_B > 0  % Avoid division by zero
+                normalized_B(:, col) = (value_B - min_B) / range_B;
+            else
+                normalized_B(:, col) = value_B;  % Keep original if no variation
+            end
+        end
+        
+        % Update the results structure
+        cv_results.mean_A_matrix(:, significant_components) = normalized_A;
+        cv_results.mean_B_matrix(:, significant_components) = normalized_B;
+
+        % Construct comprehensive result structure
+        pair_result = struct();
+        pair_result.region_i = region_i_name;
+        pair_result.region_j = region_j_name;
+        pair_result.target_neurons = target_neurons;
+        pair_result.selected_neurons_i = selected_neurons_i;
+        pair_result.selected_neurons_j = selected_neurons_j;
+        pair_result.original_neuron_counts = [original_neurons_i, original_neurons_j];
+        pair_result.cv_results = cv_results;
+        pair_result.significant_components = significant_components;
+        pair_result.max_R2 = max(cv_results.mean_cv_R2);
+        pair_result.mean_R2 = mean(cv_results.mean_cv_R2);
+        
+        % Store transformation matrices for projections
+        pair_result.mean_A_matrix = cv_results.mean_A_matrix;
+        pair_result.mean_B_matrix = cv_results.mean_B_matrix;
+        
+        % Calculate canonical projections for visualization
+        if ~isempty(significant_components)
+            pair_result.projections = calculate_canonical_projections(...
+                region_i_data, region_j_data, cv_results, significant_components);
+        end
+        
+        fprintf('      Maximum R = %.3f, Mean R = %.3f\n', ...
+                pair_result.max_R2, pair_result.mean_R2);
+        
+    catch ME
+        fprintf('      Error in CCA analysis: %s\n', ME.message);
+        pair_result = [];
+    end
+end
+
+function cv_results = perform_cv_cca(X, Y, config)
+% PERFORM_CV_CCA - Cross-validated canonical correlation analysis
+% This function implements robust CCA with cross-validation and regularization
+
+    try
+        n_components = min(size(X, 2), size(Y, 2));
+        n_folds = config.cv_folds;
+        fold_size = floor(size(X, 1) / n_folds);
+        
+        % Initialize cross-validation arrays
+        cv_R2 = zeros(n_folds, n_components);
+        A_matrices = zeros(size(X, 2), n_components, n_folds);
+        B_matrices = zeros(size(Y, 2), n_components, n_folds);
+        
+        fprintf('        Cross-validation: %d folds, %d components\n', n_folds, n_components);
+        
+        % Perform k-fold cross-validation
+        for fold = 1:n_folds
+            % Define train/test split
+            test_idx = (fold-1)*fold_size + 1 : fold*fold_size;
+            train_idx = setdiff(1:size(X, 1), test_idx);
+            
+            X_train = X(train_idx, :);
+            Y_train = Y(train_idx, :);
+            X_test = X(test_idx, :);
+            Y_test = Y(test_idx, :);
+            
+            % Check for rank deficiency and apply regularization if needed
+            [A_fold, B_fold] = robust_cca(X_train, Y_train, n_components);
+            
+            if isempty(A_fold) || isempty(B_fold)
+                fprintf('        Warning: CCA failed for fold %d\n', fold);
+                continue;
+            end
+            
+            % Store transformation matrices
+            A_matrices(:, :, fold) = A_fold;
+            B_matrices(:, :, fold) = B_fold;
+            
+            % Compute cross-validated RÂ² for each component
+            for comp = 1:n_components
+                X_proj = X_test * A_fold(:, comp);
+                Y_proj = Y_test * B_fold(:, comp);
+                cv_R2(fold, comp) = corr(X_proj, Y_proj);
+            end
+        end
+        
+        % Calculate summary statistics
+        cv_results = struct();
+        cv_results.cv_R2 = cv_R2;
+        cv_results.mean_cv_R2 = mean(cv_R2, 1);
+        cv_results.std_cv_R2 = std(cv_R2, 0, 1);
+        cv_results.mean_A_matrix = mean(A_matrices, 3);
+        cv_results.mean_B_matrix = mean(B_matrices, 3);
+        cv_results.A_matrices = A_matrices;
+        cv_results.B_matrices = B_matrices;
+        
+        fprintf('        CV completed. Mean range: [%.3f, %.3f]\n', ...
+                min(cv_results.mean_cv_R2), max(cv_results.mean_cv_R2));
+        
+    catch ME
+        fprintf('        Error in cross-validation: %s\n', ME.message);
+        cv_results = [];
+    end
+end
+
+function [A, B] = robust_cca(X, Y, n_components)
+% ROBUST_CCA - Canonical correlation analysis with regularization for rank deficiency
+% This function handles the common issue of rank-deficient neural data matrices
+
+    try
+        % Check matrix ranks
+        rank_X = rank(X);
+        rank_Y = rank(Y);
+        
+        if rank_X >= n_components && rank_Y >= n_components
+            % Standard CCA for full-rank case
+            [A, B, ~] = canoncorr(X, Y);
+        else
+            % Regularized CCA for rank-deficient case
+            fprintf('          Applying regularization (rank X=%d, Y=%d)\n', rank_X, rank_Y);
+            
+            lambda = 0.01; % Initial regularization parameter
+            max_attempts = 5;
+            
+            for attempt = 1:max_attempts
+                % Add ridge regularization
+                X_reg = [X; sqrt(lambda) * eye(n_components, size(X, 2))];
+                Y_reg = [Y; sqrt(lambda) * eye(n_components, size(Y, 2))];
+                
+                try
+                    [A, B, ~] = canoncorr(X_reg, Y_reg);
+                    
+                    if size(A, 2) >= n_components
+                        break;
+                    end
+                catch
+                    % Increase regularization and try again
+                    lambda = lambda * 10;
+                end
+            end
+        end
+        
+        % Ensure we have the correct number of components
+        if size(A, 2) < n_components || size(B, 2) < n_components
+            actual_components = min(size(A, 2), size(B, 2));
+            
+            if actual_components > 0
+                A = A(:, 1:actual_components);
+                B = B(:, 1:actual_components);
+                
+                % Pad with zeros if necessary
+                if actual_components < n_components
+                    A = [A, zeros(size(A, 1), n_components - actual_components)];
+                    B = [B, zeros(size(B, 1), n_components - actual_components)];
+                end
+            else
+                A = [];
+                B = [];
+            end
+        else
+            A = A(:, 1:n_components);
+            B = B(:, 1:n_components);
+        end
+        
+    catch ME
+        fprintf('          Error in robust CCA: %s\n', ME.message);
+        A = [];
+        B = [];
+    end
+end
+
+function projections = calculate_canonical_projections(region_i_data, region_j_data, cv_results, sig_components)
+% CALCULATE_CANONICAL_PROJECTIONS - Compute canonical projections for visualization
+% This function generates the time-series projections used for visualization and interpretation
+    try
+        n_trials = size(region_i_data, 1);
+        n_neurons = size(region_i_data, 2);
+        n_timepoints = size(region_i_data, 3);
+        
+
+
+        region_i_sampled_p = permute(region_i_data,[2,3,1]);
+        region_j_sampled_p = permute(region_j_data,[2,3,1]);
+
+
+        X = reshape(region_i_sampled_p, n_neurons,n_trials * n_timepoints)';
+        Y = reshape(region_j_sampled_p, n_neurons,n_trials * n_timepoints)';
+        
+        % Mean center (consistent with CCA preprocessing)
+        % X = X - mean(X);
+        % Y = Y - mean(Y);
+        
+        [X,mean_X,std_X] = zscore(X,0,1);
+        [Y,mean_Y,std_Y] = zscore(Y,0,1);
+
+        projections = struct();
+        projections.n_components = length(sig_components);
+        projections.time_axis = linspace(-1.5, 3.0, n_timepoints); % Assuming standard timing
+        projections.components = cell(length(sig_components), 1);
+
+
+
+        for i = 1:length(sig_components)
+            comp = sig_components(i);
+            
+            % Project data onto canonical dimensions
+            X_proj = X * cv_results.mean_A_matrix(:, comp);
+            Y_proj = Y * cv_results.mean_B_matrix(:, comp);
+            
+            % Reshape back to trial × timepoint format
+
+            X_proj_trials = reshape(X_proj, n_timepoints,n_trials)';
+            Y_proj_trials = reshape(Y_proj, n_timepoints,n_trials)';
+
+            
+            % Calculate summary statistics
+            projections.components{i} = struct();
+            projections.components{i}.component_number = comp;
+            projections.components{i}.R2 = cv_results.mean_cv_R2(comp);
+            projections.components{i}.region_i_mean = mean(X_proj_trials , 1);
+            projections.components{i}.region_j_mean = mean(Y_proj_trials, 1);
+            projections.components{i}.region_i_std = std(X_proj_trials, 0, 1);
+            projections.components{i}.region_j_std = std(Y_proj_trials, 0, 1);
+            projections.components{i}.region_i_trials = X_proj_trials;
+            projections.components{i}.region_j_trials = Y_proj_trials;
+        end
+        
+        fprintf('        Calculated projections for %d significant components\n', length(sig_components));
+        
+    catch ME
+        fprintf('        Error calculating projections: %s\n', ME.message);
+        projections = [];
+    end
+end
