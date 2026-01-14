@@ -890,75 +890,12 @@ def main():
     # Each region is averaged across ALL sessions recording that region,
     # regardless of what other regions were co-recorded
     pca_viz_cued.create_all_component_figures(
-        n_components_to_plot=3,
+        n_components_to_plot=10,
         figsize=(40, 40),
         save_path=str(output_dir / "cued_long"),
         min_sessions=3
     )
-    # Option 2: Spontaneous state analysis
-    print("\n[2] Processing SPONTANEOUS state sessions...")
-    pca_viz_spont = OxfordPCAVisualizer(
-        base_results_dir=base_dir,
-        results_subdir="sessions_spont_miss_long_results",
-        n_components=10
-    )
-    pca_viz_spont.load_all_sessions()
-    pca_viz_spont.generate_report()
 
-    # Create cumulative variance figure
-    pca_viz_spont.create_cumulative_variance_figure(
-        figsize=(16, 12),
-        save_path=str(output_dir / "spont_long"),
-        n_rows=3,
-        n_cols=4
-    )
-
-    # Create variance summary table
-    pca_viz_spont.create_variance_summary_table(
-        save_path=str(output_dir / "spont_long")
-    )
-
-    # Create temporal projection figures
-    pca_viz_spont.create_all_component_figures(
-        n_components_to_plot=3,
-        figsize=(40, 40),
-        save_path=str(output_dir / "spont_long"),
-        min_sessions=3
-    )
-
-
-    # Option 3: Spontaneous state analysis
-    print("\n[2] Processing SPONTANEOUS state sessions...")
-    pca_viz_spont_short = OxfordPCAVisualizer(
-        base_results_dir=base_dir,
-        results_subdir="sessions_spont_short_results",
-        n_components=10
-    )
-    pca_viz_spont_short.load_all_sessions()
-    pca_viz_spont_short.generate_report()
-
-    # Create cumulative variance figure
-    pca_viz_spont_short.create_cumulative_variance_figure(
-        figsize=(16, 12),
-        save_path=str(output_dir / "spont_short"),
-        n_rows=3,
-        n_cols=4
-    )
-
-    # Create variance summary table
-    pca_viz_spont_short.create_variance_summary_table(
-        save_path=str(output_dir / "spont_short")
-    )
-
-    # Create temporal projection figures
-    pca_viz_spont_short.create_all_component_figures(
-        n_components_to_plot=3,
-        figsize=(40, 40),
-        save_path=str(output_dir / "spont_short"),
-        min_sessions=3
-    )
-
-    # Option 4: Spontaneous state analysis
     print("\n[2] Processing SPONTANEOUS state sessions...")
     pca_viz_spont_hit = OxfordPCAVisualizer(
         base_results_dir=base_dir,
@@ -983,11 +920,77 @@ def main():
 
     # Create temporal projection figures
     pca_viz_spont_hit.create_all_component_figures(
-        n_components_to_plot=3,
+        n_components_to_plot=10,
         figsize=(40, 40),
         save_path=str(output_dir / "spont_hit_long"),
         min_sessions=3
     )
+
+    # # Option 2: Spontaneous state analysis
+    # print("\n[2] Processing SPONTANEOUS state sessions...")
+    # pca_viz_spont = OxfordPCAVisualizer(
+    #     base_results_dir=base_dir,
+    #     results_subdir="sessions_spont_miss_long_results",
+    #     n_components=10
+    # )
+    # pca_viz_spont.load_all_sessions()
+    # pca_viz_spont.generate_report()
+    #
+    # # Create cumulative variance figure
+    # pca_viz_spont.create_cumulative_variance_figure(
+    #     figsize=(16, 12),
+    #     save_path=str(output_dir / "spont_long"),
+    #     n_rows=3,
+    #     n_cols=4
+    # )
+    #
+    # # Create variance summary table
+    # pca_viz_spont.create_variance_summary_table(
+    #     save_path=str(output_dir / "spont_long")
+    # )
+    #
+    # # Create temporal projection figures
+    # pca_viz_spont.create_all_component_figures(
+    #     n_components_to_plot=3,
+    #     figsize=(40, 40),
+    #     save_path=str(output_dir / "spont_long"),
+    #     min_sessions=3
+    # )
+    #
+    #
+    # # Option 3: Spontaneous state analysis
+    # print("\n[2] Processing SPONTANEOUS state sessions...")
+    # pca_viz_spont_short = OxfordPCAVisualizer(
+    #     base_results_dir=base_dir,
+    #     results_subdir="sessions_spont_short_results",
+    #     n_components=10
+    # )
+    # pca_viz_spont_short.load_all_sessions()
+    # pca_viz_spont_short.generate_report()
+    #
+    # # Create cumulative variance figure
+    # pca_viz_spont_short.create_cumulative_variance_figure(
+    #     figsize=(16, 12),
+    #     save_path=str(output_dir / "spont_short"),
+    #     n_rows=3,
+    #     n_cols=4
+    # )
+    #
+    # # Create variance summary table
+    # pca_viz_spont_short.create_variance_summary_table(
+    #     save_path=str(output_dir / "spont_short")
+    # )
+    #
+    # # Create temporal projection figures
+    # pca_viz_spont_short.create_all_component_figures(
+    #     n_components_to_plot=3,
+    #     figsize=(40, 40),
+    #     save_path=str(output_dir / "spont_short"),
+    #     min_sessions=3
+    # )
+    #
+    # # Option 4: Spontaneous state analysis
+
 
     print("\n" + "=" * 70)
     print("PCA Visualization Pipeline Complete")
