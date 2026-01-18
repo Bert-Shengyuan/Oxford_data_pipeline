@@ -1,13 +1,34 @@
 #!/usr/bin/env python3
 """
-Cross-Trial-Type CCA Analysis - Demonstration Script
-====================================================
+Cross-Trial-Type CCA Analysis - Batch Processing Script
+========================================================
 
-This script demonstrates how to use the CrossTrialTypeCCAAnalyzer to:
+This script demonstrates how to use the CrossTrialTypeCCAAnalyzer for
+multi-session batch analysis with cross-session aggregation.
+
+Key Features:
+-------------
 1. Load neural data from multiple trial types (cued_hit_long, spont_hit_long, spont_miss_long)
 2. Extract CCA weights from the reference condition (cued_hit_long)
 3. Project neural activity from all conditions onto the same CCA subspace
-4. Statistically compare the latent representations
+4. Aggregate results across sessions for each region pair
+5. Create summary figures following anatomical ordering
+
+Cross-Session Aggregation:
+--------------------------
+For region pairs with ≥5 sessions, the pipeline:
+- Computes session-averaged projections
+- Aggregates across sessions with mean ± SEM
+- Creates boxplots of temporal R² distributions
+- Generates upper-triangle summary matrices
+
+Mathematical Framework:
+-----------------------
+The cross-session aggregated projection is:
+$$\bar{\mathbf{u}}_{c,\text{pop}} = \frac{1}{N_s} \sum_{s=1}^{N_s} \bar{\mathbf{u}}_{c,s}$$
+
+with cross-session SEM:
+$$\text{SEM}_{\text{pop}} = \frac{\sigma_{\text{sessions}}}{\sqrt{N_s}}$$
 
 Usage:
 ------
@@ -31,8 +52,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cross_trial_type_cca_analysis import (
     CrossTrialTypeCCAAnalyzer,
     CrossTrialTypeCCAPipeline,
+    CrossSessionCCAAnalyzer,
+    CrossTrialTypeSummaryVisualizer,
     TRIAL_TYPES,
-    TRIAL_TYPE_COLORS
+    TRIAL_TYPE_COLORS,
+    ANATOMICAL_ORDER,
+    MIN_SESSIONS_THRESHOLD,
+    sort_pair_by_anatomy
 )
 
 
@@ -40,16 +66,59 @@ def create_analysis_config() -> dict:
     """
     Create configuration for cross-trial-type CCA analysis.
     
+    This function defines all parameters for the analysis pipeline.
     Modify this function to customize the analysis for your needs.
     
     Returns:
-        Configuration dictionary
+        Configuration dictionary with the following keys:
+        - base_dir: Root directory containing all session results
+        - sessions: List of session names to analyze
+        - reference_type: Trial type for CCA weight training
+        - n_components: Number of CCA components to analyze
+        - region_pairs: List of region pairs to analyze (None for auto-detect)
+        - output_base_dir: Base directory for output files
+        - enable_cross_session: Whether to perform cross-session aggregation
+        - min_sessions: Minimum sessions for cross-session analysis
     """
     config = {
         # Base directory containing all session results
         'base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset',
         
-        # Sessions to analyze - can be a single session or multiple
+        # Sessions to analyze - full list for comprehensive batch analysis
+        # 'sessions': [
+        #     'yp010_220209',
+        #     'yp010_220210',
+        #     'yp010_220211',
+        #     'yp010_220212',
+        #     'yp012_220208',
+        #     'yp012_220209',
+        #     'yp012_220210',
+        #     'yp012_220211',
+        #     'yp012_220212',
+        #     'yp013_220209',
+        #     'yp013_220210',
+        #     'yp013_220211',
+        #     'yp013_220212',
+        #     'yp014_220208',
+        #     'yp014_220209',
+        #     'yp014_220210',
+        #     'yp014_220211',
+        #     'yp014_220212',
+        #     'yp020_220331',
+        #     'yp020_220401',
+        #     'yp020_220402',
+        #     'yp020_220403',
+        #     'yp020_220404',
+        #     'yp020_220405',
+        #     'yp020_220407',
+        #     'yp021_220331',
+        #     'yp021_220401',
+        #     'yp021_220402',
+        #     'yp021_220403',
+        #     'yp021_220404',
+        #     'yp021_220405',
+        #     'yp021_220407',
+        # ],
         'sessions': [
             'yp010_220209',
             'yp010_220210',
@@ -58,40 +127,42 @@ def create_analysis_config() -> dict:
             'yp012_220208',
             'yp012_220209',
             'yp012_220210',
-            'yp012_220211',
-            'yp012_220212',
-            'yp013_220209',
-            'yp013_220210',
-            'yp013_220211',
-            'yp013_220212',
-            'yp014_220208',
-            'yp014_220209',
-            'yp014_220210',
-            'yp014_220211',
-            'yp014_220212',
-            'yp020_220331',
-            'yp020_220401',
-            'yp020_220402',
-            'yp020_220403',
-            'yp020_220404',
-            'yp020_220405',
-            'yp020_220407',
-            'yp021_220331',
-            'yp021_220401',
-            'yp021_220402',
-            'yp021_220403',
-            'yp021_220404',
-            'yp021_220405',
-            'yp021_220407',
         ],
-        
         # Reference trial type - CCA weights are extracted from this condition
         'reference_type': 'cued_hit_long',
         
         # Number of CCA components to analyze
-        'n_components': 5,
+        'n_components': 3,
         
-        # Region pairs to analyze (set to None for auto-detection)
+        # Region pairs to analyze (set to None for auto-detection from each session)
+        # Using anatomical ordering for consistent visualization
+        'region_pairs': None,  # Auto-detect all available pairs
+        
+        # Output directory (will be created if doesn't exist)
+        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
+        
+        # Enable cross-session aggregation for pairs with sufficient sessions
+        'enable_cross_session': True,
+        
+        # Minimum number of sessions required for cross-session analysis
+        'min_sessions': MIN_SESSIONS_THRESHOLD
+    }
+    
+    return config
+
+
+def create_single_session_config() -> dict:
+    """
+    Create configuration for single session demo analysis.
+    
+    Returns:
+        Configuration dictionary for single session analysis
+    """
+    config = {
+        'base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset',
+        'sessions': ['yp021_220405'],  # Single session for demo
+        'reference_type': 'cued_hit_long',
+        'n_components': 5,
         'region_pairs': [
             ('mPFC', 'STR'),
             ('MOp', 'STR'),
@@ -99,9 +170,9 @@ def create_analysis_config() -> dict:
             ('ORB', 'STR'),
             ('MOp', 'MOs'),
         ],
-        
-        # Output directory (will be created if doesn't exist)
-        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca'
+        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
+        'enable_cross_session': False,
+        'min_sessions': 1
     }
     
     return config
@@ -213,6 +284,11 @@ def run_batch_analysis(config: dict) -> CrossTrialTypeCCAPipeline:
     """
     Run analysis for multiple sessions using the pipeline.
     
+    This function performs comprehensive batch analysis including:
+    1. Per-session analysis for all sessions
+    2. Cross-session aggregation for region pairs with ≥min_sessions
+    3. Summary figure generation with upper-triangle format
+    
     Parameters:
         config: Analysis configuration dictionary
         
@@ -224,7 +300,13 @@ def run_batch_analysis(config: dict) -> CrossTrialTypeCCAPipeline:
     print("=" * 70)
     
     pipeline = CrossTrialTypeCCAPipeline(config)
+    
+    # Run all session analyses
     results = pipeline.run_all_sessions()
+    
+    # Run cross-session aggregation if enabled
+    if config.get('enable_cross_session', True):
+        pipeline.run_cross_session_aggregation()
     
     return pipeline
 
@@ -235,6 +317,9 @@ def create_aggregate_summary_figure(
 ) -> plt.Figure:
     """
     Create aggregate summary figure across all analyzed sessions.
+    
+    This figure shows peak amplitudes and temporal correlations
+    aggregated across all sessions and region pairs.
     
     Parameters:
         pipeline: Completed pipeline with analyzers
@@ -389,6 +474,53 @@ def print_analysis_summary(analyzer: CrossTrialTypeCCAAnalyzer) -> None:
     print(f"\nOutput saved to: {analyzer.output_dir}")
 
 
+def print_cross_session_summary(pipeline: CrossTrialTypeCCAPipeline) -> None:
+    """
+    Print summary of cross-session analysis results.
+    
+    Parameters:
+        pipeline: Completed pipeline with cross-session results
+    """
+    print("\n" + "=" * 70)
+    print("CROSS-SESSION ANALYSIS SUMMARY")
+    print("=" * 70)
+    
+    min_sessions = pipeline.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
+    
+    print(f"\nMinimum sessions threshold: {min_sessions}")
+    print(f"Total region pairs analyzed: {len(pipeline.cross_session_analyzers)}")
+    
+    # Count pairs meeting threshold
+    valid_pairs = []
+    insufficient_pairs = []
+    
+    for pair_key, cs_analyzer in pipeline.cross_session_analyzers.items():
+        n_sessions = len(cs_analyzer.session_projections)
+        if n_sessions >= min_sessions:
+            valid_pairs.append((pair_key, n_sessions))
+        else:
+            insufficient_pairs.append((pair_key, n_sessions))
+    
+    print(f"\nPairs with ≥{min_sessions} sessions (valid for cross-session analysis):")
+    for pair_key, n in sorted(valid_pairs, key=lambda x: x[1], reverse=True):
+        print(f"  {pair_key[0]:6s} vs {pair_key[1]:6s}: {n:3d} sessions")
+    
+    if insufficient_pairs:
+        print(f"\nPairs with <{min_sessions} sessions (insufficient data):")
+        for pair_key, n in sorted(insufficient_pairs, key=lambda x: x[1], reverse=True):
+            print(f"  {pair_key[0]:6s} vs {pair_key[1]:6s}: {n:3d} sessions")
+    
+    # Summary statistics
+    if valid_pairs:
+        print(f"\nSummary:")
+        print(f"  Valid pairs for cross-session analysis: {len(valid_pairs)}")
+        print(f"  Total sessions across valid pairs: {sum(n for _, n in valid_pairs)}")
+        
+        if pipeline.summary_visualizer:
+            output_dir = pipeline.summary_visualizer.output_dir
+            print(f"\nSummary figures saved to: {output_dir}")
+
+
 def main():
     """Main entry point for cross-trial-type CCA analysis."""
     
@@ -403,6 +535,7 @@ def main():
     print("onto CCA subspaces trained on a reference condition.")
     print(f"\nReference condition: {config['reference_type']}")
     print(f"Comparison conditions: spont_hit_long, spont_miss_long")
+    print(f"Minimum sessions for cross-session analysis: {config.get('min_sessions', MIN_SESSIONS_THRESHOLD)}")
     
     # Option 1: Single session detailed demo
     if len(config['sessions']) == 1:
@@ -417,7 +550,11 @@ def main():
         print(f"\nRunning batch analysis for {len(config['sessions'])} sessions...")
         pipeline = run_batch_analysis(config)
         
-        # Create aggregate summary
+        # Print cross-session summary
+        if config.get('enable_cross_session', True):
+            print_cross_session_summary(pipeline)
+        
+        # Create legacy aggregate summary (for backward compatibility)
         output_dir = Path(config.get('output_base_dir', '.'))
         output_dir.mkdir(parents=True, exist_ok=True)
         create_aggregate_summary_figure(pipeline, output_dir)

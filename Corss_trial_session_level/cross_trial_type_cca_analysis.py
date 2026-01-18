@@ -23,12 +23,14 @@ neural activity matrix for region $i$ in condition $c$.
 The cross-condition projection similarity is quantified by:
 $$R^2_{c_1, c_2} = \text{corr}^2(\mathbf{u}_{c_1}, \mathbf{u}_{c_2})$$
 
-Statistical Comparison:
------------------------
-1. Peak amplitude comparison: max projection within post-stimulus window
-2. Temporal correlation: correlation between projection time courses
-3. Wilcoxon signed-rank test: non-parametric paired comparison
-4. Bootstrap confidence intervals: robust uncertainty estimation
+Cross-Session Aggregation:
+--------------------------
+For multi-session analysis, projections are first computed per-session,
+then aggregated across sessions:
+$$\bar{\mathbf{u}}_c = \frac{1}{N_s} \sum_{s=1}^{N_s} \mathbf{u}_{c,s}$$
+
+Standard error is computed as:
+$$\text{SEM} = \frac{\sigma}{\sqrt{N_s}}$$
 
 Author: Oxford Neural Analysis Pipeline
 Date: 2025
@@ -83,6 +85,9 @@ ANATOMICAL_ORDER = [
     'HY'  # Hypothalamic
 ]
 
+# Minimum sessions threshold for cross-session analysis
+MIN_SESSIONS_THRESHOLD = 5
+
 
 # =============================================================================
 # HELPER FUNCTIONS FOR DATA LOADING
@@ -128,6 +133,24 @@ def extract_string_field(data_dict: Dict, field_name: str) -> Optional[str]:
         return None
     except Exception:
         return None
+
+
+def get_anatomical_index(region: str) -> int:
+    """Get anatomical ordering index for a region."""
+    try:
+        return ANATOMICAL_ORDER.index(region)
+    except ValueError:
+        return len(ANATOMICAL_ORDER)
+
+
+def sort_pair_by_anatomy(region_i: str, region_j: str) -> Tuple[str, str]:
+    """Sort region pair by anatomical order."""
+    idx_i = get_anatomical_index(region_i)
+    idx_j = get_anatomical_index(region_j)
+    if idx_i <= idx_j:
+        return (region_i, region_j)
+    else:
+        return (region_j, region_i)
 
 
 # =============================================================================
@@ -195,12 +218,15 @@ class CrossTrialTypeCCAAnalyzer:
         self.available_regions: List[str] = []
         self.available_pairs: List[Tuple[str, str, int]] = []
 
+        # Current region pair being analyzed
+        self.current_region_pair: Optional[Tuple[str, str]] = None
+
         # Time axis
         self.time_bins: Optional[np.ndarray] = None
 
         # Output directory
-        self.output_dir = Path(base_dir) / 'Paper_output' / 'cross_trial_type_cca' / session_name
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # self.output_dir = Path(base_dir) / 'Paper_output' / 'cross_trial_type_cca' / session_name
+        # self.output_dir.mkdir(parents=True, exist_ok=True)
 
         print("=" * 70)
         print("Cross-Trial-Type CCA Analyzer")
@@ -208,7 +234,7 @@ class CrossTrialTypeCCAAnalyzer:
         print(f"Session: {session_name}")
         print(f"Reference condition: {reference_type}")
         print(f"Components to analyze: {n_components}")
-        print(f"Output directory: {self.output_dir}")
+        # print(f"Output directory: {self.output_dir}")
 
     # =========================================================================
     # DATA LOADING METHODS
@@ -273,8 +299,8 @@ class CrossTrialTypeCCAAnalyzer:
             if 'timepoints' in region_data:
                 n_timepoints = int(region_data['timepoints'].flatten()[0])
                 self.time_bins = np.linspace(-1.5, 3.0, n_timepoints)
-            elif 'time_axis' in region_data:
-                self.time_bins = np.array(region_data['time_axis']).flatten()
+            # elif 'time_axis' in region_data:
+            #     self.time_bins = np.array(region_data['time_axis']).flatten()
 
         if self.time_bins is None:
             # Default time axis: -1.5s to 3.0s at ~20ms bins
@@ -323,6 +349,7 @@ class CrossTrialTypeCCAAnalyzer:
             True if extraction successful for all available trial types
         """
         region_i, region_j = region_pair
+        self.current_region_pair = region_pair
         print(f"\n" + "-" * 50)
         print(f"Extracting neural data for: {region_i} vs {region_j}")
         print("-" * 50)
@@ -428,7 +455,7 @@ class CrossTrialTypeCCAAnalyzer:
         mu_A = pair_result.get('mean_A', None)
         mu_B = pair_result.get('mean_B', None)
 
-        # Store CCA weights
+        # Store weights
         self.cca_weights = {
             'region_i': region_i,
             'region_j': region_j,
@@ -436,19 +463,12 @@ class CrossTrialTypeCCAAnalyzer:
             'B': B_matrix,
             'mu_A': mu_A,
             'mu_B': mu_B,
-            'pair_idx': pair_idx,
-            'pair_result': pair_result
+            'n_components': A_matrix.shape[1] if A_matrix.ndim > 1 else 1
         }
 
-        print(f"  Region {region_i}: A matrix shape {A_matrix.shape}")
-        print(f"  Region {region_j}: B matrix shape {B_matrix.shape}")
-
-        # Extract cross-validated R² values for reference
-        if 'cv_results' in pair_result:
-            cv_results = pair_result['cv_results']
-            mean_cv_R2 = cv_results.get('mean_cv_R2', [])
-            if len(mean_cv_R2) > 0:
-                print(f"  Reference CV-R²: {mean_cv_R2[:self.n_components]}")
+        print(f"  Region i ({region_i}): A matrix shape = {A_matrix.shape}")
+        print(f"  Region j ({region_j}): B matrix shape = {B_matrix.shape}")
+        print(f"  Available components: {self.cca_weights['n_components']}")
 
         return True
 
@@ -494,11 +514,6 @@ class CrossTrialTypeCCAAnalyzer:
             X_i = neural[region_i]  # shape: (n_trials, n_neurons, n_time)
             X_j = neural[region_j]
 
-
-            X_i_mean_test = np.mean(X_i, axis=0).T # (n_time, n_neurons)
-            X_j_mean_test = np.mean(X_j, axis=0).T
-
-
             n_trials, n_neurons, n_timepoints = X_i.shape
 
             region_i_sampled_p = np.transpose(X_i, (1, 2, 0))
@@ -506,21 +521,14 @@ class CrossTrialTypeCCAAnalyzer:
 
             # Reshape and transpose: (neurons, timepoints, trials) → (trials×timepoints, neurons)
             X = region_i_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
-            Y = region_j_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
+            Y = region_j_sampled_p.reshape(region_j_sampled_p.shape[0], n_trials * n_timepoints).T
 
             X_i_norm = zscore(X, axis=0, nan_policy='omit')
             X_j_norm = zscore(Y, axis=0, nan_policy='omit')
+
+
             X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
             X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
-
-
-
-            # Z-score normalize across time
-            # X_i_norm = zscore(X_i_mean, axis=0, nan_policy='omit')
-            # X_j_norm = zscore(X_j_mean, axis=0, nan_policy='omit')
-            # X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
-            # X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
-
 
             # Project onto CCA subspace: (n_time, n_components)
             u = (X_i_norm @ A[:, :self.n_components]).T
@@ -528,28 +536,12 @@ class CrossTrialTypeCCAAnalyzer:
             u_trials_p = u.reshape(self.n_components, n_timepoints, n_trials)
             v_trials_p = v.reshape(self.n_components, n_timepoints, n_trials)
 
-            # # Compute trial-averaged activity: (n_time, n_neurons)
-            u_final = np.mean(u_trials_p,axis=2).T
-            v_final = np.mean(v_trials_p,axis=2).T
+            # Compute trial-averaged activity
+            u_final = np.mean(u_trials_p, axis=2).T
+            v_final = np.mean(v_trials_p, axis=2).T
 
             u_trials = np.transpose(u_trials_p, (2, 1, 0))
             v_trials = np.transpose(v_trials_p, (2, 1, 0))
-
-            # Also compute trial-level projections for statistics
-            # n_trials = X_i.shape[0]
-            # u_trials = np.zeros((n_trials, X_i.shape[2], self.n_components))
-            # v_trials = np.zeros((n_trials, X_j.shape[2], self.n_components))
-            # for trial_idx in range(n_trials):
-            #     X_i_trial = X_i[trial_idx, :, :].T  # (n_time, n_neurons)
-            #     X_j_trial = X_j[trial_idx, :, :].T
-            #
-            #     X_i_trial_norm = zscore(X_i_trial, axis=0, nan_policy='omit')
-            #     X_j_trial_norm = zscore(X_j_trial, axis=0, nan_policy='omit')
-            #     X_i_trial_norm = np.nan_to_num(X_i_trial_norm, nan=0.0)
-            #     X_j_trial_norm = np.nan_to_num(X_j_trial_norm, nan=0.0)
-            #
-            #     u_trials[trial_idx] = X_i_trial_norm @ A[:, :self.n_components]
-            #     v_trials[trial_idx] = X_j_trial_norm @ B[:, :self.n_components]
 
             # Store projections
             self.projections[trial_type] = {
@@ -646,8 +638,6 @@ class CrossTrialTypeCCAAnalyzer:
             }
 
             print(f"\n  Temporal correlation ({self.reference_type} vs {trial_type}):")
-            # print(f"    Region i R²: {[f'{c['r2']:.3f}' for c in corr_u[:3]]}")
-            # print(f"    Region j R²: {[f'{c['r2']:.3f}' for c in corr_v[:3]]}")
 
         # Pairwise statistical tests on peak values
         trial_types = list(self.projections.keys())
@@ -718,84 +708,6 @@ class CrossTrialTypeCCAAnalyzer:
         return results
 
     # =========================================================================
-    # RASTERMAP ORDERING (FROM REFERENCE ONLY)
-    # =========================================================================
-
-    def compute_global_rastermap(self) -> Optional[Dict]:
-        """
-        Compute global Rastermap ordering using reference trial type only.
-
-        This ordering will be applied to visualizations of all trial types
-        to ensure consistent neuron ordering across comparisons.
-
-        Returns:
-            Dictionary with Rastermap results or None if unavailable
-        """
-        if not RASTERMAP_AVAILABLE:
-            print("Rastermap not available - skipping neuron ordering")
-            return None
-
-        print(f"\n" + "-" * 50)
-        print(f"Computing Rastermap ordering from {self.reference_type}")
-        print("-" * 50)
-
-        ref_neural = self.neural_data.get(self.reference_type, {})
-
-        if not ref_neural:
-            print("No neural data for reference type")
-            return None
-
-        all_neural_data = []
-        region_indices = {}
-        current_idx = 0
-
-        for region_name, spike_data in ref_neural.items():
-            # Shape: (n_trials, n_neurons, n_time)
-            n_trials, n_neurons, n_time = spike_data.shape
-
-            # Reshape to (n_neurons, n_time * n_trials) for Rastermap
-            reshaped = spike_data.transpose(1, 0, 2).reshape(n_neurons, -1)
-            all_neural_data.append(reshaped)
-
-            region_indices[region_name] = {
-                'start': current_idx,
-                'end': current_idx + n_neurons,
-                'n_neurons': n_neurons
-            }
-            current_idx += n_neurons
-
-            print(f"  {region_name}: {n_neurons} neurons")
-
-        # Pool all data
-        pooled_data = np.vstack(all_neural_data)
-        print(f"  Pooled data: {pooled_data.shape}")
-
-        # Normalize
-        pooled_norm = zscore(pooled_data, axis=1, nan_policy='omit')
-        pooled_norm = np.nan_to_num(pooled_norm, nan=0.0)
-
-        # Fit Rastermap
-        model = Rastermap(
-            n_PCs=min(pooled_data.shape[0], 200),
-            locality=0,
-            grid_upsample=5
-        )
-        model.fit(pooled_norm)
-
-        self.global_rastermap_results = {
-            'sorting_idx': model.isort,
-            'embedding': model.embedding,
-            'region_indices': region_indices,
-            'n_total_neurons': pooled_data.shape[0],
-            'n_time': n_time,
-            'n_trials': n_trials
-        }
-
-        print(f"  Rastermap complete: {len(model.isort)} neurons sorted")
-
-        return self.global_rastermap_results
-
-    # =========================================================================
     # VISUALIZATION METHODS
     # =========================================================================
 
@@ -811,7 +723,6 @@ class CrossTrialTypeCCAAnalyzer:
         Layout:
         - Row 1: Region i projections (all components, all trial types)
         - Row 2: Region j projections (all components, all trial types)
-        - Row 3: Peak amplitude comparison bar plots
 
         Parameters:
             region_pair: Tuple of (region_i, region_j)
@@ -827,8 +738,8 @@ class CrossTrialTypeCCAAnalyzer:
         fig = plt.figure(figsize=figsize)
         fontsize = 12
 
-        # Create grid: 3 rows × n_comp_show columns
-        gs = fig.add_gridspec(2, n_comp_show, height_ratios=[1, 1, 0.8],
+        # Create grid: 2 rows × n_comp_show columns
+        gs = fig.add_gridspec(2, n_comp_show, height_ratios=[1, 1],
                               hspace=0.35, wspace=0.3)
 
         # Row 1: Region i projections
@@ -850,10 +761,6 @@ class CrossTrialTypeCCAAnalyzer:
             if comp_idx == 0:
                 ax.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
             ax.set_xlabel('Time (s)', fontsize=fontsize)
-
-        # # Row 3: Peak amplitude comparison
-        # ax_peak = fig.add_subplot(gs[2, :])
-        # self._plot_peak_amplitude_comparison(ax_peak, fontsize)
 
         # Add overall title
         plt.suptitle(
@@ -892,13 +799,18 @@ class CrossTrialTypeCCAAnalyzer:
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
             linestyle = '-' if trial_type == self.reference_type else '-'
             linewidth = 2 if trial_type == self.reference_type else 1.0
-
-            ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                    linewidth=linewidth, label=trial_type.replace('_', ' '),
-                    alpha=0.9)
-            ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                            alpha=0.15, color=color)
-
+            if trial_type == self.reference_type:
+                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
+                        linewidth=linewidth, label=trial_type.replace('_', ' '),
+                        alpha=0.8)
+                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
+                                alpha=0.15, color=color)
+            else:
+                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
+                        linewidth=linewidth, label=trial_type.replace('_', ' '),
+                        alpha=0.4)
+                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
+                                alpha=0.15, color=color)
         # Add stimulus onset marker
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
         ax.axvspan(0, 1.5, alpha=0.05, color='gray')
@@ -908,37 +820,6 @@ class CrossTrialTypeCCAAnalyzer:
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=fontsize - 2)
         ax.legend(fontsize=fontsize - 3, loc='upper right')
-
-    def _plot_peak_amplitude_comparison(self, ax: plt.Axes, fontsize: int) -> None:
-        """Plot peak amplitude comparison as grouped bar chart."""
-        trial_types = list(self.projections.keys())
-        n_types = len(trial_types)
-        n_comp_show = min(3, self.n_components)
-
-        # Prepare data
-        bar_width = 0.25
-        x_base = np.arange(n_comp_show)
-
-        for idx, trial_type in enumerate(trial_types):
-            peaks = self.statistical_results['peak_amplitudes'][trial_type]
-            region_i_peaks = peaks['region_i'][:n_comp_show]
-            region_j_peaks = peaks['region_j'][:n_comp_show]
-            avg_peaks = [(a + b) / 2 for a, b in zip(region_i_peaks, region_j_peaks)]
-
-            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
-            offset = (idx - n_types / 2 + 0.5) * bar_width
-
-            ax.bar(x_base + offset, avg_peaks, bar_width, color=color,
-                   label=trial_type.replace('_', ' '), alpha=0.8, edgecolor='black')
-
-        ax.set_xticks(x_base)
-        ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize)
-        ax.set_ylabel('Peak Amplitude\n(avg. both regions)', fontsize=fontsize)
-        ax.set_xlabel('CCA Component', fontsize=fontsize)
-        ax.legend(fontsize=fontsize - 2, loc='upper right')
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.grid(True, axis='y', alpha=0.3)
 
     def create_statistical_summary_figure(
             self,
@@ -950,8 +831,8 @@ class CrossTrialTypeCCAAnalyzer:
         Create figure showing statistical comparison results.
 
         Layout:
-        - Top row: Temporal correlation heatmap
-        - Bottom row: Pairwise test p-values and effect sizes
+        - Top row: Temporal correlation bar charts
+        - Bottom row: P-value heatmap
 
         Parameters:
             region_pair: Tuple of (region_i, region_j)
@@ -966,7 +847,7 @@ class CrossTrialTypeCCAAnalyzer:
         fig = plt.figure(figsize=figsize)
         fontsize = 12
 
-        gs = fig.add_gridspec(1, 2, hspace=0.35, wspace=0.3)
+        gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.3)
 
         # Plot 1: Temporal correlation R² values
         ax1 = fig.add_subplot(gs[0, 0])
@@ -975,13 +856,9 @@ class CrossTrialTypeCCAAnalyzer:
         ax2 = fig.add_subplot(gs[0, 1])
         self._plot_temporal_correlation_bars(ax2, 'region_j', region_j, fontsize)
 
-        # # Plot 2: P-value heatmap
-        # ax3 = fig.add_subplot(gs[1, 0])
-        # self._plot_pvalue_heatmap(ax3, fontsize)
-        #
-        # # Plot 3: Effect size comparison
-        # ax4 = fig.add_subplot(gs[1, 1])
-        # self._plot_effect_sizes(ax4, fontsize)
+        # Plot 2: P-value heatmap
+        ax3 = fig.add_subplot(gs[1, 0])
+        self._plot_pvalue_heatmap(ax3, fontsize)
 
         plt.suptitle(
             f'Statistical Comparison: Cross-Trial-Type CCA Projections\n'
@@ -1058,7 +935,8 @@ class CrossTrialTypeCCAAnalyzer:
                     p_matrix[i, j] = (p_i + p_j) / 2
 
         # Plot heatmap
-        im = ax.imshow(-np.log10(p_matrix + 1e-10), cmap='Reds', aspect='auto')
+        p_matrix = -np.log10(p_matrix + 1e-10)
+        im = ax.imshow(p_matrix, cmap='Reds', aspect='auto',vmax=2.5,vmin=0)
 
         ax.set_xticks(np.arange(n_comp_show))
         ax.set_yticks(np.arange(len(comparisons)))
@@ -1072,63 +950,15 @@ class CrossTrialTypeCCAAnalyzer:
             for j in range(n_comp_show):
                 p_val = p_matrix[i, j]
                 text = f'{p_val:.3f}'
-                if p_val < 0.05:
+                if p_val > 1.3:
                     text += '*'
-                if p_val < 0.01:
+                if p_val > 2:
                     text += '*'
                 ax.text(j, i, text, ha='center', va='center', fontsize=fontsize - 3,
-                        color='white' if -np.log10(p_val + 1e-10) > 1 else 'black')
+                        color='white' if (p_val + 1e-10) > 1 else 'black')
 
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-    def _plot_effect_sizes(self, ax: plt.Axes, fontsize: int) -> None:
-        """Plot Cohen's d effect sizes."""
-        pairwise = self.statistical_results['pairwise_tests']
-        n_comp_show = min(3, self.n_components)
-
-        comparisons = list(pairwise.keys())
-        if not comparisons:
-            ax.text(0.5, 0.5, 'No effect sizes available',
-                    ha='center', va='center', fontsize=fontsize)
-            ax.axis('off')
-            return
-
-        bar_width = 0.25
-        x_base = np.arange(n_comp_show)
-
-        for idx, comp in enumerate(comparisons):
-            d_values = []
-            for j in range(n_comp_show):
-                if j < len(pairwise[comp]['region_i']):
-                    d_i = pairwise[comp]['region_i'][j]['cohens_d']
-                    d_j = pairwise[comp]['region_j'][j]['cohens_d']
-                    d_values.append((d_i + d_j) / 2)
-                else:
-                    d_values.append(0)
-
-            offset = (idx - len(comparisons) / 2 + 0.5) * bar_width
-
-            # Get color from comparison name
-            other_type = comp.split('_vs_')[-1]
-            color = TRIAL_TYPE_COLORS.get(other_type, 'gray')
-
-            ax.bar(x_base + offset, d_values, bar_width, color=color,
-                   label=comp.replace('_', ' '), alpha=0.8, edgecolor='black')
-
-        ax.axhline(y=0.2, color='gray', linestyle='--', alpha=0.5, label='Small effect')
-        ax.axhline(y=0.5, color='gray', linestyle=':', alpha=0.5, label='Medium effect')
-        ax.axhline(y=-0.2, color='gray', linestyle='--', alpha=0.5)
-        ax.axhline(y=-0.5, color='gray', linestyle=':', alpha=0.5)
-
-        ax.set_xticks(x_base)
-        ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize - 2)
-        ax.set_ylabel("Cohen's d", fontsize=fontsize)
-        ax.set_xlabel('CCA Component', fontsize=fontsize)
-        ax.set_title('Effect Size (avg. both regions)', fontsize=fontsize + 1)
-        ax.legend(fontsize=fontsize - 3, loc='upper right')
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.grid(True, axis='y', alpha=0.3)
 
     def create_detailed_temporal_figure(
             self,
@@ -1200,7 +1030,7 @@ class CrossTrialTypeCCAAnalyzer:
         plt.tight_layout(rect=[0, 0, 1, 0.94])
 
         if save_fig:
-            save_path = self.output_dir / f"detailed_comp{component_idx + 1}_{region_i}_{region_j}.png"
+            save_path = self.output_dir / f"detailed_temporal_{region_i}_{region_j}_comp{component_idx + 1}.png"
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Saved: {save_path}")
 
@@ -1210,101 +1040,83 @@ class CrossTrialTypeCCAAnalyzer:
             self,
             ax: plt.Axes,
             mean_proj: np.ndarray,
-            trial_projs: np.ndarray,
+            trial_proj: np.ndarray,
             color: str,
             trial_type: str,
             fontsize: int
     ) -> None:
         """Plot detailed projection with individual trial traces."""
-        # Take absolute value
-        mean_proj = np.abs(mean_proj)
-        trial_projs = np.abs(trial_projs)
+        # Plot individual trials (faint)
+        for trial_idx in range(min(20, trial_proj.shape[0])):
+            ax.plot(self.time_bins, np.abs(trial_proj[trial_idx, :]),
+                    color=color, alpha=0.1, linewidth=0.5)
 
-        # Plot individual trials (light)
-        for trial_idx in range(min(20, trial_projs.shape[0])):
-            ax.plot(self.time_bins, trial_projs[trial_idx], color=color,
-                    alpha=0.1, linewidth=0.5)
+        # Plot mean (bold)
+        ax.plot(self.time_bins, np.abs(mean_proj), color=color,
+                linewidth=2.5, alpha=0.9)
 
-        # Plot mean with Std
-        sem = np.std(trial_projs, axis=0) / np.sqrt(trial_projs.shape[0])
-        std = np.std(trial_projs, axis=0)
-        ax.plot(self.time_bins, mean_proj, color=color, linewidth=2.5, alpha=0.9)
-        # ax.fill_between(self.time_bins, mean_proj - sem, mean_proj + sem,
-        #                 alpha=0.2, color=color)
-        ax.fill_between(self.time_bins, mean_proj - std, mean_proj + std,
-                        alpha=0.2, color=color)
+        # Add stimulus onset marker
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
         ax.axvspan(0, 1.5, alpha=0.05, color='gray')
+
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=fontsize - 2)
 
-    # =========================================================================
-    # REPORT GENERATION
-    # =========================================================================
-
     def generate_summary_report(self, region_pair: Tuple[str, str]) -> Path:
         """
-        Generate comprehensive text and JSON summary reports.
+        Generate text report summarizing analysis results.
 
         Parameters:
             region_pair: Tuple of (region_i, region_j)
 
         Returns:
-            Path to the generated report directory
+            Path to the generated report file
         """
         region_i, region_j = region_pair
-        report_dir = self.output_dir / 'reports'
-        report_dir.mkdir(exist_ok=True)
+        report_dir = self.output_dir / f"reports_{region_i}_{region_j}"
+        report_dir.mkdir(parents=True, exist_ok=True)
 
-        # JSON report
-        json_report = {
-            'session': self.session_name,
-            'region_pair': [region_i, region_j],
-            'reference_type': self.reference_type,
-            'available_trial_types': self.available_trial_types,
-            'n_components': self.n_components,
-            'analysis_date': str(datetime.now()),
-            'statistical_results': self._serialize_stats_for_json()
-        }
-
-        json_path = report_dir / f'analysis_summary_{region_i}_{region_j}.json'
-        with open(json_path, 'w') as f:
-            json.dump(json_report, f, indent=2)
-
-        # Text report
-        text_path = report_dir / f'analysis_report_{region_i}_{region_j}.txt'
-        with open(text_path, 'w') as f:
+        # Write main text report
+        report_path = report_dir / "analysis_summary.txt"
+        with open(report_path, 'w') as f:
             f.write("=" * 70 + "\n")
-            f.write("Cross-Trial-Type CCA Projection Analysis Report\n")
+            f.write("Cross-Trial-Type CCA Analysis Summary\n")
             f.write("=" * 70 + "\n\n")
-
             f.write(f"Session: {self.session_name}\n")
-            f.write(f"Region Pair: {region_i} vs {region_j}\n")
-            f.write(f"Reference Type: {self.reference_type}\n")
-            f.write(f"Trial Types Analyzed: {', '.join(self.available_trial_types)}\n")
-            f.write(f"Analysis Date: {datetime.now()}\n\n")
+            f.write(f"Region pair: {region_i} vs {region_j}\n")
+            f.write(f"Reference type: {self.reference_type}\n")
+            f.write(f"Analysis date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
-            f.write("-" * 50 + "\n")
-            f.write("Trial Counts:\n")
-            f.write("-" * 50 + "\n")
-            for tt, proj in self.projections.items():
-                f.write(f"  {tt}: {proj['n_trials']} trials\n")
+            f.write("Trial Types Analyzed:\n")
+            for tt in self.available_trial_types:
+                if tt in self.projections:
+                    f.write(f"  - {tt}: {self.projections[tt]['n_trials']} trials\n")
 
-            f.write("\n" + "-" * 50 + "\n")
-            f.write("Peak Amplitudes (Component 1):\n")
+            f.write("\nStatistical Results:\n")
             f.write("-" * 50 + "\n")
+
+            # Peak amplitudes
+            f.write("\nPeak Amplitudes (Component 1):\n")
             for tt, peaks in self.statistical_results['peak_amplitudes'].items():
                 f.write(f"  {tt}:\n")
                 f.write(f"    {region_i}: {peaks['region_i'][0]:.4f}\n")
                 f.write(f"    {region_j}: {peaks['region_j'][0]:.4f}\n")
 
-            f.write("\n" + "-" * 50 + "\n")
-            f.write("Statistical Tests (Component 1):\n")
-            f.write("-" * 50 + "\n")
-            for comp, tests in self.statistical_results['pairwise_tests'].items():
-                f.write(f"\n  {comp}:\n")
+            # Temporal correlations
+            f.write("\nTemporal Correlations (vs reference):\n")
+            for comp_name, corr in self.statistical_results['temporal_correlations'].items():
+                f.write(f"  {comp_name}:\n")
+                for comp_idx in range(min(3, len(corr['region_i']))):
+                    f.write(f"    Comp {comp_idx + 1}: ")
+                    f.write(f"{region_i} R²={corr['region_i'][comp_idx]['r2']:.4f}, ")
+                    f.write(f"{region_j} R²={corr['region_j'][comp_idx]['r2']:.4f}\n")
+
+            # Pairwise tests
+            f.write("\nPairwise Statistical Tests:\n")
+            for comp_name, tests in self.statistical_results['pairwise_tests'].items():
+                f.write(f"  {comp_name}:\n")
                 if tests['region_i']:
                     t = tests['region_i'][0]
                     f.write(f"    {region_i}: Wilcoxon p={t['wilcoxon_p']:.4f}, ")
@@ -1337,6 +1149,853 @@ class CrossTrialTypeCCAAnalyzer:
 
 
 # =============================================================================
+# CROSS-SESSION AGGREGATION CLASS
+# =============================================================================
+
+class CrossSessionCCAAnalyzer:
+    """
+    Aggregator for cross-trial-type CCA analysis across multiple sessions.
+    
+    This class collects results from multiple sessions for a given region pair
+    and computes cross-session statistics including mean ± SEM projections
+    and temporal correlation distributions.
+    
+    Mathematical Framework:
+    -----------------------
+    For cross-session aggregation of projections:
+    
+    $$\bar{\mathbf{u}}_{c,\text{pop}} = \frac{1}{N_s} \sum_{s=1}^{N_s} \bar{\mathbf{u}}_{c,s}$$
+    
+    where $\bar{\mathbf{u}}_{c,s}$ is the session-mean projection.
+    
+    The cross-session SEM is:
+    $$\text{SEM}_{\text{pop}} = \frac{\sigma_{\text{sessions}}}{\sqrt{N_s}}$$
+    
+    Attributes:
+        base_dir: Root directory containing all session results
+        region_pair: Tuple of (region_i, region_j) being analyzed
+        session_results: Dictionary mapping session_name → analyzer results
+        aggregated_projections: Cross-session aggregated projections
+        aggregated_statistics: Cross-session statistical summaries
+    """
+    
+    def __init__(
+            self,
+            base_dir: str,
+            region_pair: Tuple[str, str],
+            reference_type: str = 'cued_hit_long',
+            n_components: int = 5,
+            min_sessions: int = MIN_SESSIONS_THRESHOLD
+    ):
+        """
+        Initialize the cross-session analyzer.
+        
+        Parameters:
+            base_dir: Root directory for Oxford dataset
+            region_pair: Tuple of (region_i, region_j) to analyze
+            reference_type: Trial type for CCA weight training
+            n_components: Number of CCA components to analyze
+            min_sessions: Minimum sessions required for aggregation
+        """
+        self.base_dir = Path(base_dir)
+
+
+        self.region_pair = sort_pair_by_anatomy(*region_pair)
+
+
+
+        self.reference_type = reference_type
+        self.n_components = n_components
+        self.min_sessions = min_sessions
+        
+        # Session-level data containers
+        self.session_analyzers: Dict[str, CrossTrialTypeCCAAnalyzer] = {}
+        self.session_projections: Dict[str, Dict] = {}
+        self.session_statistics: Dict[str, Dict] = {}
+        
+        # Cross-session aggregated results
+        self.aggregated_projections: Dict[str, Dict] = {}
+        self.aggregated_statistics: Dict = {}
+        
+        # Time axis (from first valid session)
+        self.time_bins: Optional[np.ndarray] = None
+        
+        # Available trial types (intersection across sessions)
+        self.available_trial_types: List[str] = []
+        
+        # Output directory
+        region_i, region_j = self.region_pair
+        self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'cross_session' / f'{region_i}_{region_j}'
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print("=" * 70)
+        print("Cross-Session CCA Analyzer")
+        print("=" * 70)
+        print(f"Region pair: {region_i} vs {region_j}")
+        print(f"Reference condition: {reference_type}")
+        print(f"Minimum sessions: {min_sessions}")
+        print(f"Output directory: {self.output_dir}")
+    
+    def add_session_result(
+            self,
+            session_name: str,
+            analyzer: CrossTrialTypeCCAAnalyzer
+    ) -> bool:
+        """
+        Add results from a single session analyzer.
+        
+        Parameters:
+            session_name: Session identifier
+            analyzer: Completed CrossTrialTypeCCAAnalyzer with projections
+            
+        Returns:
+            True if session was successfully added
+        """
+        if not analyzer.projections:
+            print(f"  {session_name}: No projections available")
+            return False
+        
+        # Store analyzer and extract relevant data
+        self.session_analyzers[session_name] = analyzer
+        self.session_projections[session_name] = analyzer.projections
+        self.session_statistics[session_name] = analyzer.statistical_results
+        
+        # Update time bins from first session
+        if self.time_bins is None:
+            self.time_bins = analyzer.time_bins
+        
+        print(f"  Added session: {session_name}")
+        return True
+    
+    def aggregate_projections(self) -> bool:
+        """
+        Aggregate projections across all sessions.
+        
+        Computes mean ± SEM by:
+        1. First averaging within each session (already done in per-session analysis)
+        2. Then averaging across sessions
+        
+        Returns:
+            True if aggregation successful
+        """
+        n_sessions = len(self.session_projections)
+        if n_sessions < self.min_sessions:
+            print(f"Insufficient sessions: {n_sessions} < {self.min_sessions}")
+            return False
+        
+        print(f"\n" + "-" * 50)
+        print(f"Aggregating projections across {n_sessions} sessions")
+        print("-" * 50)
+        
+        # Find common trial types across all sessions
+        common_trial_types = None
+        for session_proj in self.session_projections.values():
+            session_types = set(session_proj.keys())
+            if common_trial_types is None:
+                common_trial_types = session_types
+            else:
+                common_trial_types &= session_types
+        
+        if not common_trial_types:
+            print("No common trial types across sessions")
+            return False
+        
+        self.available_trial_types = list(common_trial_types)
+        print(f"Common trial types: {', '.join(self.available_trial_types)}")
+        
+        # Aggregate for each trial type
+        for trial_type in self.available_trial_types:
+            # Collect session-level means
+            u_means_all = []
+            v_means_all = []
+            
+            for session_name, session_proj in self.session_projections.items():
+                if trial_type not in session_proj:
+                    continue
+                
+                proj = session_proj[trial_type]
+                u_means_all.append(proj['u_mean'])
+                v_means_all.append(proj['v_mean'])
+            
+            if len(u_means_all) < self.min_sessions:
+                continue
+            
+            # Stack into arrays: (n_sessions, n_time, n_components)
+            u_stack = np.stack(u_means_all, axis=0)
+            v_stack = np.stack(v_means_all, axis=0)
+            
+            # Compute cross-session statistics
+            n_sessions = u_stack.shape[0]
+            
+            self.aggregated_projections[trial_type] = {
+                'u_mean': np.mean(u_stack, axis=0),  # (n_time, n_components)
+                'v_mean': np.mean(v_stack, axis=0),
+                'u_std': np.std(u_stack, axis=0),
+                'v_std': np.std(v_stack, axis=0),
+                'u_sem': np.std(u_stack, axis=0) / np.sqrt(n_sessions),
+                'v_sem': np.std(v_stack, axis=0) / np.sqrt(n_sessions),
+                'u_sessions': u_stack,  # Keep individual session data for plotting
+                'v_sessions': v_stack,
+                'n_sessions': n_sessions
+            }
+            
+            print(f"  {trial_type}: aggregated {n_sessions} sessions")
+        
+        return len(self.aggregated_projections) >= 2
+    
+    def aggregate_temporal_correlations(self) -> Dict:
+        """
+        Aggregate temporal R² correlations across sessions.
+        
+        Collects per-session R² values for boxplot visualization.
+        
+        Returns:
+            Dictionary with aggregated correlation data
+        """
+        print(f"\n" + "-" * 50)
+        print("Aggregating temporal correlations")
+        print("-" * 50)
+        
+        aggregated_corr = {}
+        
+        for session_name, session_stats in self.session_statistics.items():
+            if 'temporal_correlations' not in session_stats:
+                continue
+            
+            for comparison_key, corr_data in session_stats['temporal_correlations'].items():
+                if comparison_key not in aggregated_corr:
+                    aggregated_corr[comparison_key] = {
+                        'region_i': {f'comp_{k+1}': [] for k in range(self.n_components)},
+                        'region_j': {f'comp_{k+1}': [] for k in range(self.n_components)}
+                    }
+                
+                # Collect R² values per component
+                for comp_idx, corr in enumerate(corr_data['region_i'][:self.n_components]):
+                    aggregated_corr[comparison_key]['region_i'][f'comp_{comp_idx+1}'].append(corr['r2'])
+                
+                for comp_idx, corr in enumerate(corr_data['region_j'][:self.n_components]):
+                    aggregated_corr[comparison_key]['region_j'][f'comp_{comp_idx+1}'].append(corr['r2'])
+        
+        self.aggregated_statistics['temporal_correlations'] = aggregated_corr
+        
+        # Print summary
+        for comparison_key, data in aggregated_corr.items():
+            n_vals = len(data['region_i']['comp_1'])
+            print(f"  {comparison_key}: {n_vals} sessions")
+        
+        return aggregated_corr
+    
+    def create_cross_session_projection_figure(
+            self,
+            figsize: Tuple[float, float] = (16, 12),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Create figure showing cross-session aggregated projections.
+        
+        Shows mean ± SEM across sessions for each trial type.
+        
+        Parameters:
+            figsize: Figure dimensions
+            save_fig: Whether to save the figure
+            
+        Returns:
+            Matplotlib figure object
+        """
+        region_i, region_j = self.region_pair
+        n_comp_show = min(3, self.n_components)
+        n_sessions = len(self.session_projections)
+        
+        fig = plt.figure(figsize=figsize)
+        fontsize = 12
+        
+        # Create grid: 2 rows × n_comp_show columns
+        gs = fig.add_gridspec(2, n_comp_show, height_ratios=[1, 1],
+                              hspace=0.35, wspace=0.3)
+        
+        # Row 1: Region i projections
+        for comp_idx in range(n_comp_show):
+            ax = fig.add_subplot(gs[0, comp_idx])
+            self._plot_cross_session_projections(
+                ax, 'u_mean', 'u_sem', comp_idx, region_i, fontsize
+            )
+            if comp_idx == 0:
+                ax.set_ylabel(f'{region_i}\nProjection', fontsize=fontsize)
+            ax.set_title(f'CCA Component {comp_idx + 1}', fontsize=fontsize + 1)
+        
+        # Row 2: Region j projections
+        for comp_idx in range(n_comp_show):
+            ax = fig.add_subplot(gs[1, comp_idx])
+            self._plot_cross_session_projections(
+                ax, 'v_mean', 'v_sem', comp_idx, region_j, fontsize
+            )
+            if comp_idx == 0:
+                ax.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
+            ax.set_xlabel('Time (s)', fontsize=fontsize)
+        
+        # Add overall title
+        plt.suptitle(
+            f'Cross-Session Aggregated CCA Projections (n={n_sessions} sessions)\n'
+            f'{region_i} vs {region_j} | CCA trained on {self.reference_type}',
+            fontsize=fontsize + 2, fontweight='bold', y=0.98
+        )
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        
+        if save_fig:
+            save_path = self.output_dir / f"cross_session_projection_{region_i}_{region_j}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Saved: {save_path}")
+        
+        return fig
+    
+    def _plot_cross_session_projections(
+            self,
+            ax: plt.Axes,
+            mean_key: str,
+            sem_key: str,
+            comp_idx: int,
+            region_name: str,
+            fontsize: int
+    ) -> None:
+        """Plot cross-session aggregated projections for a single component."""
+        for trial_type in self.available_trial_types:
+            if trial_type not in self.aggregated_projections:
+                continue
+            
+            agg = self.aggregated_projections[trial_type]
+            mean_proj = np.abs(agg[mean_key][:, comp_idx])
+            sem_proj = agg[sem_key][:, comp_idx]
+            
+            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
+            linewidth = 2 if trial_type == self.reference_type else 1.5
+            
+            ax.plot(self.time_bins, mean_proj, color=color, linewidth=linewidth,
+                    label=f'{trial_type.replace("_", " ")} (n={agg["n_sessions"]})',
+                    alpha=0.9)
+            ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
+                            alpha=0.2, color=color)
+        
+        # Add stimulus onset marker
+        ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
+        ax.axvspan(0, 1.5, alpha=0.05, color='gray')
+        ax.set_ylim([0, 6])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis='both', labelsize=fontsize - 2)
+        ax.legend(fontsize=fontsize - 3, loc='upper right')
+    
+    def create_temporal_correlation_boxplot_figure(
+            self,
+            figsize: Tuple[float, float] = (14, 10),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Create figure with boxplots of temporal R² across sessions.
+        
+        Parameters:
+            figsize: Figure dimensions
+            save_fig: Whether to save the figure
+            
+        Returns:
+            Matplotlib figure object
+        """
+        region_i, region_j = self.region_pair
+        
+        if 'temporal_correlations' not in self.aggregated_statistics:
+            print("No temporal correlations to plot")
+            return None
+        
+        correlations = self.aggregated_statistics['temporal_correlations']
+        n_comp_show = min(3, self.n_components)
+        
+        fig = plt.figure(figsize=figsize)
+        fontsize = 12
+        
+        gs = fig.add_gridspec(1, 2, wspace=0.3)
+        
+        # Plot for region i
+        ax1 = fig.add_subplot(gs[0, 0])
+        self._plot_correlation_boxplots(ax1, correlations, 'region_i', region_i, 
+                                        n_comp_show, fontsize)
+        
+        # Plot for region j
+        ax2 = fig.add_subplot(gs[0, 1])
+        self._plot_correlation_boxplots(ax2, correlations, 'region_j', region_j,
+                                        n_comp_show, fontsize)
+        
+        plt.suptitle(
+            f'Cross-Session Temporal R² Distribution\n'
+            f'{region_i} vs {region_j} | n={len(self.session_projections)} sessions',
+            fontsize=fontsize + 2, fontweight='bold', y=0.98
+        )
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        
+        if save_fig:
+            save_path = self.output_dir / f"temporal_correlation_boxplot_{region_i}_{region_j}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Saved: {save_path}")
+        
+        return fig
+    
+    def _plot_correlation_boxplots(
+            self,
+            ax: plt.Axes,
+            correlations: Dict,
+            region_key: str,
+            region_name: str,
+            n_comp_show: int,
+            fontsize: int
+    ) -> None:
+        """Plot boxplots of temporal R² for a single region."""
+        comparisons = list(correlations.keys())
+        n_comparisons = len(comparisons)
+        
+        positions = []
+        data_to_plot = []
+        colors = []
+        labels = []
+        
+        for comp_idx in range(n_comp_show):
+            comp_key = f'comp_{comp_idx + 1}'
+            
+            for idx, comparison in enumerate(comparisons):
+                r2_values = correlations[comparison][region_key][comp_key]
+                
+                if r2_values:
+                    # Position: grouped by component, offset by comparison
+                    pos = comp_idx * (n_comparisons + 1) + idx
+                    positions.append(pos)
+                    data_to_plot.append(r2_values)
+                    
+                    # Color based on comparison trial type
+                    other_type = comparison.replace(f"{self.reference_type}_vs_", "")
+                    colors.append(TRIAL_TYPE_COLORS.get(other_type, 'gray'))
+                    
+                    if comp_idx == 0:
+                        labels.append(other_type.replace('_', ' '))
+        
+        if not data_to_plot:
+            ax.text(0.5, 0.5, 'No data available', ha='center', va='center')
+            return
+        
+        # Create boxplots
+        bp = ax.boxplot(data_to_plot, positions=positions, widths=0.6, patch_artist=True)
+        
+        # Color the boxes
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        # Set x-axis labels
+        comp_positions = [(i * (n_comparisons + 1) + (n_comparisons - 1) / 2) 
+                          for i in range(n_comp_show)]
+        ax.set_xticks(comp_positions)
+        ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize)
+        
+        ax.set_ylabel('Temporal R²', fontsize=fontsize)
+        ax.set_title(f'{region_name}', fontsize=fontsize + 1)
+        ax.set_ylim([0, 1.0])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, axis='y', alpha=0.3)
+        
+        # Add legend
+        if labels:
+            from matplotlib.patches import Patch
+            unique_labels = list(dict.fromkeys(labels))
+            unique_colors = [TRIAL_TYPE_COLORS.get(l.replace(' ', '_'), 'gray') for l in unique_labels]
+            legend_elements = [Patch(facecolor=c, alpha=0.7, label=l) 
+                              for c, l in zip(unique_colors, unique_labels)]
+            ax.legend(handles=legend_elements, fontsize=fontsize - 2, loc='lower right')
+
+
+# =============================================================================
+# UPPER TRIANGLE SUMMARY FIGURE CLASSES
+# =============================================================================
+
+class CrossTrialTypeSummaryVisualizer:
+    """
+    Visualizer for creating upper-triangle summary figures across all region pairs.
+    
+    Following the layout from CCA_test_all.py, this class creates:
+    1. Figure 1: First component projections for all region pairs
+    2. Figure 2: R² boxplots of top 3 components comparing trial types
+    
+    The upper triangle format allows visualization of all unique region pairs
+    in a single figure, with anatomical ordering ensuring consistent layout.
+    """
+    
+    def __init__(
+            self,
+            base_dir: str,
+            reference_type: str = 'cued_hit_long',
+            n_components: int = 5,
+            min_sessions: int = MIN_SESSIONS_THRESHOLD
+    ):
+        """
+        Initialize the summary visualizer.
+        
+        Parameters:
+            base_dir: Root directory for Oxford dataset
+            reference_type: Trial type for CCA weight training
+            n_components: Number of CCA components to analyze
+            min_sessions: Minimum sessions required for a pair to be included
+        """
+        self.base_dir = Path(base_dir)
+        self.reference_type = reference_type
+        self.n_components = n_components
+        self.min_sessions = min_sessions
+        
+        # Cross-session analyzers for each region pair
+        self.pair_analyzers: Dict[Tuple[str, str], CrossSessionCCAAnalyzer] = {}
+        
+        # Available regions and time axis
+        self.available_regions: List[str] = []
+        self.time_bins: Optional[np.ndarray] = None
+        
+        # Output directory
+        self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures'
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print("=" * 70)
+        print("Cross-Trial-Type Summary Visualizer")
+        print("=" * 70)
+        print(f"Reference condition: {reference_type}")
+        print(f"Minimum sessions: {min_sessions}")
+    
+    def add_pair_analyzer(
+            self,
+            pair_analyzer: CrossSessionCCAAnalyzer
+    ) -> None:
+        """
+        Add a cross-session analyzer for a region pair.
+        
+        Parameters:
+            pair_analyzer: Completed CrossSessionCCAAnalyzer with aggregated results
+        """
+        pair_key = pair_analyzer.region_pair
+        self.pair_analyzers[pair_key] = pair_analyzer
+        
+        # Update available regions
+        for region in pair_key:
+            if region not in self.available_regions:
+                self.available_regions.append(region)
+        
+        # Update time bins
+        if self.time_bins is None and pair_analyzer.time_bins is not None:
+            self.time_bins = pair_analyzer.time_bins
+        
+        print(f"  Added pair: {pair_key[0]} vs {pair_key[1]}")
+    
+    def _get_ordered_regions(self) -> List[str]:
+        """Return available regions in anatomical order."""
+        return [r for r in ANATOMICAL_ORDER if r in self.available_regions]
+    
+    def create_projection_matrix_figure(
+            self,
+            figsize: Tuple[float, float] = (40, 40),
+            component_idx: int = 0,
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Create upper-triangle figure showing first component projections.
+        
+        Similar to create_temporal_projection_figure in CCA_test_all.py,
+        but showing cross-trial-type comparisons with cross-session aggregation.
+        
+        Parameters:
+            figsize: Figure dimensions
+            component_idx: Which CCA component to display (0-indexed)
+            save_fig: Whether to save the figure
+            
+        Returns:
+            Matplotlib figure object
+        """
+        print(f"\nCreating projection matrix figure (Component {component_idx + 1})...")
+        
+        ordered_regions = self._get_ordered_regions()
+        n_regions = len(ordered_regions)
+        
+        if n_regions == 0:
+            print("No regions available for plotting")
+            return None
+        
+        fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
+        
+        for i, region_i in enumerate(ordered_regions):
+            for j, region_j in enumerate(ordered_regions):
+                ax = axes[i, j] if n_regions > 1 else axes
+                
+                if i == j:
+                    # Diagonal: region name
+                    ax.text(0.5, 0.5, region_i, ha='center', va='center',
+                            fontsize=32, fontweight='bold')
+                    ax.set_xlim([0, 1])
+                    ax.set_ylim([0, 1])
+                    ax.axis('off')
+                elif i > j:
+                    # Lower triangle: hide
+                    ax.axis('off')
+                else:
+                    # Upper triangle: plot cross-trial-type projections
+                    self._plot_pair_projections(
+                        ax, region_i, region_j, component_idx
+                    )
+        
+        fig.suptitle(
+            f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
+            f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+            fontsize=48, fontweight='bold', y=0.995
+        )
+        
+        plt.tight_layout(rect=[0, 0.01, 1, 0.99])
+        
+        if save_fig:
+            save_path = self.output_dir / f"projection_matrix_comp{component_idx + 1}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Saved: {save_path}")
+        
+        plt.close(fig)
+        return fig
+    
+    def _plot_pair_projections(
+            self,
+            ax: plt.Axes,
+            region_i: str,
+            region_j: str,
+            component_idx: int
+    ) -> None:
+        """
+        Plot cross-trial-type projections for a single region pair.
+        
+        Parameters:
+            ax: Matplotlib axes
+            region_i: First region name
+            region_j: Second region name
+            component_idx: Component to plot (0-indexed)
+        """
+        # Find pair analyzer (check both orderings)
+        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_analyzer = self.pair_analyzers.get(pair_key)
+        
+        if pair_analyzer is None:
+            # Try alternate key
+            alt_key = (pair_key[1], pair_key[0])
+            pair_analyzer = self.pair_analyzers.get(alt_key)
+        
+        if pair_analyzer is None or len(pair_analyzer.aggregated_projections) < 2:
+            ax.set_visible(False)
+            return
+        
+        n_sessions = pair_analyzer.aggregated_projections.get(
+            self.reference_type, {}).get('n_sessions', 0)
+        
+        if n_sessions < self.min_sessions:
+            ax.set_visible(False)
+            return
+        
+        # Plot projections for each trial type
+        time_vec = pair_analyzer.time_bins
+        
+        for trial_type in pair_analyzer.available_trial_types:
+            agg = pair_analyzer.aggregated_projections[trial_type]
+            
+            # Average of both regions
+            mean_u = np.abs(agg['u_mean'][:, component_idx])
+            mean_v = np.abs(agg['v_mean'][:, component_idx])
+            mean_proj = (mean_u + mean_v) / 2
+            
+            sem_u = agg['u_sem'][:, component_idx]
+            sem_v = agg['v_sem'][:, component_idx]
+            sem_proj = (sem_u + sem_v) / 2
+            
+            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
+            linewidth = 2.5 if trial_type == self.reference_type else 2.0
+            
+            ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth, 
+                    alpha=0.9, label=trial_type.replace('_', ' '))
+            ax.fill_between(time_vec, mean_proj - sem_proj, mean_proj + sem_proj,
+                            alpha=0.15, color=color)
+        
+        # Reference line at t=0
+        ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
+        
+        # Formatting
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
+        ax.set_yticks(np.arange(0, 10, 2))
+        ax.set_yticklabels(ax.get_yticks(), fontsize=20)
+        ax.set_ylim([0, 5])
+        ax.set_xticks([-1.5, 0, 2, 3])
+        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
+        ax.tick_params(axis='both', which='major', width=2, length=8)
+        
+        for spine in ax.spines.values():
+            spine.set_linewidth(3)
+        
+        # Add session count annotation
+        ax.text(0.02, 0.98, f'n={n_sessions}', transform=ax.transAxes,
+                fontsize=16, va='top', ha='left')
+    
+    def create_r2_boxplot_matrix_figure(
+            self,
+            figsize: Tuple[float, float] = (40, 40),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Create upper-triangle figure showing R² boxplots for top 3 components.
+        
+        Each cell shows boxplots comparing cued_hit_long vs spont_hit_long
+        and spont_miss_long across sessions.
+        
+        Parameters:
+            figsize: Figure dimensions
+            save_fig: Whether to save the figure
+            
+        Returns:
+            Matplotlib figure object
+        """
+        print("\nCreating R² boxplot matrix figure...")
+        
+        ordered_regions = self._get_ordered_regions()
+        n_regions = len(ordered_regions)
+        
+        if n_regions == 0:
+            print("No regions available for plotting")
+            return None
+        
+        fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
+        
+        for i, region_i in enumerate(ordered_regions):
+            for j, region_j in enumerate(ordered_regions):
+                ax = axes[i, j] if n_regions > 1 else axes
+                
+                if i == j:
+                    # Diagonal: region name
+                    ax.text(0.5, 0.5, region_i, ha='center', va='center',
+                            fontsize=32, fontweight='bold')
+                    ax.set_xlim([0, 1])
+                    ax.set_ylim([0, 1])
+                    ax.axis('off')
+                elif i > j:
+                    # Lower triangle: hide
+                    ax.axis('off')
+                else:
+                    # Upper triangle: plot R² boxplots
+                    self._plot_pair_r2_boxplots(ax, region_i, region_j)
+        
+        fig.suptitle(
+            f'Cross-Session Temporal R² Distribution (Top 3 Components)\n'
+            f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+            fontsize=48, fontweight='bold', y=0.995
+        )
+        
+        plt.tight_layout(rect=[0, 0.01, 1, 0.99])
+        
+        if save_fig:
+            save_path = self.output_dir / "r2_boxplot_matrix.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Saved: {save_path}")
+        
+        plt.close(fig)
+        return fig
+    
+    def _plot_pair_r2_boxplots(
+            self,
+            ax: plt.Axes,
+            region_i: str,
+            region_j: str
+    ) -> None:
+        """
+        Plot R² boxplots for a single region pair.
+        
+        Parameters:
+            ax: Matplotlib axes
+            region_i: First region name
+            region_j: Second region name
+        """
+        # Find pair analyzer
+        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_analyzer = self.pair_analyzers.get(pair_key)
+        
+        if pair_analyzer is None:
+            alt_key = (pair_key[1], pair_key[0])
+            pair_analyzer = self.pair_analyzers.get(alt_key)
+        
+        if pair_analyzer is None:
+            ax.set_visible(False)
+            return
+        
+        if 'temporal_correlations' not in pair_analyzer.aggregated_statistics:
+            ax.set_visible(False)
+            return
+        
+        correlations = pair_analyzer.aggregated_statistics['temporal_correlations']
+        n_comp_show = min(3, self.n_components)
+        
+        # Prepare data for boxplots
+        comparisons = list(correlations.keys())
+        n_comparisons = len(comparisons)
+        
+        if n_comparisons == 0:
+            ax.set_visible(False)
+            return
+        
+        positions = []
+        data_to_plot = []
+        colors = []
+        
+        for comp_idx in range(n_comp_show):
+            comp_key = f'comp_{comp_idx + 1}'
+            
+            for idx, comparison in enumerate(comparisons):
+                # Average R² across both regions
+                r2_i = correlations[comparison]['region_i'].get(comp_key, [])
+                r2_j = correlations[comparison]['region_j'].get(comp_key, [])
+                
+                if r2_i and r2_j:
+                    r2_avg = [(a + b) / 2 for a, b in zip(r2_i, r2_j)]
+                    
+                    pos = comp_idx * (n_comparisons + 0.5) + idx
+                    positions.append(pos)
+                    data_to_plot.append(r2_avg)
+                    
+                    other_type = comparison.replace(f"{self.reference_type}_vs_", "")
+                    colors.append(TRIAL_TYPE_COLORS.get(other_type, 'gray'))
+        
+        if not data_to_plot:
+            ax.set_visible(False)
+            return
+        
+        # Create boxplots
+        bp = ax.boxplot(data_to_plot, positions=positions, widths=0.4, patch_artist=True)
+        
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        # Set x-axis labels
+        comp_positions = [(i * (n_comparisons + 0.5) + (n_comparisons - 1) / 2) 
+                          for i in range(n_comp_show)]
+        ax.set_xticks(comp_positions)
+        ax.set_xticklabels([f'C{i+1}' for i in range(n_comp_show)], fontsize=18)
+        
+        ax.set_ylim([0, 1.05])
+        ax.set_yticks([0, 0.5, 1.0])
+        ax.set_yticklabels(['0', '0.5', '1'], fontsize=18)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, axis='y', alpha=0.3)
+        
+        for spine in ax.spines.values():
+            spine.set_linewidth(2)
+
+
+# =============================================================================
 # PIPELINE ORCHESTRATION CLASS
 # =============================================================================
 
@@ -1345,7 +2004,7 @@ class CrossTrialTypeCCAPipeline:
     Complete pipeline for cross-trial-type CCA analysis.
 
     This class orchestrates the entire analysis workflow for multiple
-    sessions and region pairs.
+    sessions and region pairs, with optional cross-session aggregation.
     """
 
     def __init__(self, config: Dict):
@@ -1360,10 +2019,17 @@ class CrossTrialTypeCCAPipeline:
                 - reference_type: Trial type for CCA training
                 - n_components: Number of CCA components
                 - output_dir: Base output directory
+                - enable_cross_session: Whether to perform cross-session aggregation
         """
         self.config = config
         self.analyzers: Dict[str, CrossTrialTypeCCAAnalyzer] = {}
         self.results: Dict = {}
+        
+        # Cross-session analyzers (organized by region pair)
+        self.cross_session_analyzers: Dict[Tuple[str, str], CrossSessionCCAAnalyzer] = {}
+        
+        # Summary visualizer
+        self.summary_visualizer: Optional[CrossTrialTypeSummaryVisualizer] = None
 
         # Validate config
         required_keys = ['base_dir', 'sessions']
@@ -1375,6 +2041,8 @@ class CrossTrialTypeCCAPipeline:
         config.setdefault('reference_type', 'cued_hit_long')
         config.setdefault('n_components', 5)
         config.setdefault('region_pairs', None)  # Auto-detect if None
+        config.setdefault('enable_cross_session', True)
+        config.setdefault('min_sessions', MIN_SESSIONS_THRESHOLD)
 
         print("=" * 70)
         print("Cross-Trial-Type CCA Pipeline Initialized")
@@ -1446,16 +2114,33 @@ class CrossTrialTypeCCAPipeline:
                 # Compute statistics
                 analyzer.compute_statistics()
 
-                # Create visualizations
-                analyzer.create_projection_comparison_figure(region_pair)
-                analyzer.create_statistical_summary_figure(region_pair)
+                # Create visualizations (single session)
+                # analyzer.create_projection_comparison_figure(region_pair)
+                # analyzer.create_statistical_summary_figure(region_pair)
 
-                # Create detailed figures for first 3 components
-                for comp_idx in range(min(3, analyzer.n_components)):
-                    analyzer.create_detailed_temporal_figure(region_pair, comp_idx)
+                # # Create detailed figures for first 3 components
+                # for comp_idx in range(min(3, analyzer.n_components)):
+                #     analyzer.create_detailed_temporal_figure(region_pair, comp_idx)
 
                 # Generate reports
-                analyzer.generate_summary_report(region_pair)
+                #analyzer.generate_summary_report(region_pair)
+                
+                # Add to cross-session analyzer if enabled
+                if self.config.get('enable_cross_session', True):
+                    pair_key = sort_pair_by_anatomy(region_i, region_j)
+                    
+                    if pair_key not in self.cross_session_analyzers:
+                        self.cross_session_analyzers[pair_key] = CrossSessionCCAAnalyzer(
+                            base_dir=self.config['base_dir'],
+                            region_pair=pair_key,
+                            reference_type=self.config['reference_type'],
+                            n_components=self.config['n_components'],
+                            min_sessions=self.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
+                        )
+                    
+                    self.cross_session_analyzers[pair_key].add_session_result(
+                        session_name, analyzer
+                    )
 
             # Store analyzer
             self.analyzers[session_name] = analyzer
@@ -1497,6 +2182,69 @@ class CrossTrialTypeCCAPipeline:
 
         self.results = results
         return results
+    
+    def run_cross_session_aggregation(self) -> None:
+        """
+        Perform cross-session aggregation and create summary figures.
+        
+        This should be called after run_all_sessions() to aggregate
+        results across sessions and create the upper-triangle summary figures.
+        """
+        print("\n" + "=" * 70)
+        print("CROSS-SESSION AGGREGATION")
+        print("=" * 70)
+        
+        min_sessions = self.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
+        
+        # Initialize summary visualizer
+        self.summary_visualizer = CrossTrialTypeSummaryVisualizer(
+            base_dir=self.config['base_dir'],
+            reference_type=self.config['reference_type'],
+            n_components=self.config['n_components'],
+            min_sessions=min_sessions
+        )
+        
+        # Process each region pair
+        valid_pairs = 0
+        for pair_key, cross_session_analyzer in self.cross_session_analyzers.items():
+            n_sessions = len(cross_session_analyzer.session_projections)
+            
+            if n_sessions < min_sessions:
+                print(f"  {pair_key[0]} vs {pair_key[1]}: {n_sessions} sessions (skipping, < {min_sessions})")
+                continue
+            
+            print(f"\n  Aggregating {pair_key[0]} vs {pair_key[1]} ({n_sessions} sessions)...")
+            
+            # Perform aggregation
+            if cross_session_analyzer.aggregate_projections():
+                cross_session_analyzer.aggregate_temporal_correlations()
+                
+                # Create cross-session figures for this pair
+                cross_session_analyzer.create_cross_session_projection_figure()
+                cross_session_analyzer.create_temporal_correlation_boxplot_figure()
+                
+                # Add to summary visualizer
+                self.summary_visualizer.add_pair_analyzer(cross_session_analyzer)
+                valid_pairs += 1
+        
+        print(f"\nValid pairs for summary: {valid_pairs}")
+        
+        # Create summary figures if we have enough pairs
+        if valid_pairs >= 1:
+            print("\nCreating summary figures...")
+            
+            # Figure 1: First component projections
+            self.summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True
+            )
+            
+            # Figure 2: R² boxplots
+            self.summary_visualizer.create_r2_boxplot_matrix_figure(
+                save_fig=True
+            )
+        else:
+            print("Not enough valid pairs for summary figures")
 
 
 # =============================================================================
@@ -1517,7 +2265,9 @@ def main():
             ('MOp', 'STR'),
             ('MOs', 'STR'),
             ('ORB', 'STR')
-        ]
+        ],
+        'enable_cross_session': True,
+        'min_sessions': MIN_SESSIONS_THRESHOLD
     }
 
     print("=" * 70)
@@ -1527,6 +2277,10 @@ def main():
     # Initialize and run pipeline
     pipeline = CrossTrialTypeCCAPipeline(config)
     results = pipeline.run_all_sessions()
+    
+    # Run cross-session aggregation if enabled
+    if config.get('enable_cross_session', True):
+        pipeline.run_cross_session_aggregation()
 
     print("\n" + "=" * 70)
     print("Analysis Complete!")
