@@ -224,17 +224,12 @@ class CrossTrialTypeCCAAnalyzer:
         # Time axis
         self.time_bins: Optional[np.ndarray] = None
 
-        # Output directory
-        # self.output_dir = Path(base_dir) / 'Paper_output' / 'cross_trial_type_cca' / session_name
-        # self.output_dir.mkdir(parents=True, exist_ok=True)
-
         print("=" * 70)
         print("Cross-Trial-Type CCA Analyzer")
         print("=" * 70)
         print(f"Session: {session_name}")
         print(f"Reference condition: {reference_type}")
         print(f"Components to analyze: {n_components}")
-        # print(f"Output directory: {self.output_dir}")
 
     # =========================================================================
     # DATA LOADING METHODS
@@ -707,447 +702,6 @@ class CrossTrialTypeCCAAnalyzer:
         self.statistical_results = results
         return results
 
-    # =========================================================================
-    # VISUALIZATION METHODS
-    # =========================================================================
-
-    def create_projection_comparison_figure(
-            self,
-            region_pair: Tuple[str, str],
-            figsize: Tuple[float, float] = (16, 12),
-            save_fig: bool = True
-    ) -> plt.Figure:
-        """
-        Create comprehensive figure comparing CCA projections across trial types.
-
-        Layout:
-        - Row 1: Region i projections (all components, all trial types)
-        - Row 2: Region j projections (all components, all trial types)
-
-        Parameters:
-            region_pair: Tuple of (region_i, region_j)
-            figsize: Figure dimensions
-            save_fig: Whether to save the figure
-
-        Returns:
-            Matplotlib figure object
-        """
-        region_i, region_j = region_pair
-        n_comp_show = min(3, self.n_components)
-
-        fig = plt.figure(figsize=figsize)
-        fontsize = 12
-
-        # Create grid: 2 rows × n_comp_show columns
-        gs = fig.add_gridspec(2, n_comp_show, height_ratios=[1, 1],
-                              hspace=0.35, wspace=0.3)
-
-        # Row 1: Region i projections
-        for comp_idx in range(n_comp_show):
-            ax = fig.add_subplot(gs[0, comp_idx])
-            self._plot_projections_single_component(
-                ax, 'u_mean', 'u_sem', comp_idx, region_i, fontsize
-            )
-            if comp_idx == 0:
-                ax.set_ylabel(f'{region_i}\nProjection', fontsize=fontsize)
-            ax.set_title(f'CCA Component {comp_idx + 1}', fontsize=fontsize + 1)
-
-        # Row 2: Region j projections
-        for comp_idx in range(n_comp_show):
-            ax = fig.add_subplot(gs[1, comp_idx])
-            self._plot_projections_single_component(
-                ax, 'v_mean', 'v_sem', comp_idx, region_j, fontsize
-            )
-            if comp_idx == 0:
-                ax.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
-            ax.set_xlabel('Time (s)', fontsize=fontsize)
-
-        # Add overall title
-        plt.suptitle(
-            f'Cross-Trial-Type CCA Projections\n'
-            f'{region_i} vs {region_j} | CCA trained on {self.reference_type}',
-            fontsize=fontsize + 2, fontweight='bold', y=0.98
-        )
-
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-        if save_fig:
-            save_path = self.output_dir / f"projection_comparison_{region_i}_{region_j}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved: {save_path}")
-
-        return fig
-
-    def _plot_projections_single_component(
-            self,
-            ax: plt.Axes,
-            mean_key: str,
-            sem_key: str,
-            comp_idx: int,
-            region_name: str,
-            fontsize: int
-    ) -> None:
-        """Plot projections for a single component across all trial types."""
-        for trial_type in self.available_trial_types:
-            if trial_type not in self.projections:
-                continue
-
-            proj = self.projections[trial_type]
-            mean_proj = np.abs(proj[mean_key][:, comp_idx])
-            sem_proj = proj[sem_key][:, comp_idx]
-
-            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
-            linestyle = '-' if trial_type == self.reference_type else '-'
-            linewidth = 2 if trial_type == self.reference_type else 1.0
-            if trial_type == self.reference_type:
-                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                        linewidth=linewidth, label=trial_type.replace('_', ' '),
-                        alpha=0.8)
-                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
-            else:
-                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                        linewidth=linewidth, label=trial_type.replace('_', ' '),
-                        alpha=0.4)
-                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
-        # Add stimulus onset marker
-        ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
-        ax.axvspan(0, 1.5, alpha=0.05, color='gray')
-        ax.set_ylim([0, 6])
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.grid(True, alpha=0.3)
-        ax.tick_params(axis='both', labelsize=fontsize - 2)
-        ax.legend(fontsize=fontsize - 3, loc='upper right')
-
-    def create_statistical_summary_figure(
-            self,
-            region_pair: Tuple[str, str],
-            figsize: Tuple[float, float] = (14, 10),
-            save_fig: bool = True
-    ) -> plt.Figure:
-        """
-        Create figure showing statistical comparison results.
-
-        Layout:
-        - Top row: Temporal correlation bar charts
-        - Bottom row: P-value heatmap
-
-        Parameters:
-            region_pair: Tuple of (region_i, region_j)
-            figsize: Figure dimensions
-            save_fig: Whether to save the figure
-
-        Returns:
-            Matplotlib figure object
-        """
-        region_i, region_j = region_pair
-
-        fig = plt.figure(figsize=figsize)
-        fontsize = 12
-
-        gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.3)
-
-        # Plot 1: Temporal correlation R² values
-        ax1 = fig.add_subplot(gs[0, 0])
-        self._plot_temporal_correlation_bars(ax1, 'region_i', region_i, fontsize)
-
-        ax2 = fig.add_subplot(gs[0, 1])
-        self._plot_temporal_correlation_bars(ax2, 'region_j', region_j, fontsize)
-
-        # Plot 2: P-value heatmap
-        ax3 = fig.add_subplot(gs[1, 0])
-        self._plot_pvalue_heatmap(ax3, fontsize)
-
-        plt.suptitle(
-            f'Statistical Comparison: Cross-Trial-Type CCA Projections\n'
-            f'{region_i} vs {region_j}',
-            fontsize=fontsize + 2, fontweight='bold', y=0.98
-        )
-
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-        if save_fig:
-            save_path = self.output_dir / f"statistical_summary_{region_i}_{region_j}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved: {save_path}")
-
-        return fig
-
-    def _plot_temporal_correlation_bars(
-            self,
-            ax: plt.Axes,
-            region_key: str,
-            region_name: str,
-            fontsize: int
-    ) -> None:
-        """Plot temporal correlation R² as bar chart."""
-        correlations = self.statistical_results['temporal_correlations']
-        n_comp_show = min(3, self.n_components)
-
-        bar_width = 0.35
-        x_base = np.arange(n_comp_show)
-
-        for idx, (comparison, corr_data) in enumerate(correlations.items()):
-            r2_values = [c['r2'] for c in corr_data[region_key][:n_comp_show]]
-            offset = (idx - len(correlations) / 2 + 0.5) * bar_width
-
-            # Extract comparison trial type for color
-            other_type = comparison.replace(f"{self.reference_type}_vs_", "")
-            color = TRIAL_TYPE_COLORS.get(other_type, 'gray')
-
-            ax.bar(x_base + offset, r2_values, bar_width, color=color,
-                   label=comparison.replace('_', ' '), alpha=0.8, edgecolor='black')
-
-        ax.set_xticks(x_base)
-        ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize - 2)
-        ax.set_ylabel('Temporal R²', fontsize=fontsize)
-        ax.set_xlabel('CCA Component', fontsize=fontsize)
-        ax.set_title(f'{region_name}', fontsize=fontsize + 1)
-        ax.legend(fontsize=fontsize - 3)
-        ax.set_ylim([0, 1.0])
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.grid(True, axis='y', alpha=0.3)
-
-    def _plot_pvalue_heatmap(self, ax: plt.Axes, fontsize: int) -> None:
-        """Plot p-value heatmap for pairwise comparisons."""
-        pairwise = self.statistical_results['pairwise_tests']
-        n_comp_show = min(3, self.n_components)
-
-        comparisons = list(pairwise.keys())
-        if not comparisons:
-            ax.text(0.5, 0.5, 'No pairwise tests available',
-                    ha='center', va='center', fontsize=fontsize)
-            ax.axis('off')
-            return
-
-        # Create p-value matrix
-        p_matrix = np.zeros((len(comparisons), n_comp_show))
-
-        for i, comp in enumerate(comparisons):
-            for j in range(n_comp_show):
-                if j < len(pairwise[comp]['region_i']):
-                    # Average p-value across both regions
-                    p_i = pairwise[comp]['region_i'][j]['wilcoxon_p']
-                    p_j = pairwise[comp]['region_j'][j]['wilcoxon_p']
-                    p_matrix[i, j] = (p_i + p_j) / 2
-
-        # Plot heatmap
-        p_matrix = -np.log10(p_matrix + 1e-10)
-        im = ax.imshow(p_matrix, cmap='Reds', aspect='auto',vmax=2.5,vmin=0)
-
-        ax.set_xticks(np.arange(n_comp_show))
-        ax.set_yticks(np.arange(len(comparisons)))
-        ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize - 2)
-        ax.set_yticklabels([c.replace('_', '\n') for c in comparisons], fontsize=fontsize - 3)
-        ax.set_xlabel('CCA Component', fontsize=fontsize)
-        ax.set_title('Significance (-log₁₀ p)', fontsize=fontsize + 1)
-
-        # Add text annotations
-        for i in range(len(comparisons)):
-            for j in range(n_comp_show):
-                p_val = p_matrix[i, j]
-                text = f'{p_val:.3f}'
-                if p_val > 1.3:
-                    text += '*'
-                if p_val > 2:
-                    text += '*'
-                ax.text(j, i, text, ha='center', va='center', fontsize=fontsize - 3,
-                        color='white' if (p_val + 1e-10) > 1 else 'black')
-
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-
-    def create_detailed_temporal_figure(
-            self,
-            region_pair: Tuple[str, str],
-            component_idx: int = 0,
-            figsize: Tuple[float, float] = (18, 10),
-            save_fig: bool = True
-    ) -> plt.Figure:
-        """
-        Create detailed temporal comparison figure for a single component.
-
-        Shows both regions' projections with individual trial variability.
-
-        Parameters:
-            region_pair: Tuple of (region_i, region_j)
-            component_idx: CCA component to display (0-indexed)
-            figsize: Figure dimensions
-            save_fig: Whether to save the figure
-
-        Returns:
-            Matplotlib figure object
-        """
-        region_i, region_j = region_pair
-
-        fig = plt.figure(figsize=figsize)
-        fontsize = 14
-
-        gs = fig.add_gridspec(2, len(self.available_trial_types),
-                              hspace=0.3, wspace=0.25)
-
-        for col_idx, trial_type in enumerate(self.available_trial_types):
-            if trial_type not in self.projections:
-                continue
-
-            proj = self.projections[trial_type]
-            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
-
-            # Row 1: Region i
-            ax1 = fig.add_subplot(gs[0, col_idx])
-            self._plot_detailed_projection(
-                ax1, proj['u_mean'][:, component_idx],
-                proj['u_trials'][:, :, component_idx],
-                color, trial_type, fontsize
-            )
-            ax1.set_ylim([0, 5])
-            ax1.set_title(f'{trial_type.replace("_", " ")}\n(n={proj["n_trials"]} trials)',
-                          fontsize=fontsize)
-            if col_idx == 0:
-                ax1.set_ylabel(f'{region_i}\nProjection', fontsize=fontsize)
-
-            # Row 2: Region j
-            ax2 = fig.add_subplot(gs[1, col_idx])
-            self._plot_detailed_projection(
-                ax2, proj['v_mean'][:, component_idx],
-                proj['v_trials'][:, :, component_idx],
-                color, trial_type, fontsize
-            )
-            if col_idx == 0:
-                ax2.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
-            ax2.set_xlabel('Time (s)', fontsize=fontsize)
-            ax2.set_ylim([0, 5])
-
-        plt.suptitle(
-            f'CCA Component {component_idx + 1} Projections\n'
-            f'{region_i} vs {region_j} | CCA trained on {self.reference_type}',
-            fontsize=fontsize + 2, fontweight='bold', y=0.98
-        )
-
-        plt.tight_layout(rect=[0, 0, 1, 0.94])
-
-        if save_fig:
-            save_path = self.output_dir / f"detailed_temporal_{region_i}_{region_j}_comp{component_idx + 1}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved: {save_path}")
-
-        return fig
-
-    def _plot_detailed_projection(
-            self,
-            ax: plt.Axes,
-            mean_proj: np.ndarray,
-            trial_proj: np.ndarray,
-            color: str,
-            trial_type: str,
-            fontsize: int
-    ) -> None:
-        """Plot detailed projection with individual trial traces."""
-        # Plot individual trials (faint)
-        for trial_idx in range(min(20, trial_proj.shape[0])):
-            ax.plot(self.time_bins, np.abs(trial_proj[trial_idx, :]),
-                    color=color, alpha=0.1, linewidth=0.5)
-
-        # Plot mean (bold)
-        ax.plot(self.time_bins, np.abs(mean_proj), color=color,
-                linewidth=2.5, alpha=0.9)
-
-        # Add stimulus onset marker
-        ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
-        ax.axvspan(0, 1.5, alpha=0.05, color='gray')
-
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.grid(True, alpha=0.3)
-        ax.tick_params(axis='both', labelsize=fontsize - 2)
-
-    def generate_summary_report(self, region_pair: Tuple[str, str]) -> Path:
-        """
-        Generate text report summarizing analysis results.
-
-        Parameters:
-            region_pair: Tuple of (region_i, region_j)
-
-        Returns:
-            Path to the generated report file
-        """
-        region_i, region_j = region_pair
-        report_dir = self.output_dir / f"reports_{region_i}_{region_j}"
-        report_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write main text report
-        report_path = report_dir / "analysis_summary.txt"
-        with open(report_path, 'w') as f:
-            f.write("=" * 70 + "\n")
-            f.write("Cross-Trial-Type CCA Analysis Summary\n")
-            f.write("=" * 70 + "\n\n")
-            f.write(f"Session: {self.session_name}\n")
-            f.write(f"Region pair: {region_i} vs {region_j}\n")
-            f.write(f"Reference type: {self.reference_type}\n")
-            f.write(f"Analysis date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-
-            f.write("Trial Types Analyzed:\n")
-            for tt in self.available_trial_types:
-                if tt in self.projections:
-                    f.write(f"  - {tt}: {self.projections[tt]['n_trials']} trials\n")
-
-            f.write("\nStatistical Results:\n")
-            f.write("-" * 50 + "\n")
-
-            # Peak amplitudes
-            f.write("\nPeak Amplitudes (Component 1):\n")
-            for tt, peaks in self.statistical_results['peak_amplitudes'].items():
-                f.write(f"  {tt}:\n")
-                f.write(f"    {region_i}: {peaks['region_i'][0]:.4f}\n")
-                f.write(f"    {region_j}: {peaks['region_j'][0]:.4f}\n")
-
-            # Temporal correlations
-            f.write("\nTemporal Correlations (vs reference):\n")
-            for comp_name, corr in self.statistical_results['temporal_correlations'].items():
-                f.write(f"  {comp_name}:\n")
-                for comp_idx in range(min(3, len(corr['region_i']))):
-                    f.write(f"    Comp {comp_idx + 1}: ")
-                    f.write(f"{region_i} R²={corr['region_i'][comp_idx]['r2']:.4f}, ")
-                    f.write(f"{region_j} R²={corr['region_j'][comp_idx]['r2']:.4f}\n")
-
-            # Pairwise tests
-            f.write("\nPairwise Statistical Tests:\n")
-            for comp_name, tests in self.statistical_results['pairwise_tests'].items():
-                f.write(f"  {comp_name}:\n")
-                if tests['region_i']:
-                    t = tests['region_i'][0]
-                    f.write(f"    {region_i}: Wilcoxon p={t['wilcoxon_p']:.4f}, ")
-                    f.write(f"Cohen's d={t['cohens_d']:.3f}\n")
-                if tests['region_j']:
-                    t = tests['region_j'][0]
-                    f.write(f"    {region_j}: Wilcoxon p={t['wilcoxon_p']:.4f}, ")
-                    f.write(f"Cohen's d={t['cohens_d']:.3f}\n")
-
-        print(f"Reports saved to: {report_dir}")
-        return report_dir
-
-    def _serialize_stats_for_json(self) -> Dict:
-        """Convert statistical results to JSON-serializable format."""
-
-        def convert(obj):
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, (np.float64, np.float32)):
-                return float(obj)
-            elif isinstance(obj, (np.int64, np.int32)):
-                return int(obj)
-            elif isinstance(obj, dict):
-                return {k: convert(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert(i) for i in obj]
-            return obj
-
-        return convert(self.statistical_results)
-
-
 # =============================================================================
 # CROSS-SESSION AGGREGATION CLASS
 # =============================================================================
@@ -1239,33 +793,103 @@ class CrossSessionCCAAnalyzer:
     def add_session_result(
             self,
             session_name: str,
-            analyzer: CrossTrialTypeCCAAnalyzer
+            analyzer: CrossTrialTypeCCAAnalyzer,
+            swap_uv: bool = False
     ) -> bool:
         """
         Add results from a single session analyzer.
-        
+
         Parameters:
             session_name: Session identifier
             analyzer: Completed CrossTrialTypeCCAAnalyzer with projections
-            
+            swap_uv: If True, swap u and v data to match the canonical pair ordering.
+                     This is needed when sort_pair_by_anatomy flipped the original
+                     region order. After swapping:
+                     - u data corresponds to self.region_pair[0] (row region)
+                     - v data corresponds to self.region_pair[1] (column region)
+
         Returns:
             True if session was successfully added
         """
         if not analyzer.projections:
             print(f"  {session_name}: No projections available")
             return False
-        
-        # Store analyzer and extract relevant data
+
+        # Store analyzer
         self.session_analyzers[session_name] = analyzer
-        self.session_projections[session_name] = analyzer.projections
-        self.session_statistics[session_name] = analyzer.statistical_results
-        
+
+        # If pair was flipped, swap u↔v to maintain correct region-data mapping
+        if swap_uv:
+            swapped_projections = {}
+            for trial_type, proj in analyzer.projections.items():
+                swapped_projections[trial_type] = {
+                    'u_mean': proj['v_mean'],  # swap: u ← v
+                    'v_mean': proj['u_mean'],  # swap: v ← u
+                    'u_trials': proj['v_trials'],
+                    'v_trials': proj['u_trials'],
+                    'u_std': proj['v_std'],
+                    'v_std': proj['u_std'],
+                    'u_sem': proj['v_sem'],
+                    'v_sem': proj['u_sem'],
+                    'n_trials': proj['n_trials']
+                }
+            self.session_projections[session_name] = swapped_projections
+
+            # Also swap statistical results for region_i ↔ region_j
+            swapped_stats = self._swap_statistics(analyzer.statistical_results)
+            self.session_statistics[session_name] = swapped_stats
+            print(f"  Added session: {session_name} (u↔v swapped for canonical ordering)")
+        else:
+            self.session_projections[session_name] = analyzer.projections
+            self.session_statistics[session_name] = analyzer.statistical_results
+            print(f"  Added session: {session_name}")
+
         # Update time bins from first session
         if self.time_bins is None:
             self.time_bins = analyzer.time_bins
-        
-        print(f"  Added session: {session_name}")
+
         return True
+
+    def _swap_statistics(self, stats: Dict) -> Dict:
+        """
+        Swap region_i and region_j in statistical results.
+
+        Parameters:
+            stats: Original statistical results dictionary
+
+        Returns:
+            New dictionary with region_i and region_j swapped
+        """
+        swapped = {}
+
+        # Swap peak amplitudes
+        if 'peak_amplitudes' in stats:
+            swapped['peak_amplitudes'] = {}
+            for trial_type, peaks in stats['peak_amplitudes'].items():
+                swapped['peak_amplitudes'][trial_type] = {
+                    'region_i': peaks['region_j'],
+                    'region_j': peaks['region_i']
+                }
+
+        # Swap temporal correlations
+        if 'temporal_correlations' in stats:
+            swapped['temporal_correlations'] = {}
+            for comp_key, corr_data in stats['temporal_correlations'].items():
+                swapped['temporal_correlations'][comp_key] = {
+                    'region_i': corr_data['region_j'],
+                    'region_j': corr_data['region_i']
+                }
+
+        # Swap pairwise tests
+        if 'pairwise_tests' in stats:
+            swapped['pairwise_tests'] = {}
+            for comp_key, test_data in stats['pairwise_tests'].items():
+                swapped['pairwise_tests'][comp_key] = {
+                    'region_i': test_data['region_j'],
+                    'region_j': test_data['region_i']
+                }
+
+        return swapped
     
     def aggregate_projections(self) -> bool:
         """
@@ -1377,14 +1001,65 @@ class CrossSessionCCAAnalyzer:
                     aggregated_corr[comparison_key]['region_j'][f'comp_{comp_idx+1}'].append(corr['r2'])
         
         self.aggregated_statistics['temporal_correlations'] = aggregated_corr
-        
+
         # Print summary
         for comparison_key, data in aggregated_corr.items():
             n_vals = len(data['region_i']['comp_1'])
             print(f"  {comparison_key}: {n_vals} sessions")
-        
+
         return aggregated_corr
-    
+
+    def aggregate_pairwise_tests(self) -> Dict:
+        """
+        Aggregate pairwise statistical test results across sessions.
+
+        Collects p-values from Wilcoxon tests for cross-session analysis.
+        Creates data structure for p-value heatmap visualization.
+
+        Returns:
+            Dictionary with aggregated p-values organized by comparison and component
+        """
+        print(f"\n" + "-" * 50)
+        print("Aggregating pairwise test p-values")
+        print("-" * 50)
+
+        aggregated_pvals = {}
+
+        for session_name, session_stats in self.session_statistics.items():
+            if 'pairwise_tests' not in session_stats:
+                continue
+
+            for comparison_key, test_data in session_stats['pairwise_tests'].items():
+                if comparison_key not in aggregated_pvals:
+                    aggregated_pvals[comparison_key] = {
+                        'region_i': {f'comp_{k+1}': [] for k in range(self.n_components)},
+                        'region_j': {f'comp_{k+1}': [] for k in range(self.n_components)}
+                    }
+
+                # Collect Wilcoxon p-values per component
+                for test_result in test_data.get('region_i', []):
+                    comp_idx = test_result.get('component', 1) - 1
+                    if comp_idx < self.n_components:
+                        aggregated_pvals[comparison_key]['region_i'][f'comp_{comp_idx+1}'].append(
+                            test_result.get('wilcoxon_p', 1.0)
+                        )
+
+                for test_result in test_data.get('region_j', []):
+                    comp_idx = test_result.get('component', 1) - 1
+                    if comp_idx < self.n_components:
+                        aggregated_pvals[comparison_key]['region_j'][f'comp_{comp_idx+1}'].append(
+                            test_result.get('wilcoxon_p', 1.0)
+                        )
+
+        self.aggregated_statistics['pairwise_tests'] = aggregated_pvals
+
+        # Print summary
+        for comparison_key, data in aggregated_pvals.items():
+            n_vals = len(data['region_i']['comp_1']) if data['region_i']['comp_1'] else 0
+            print(f"  {comparison_key}: {n_vals} sessions")
+
+        return aggregated_pvals
+
     def create_cross_session_projection_figure(
             self,
             figsize: Tuple[float, float] = (16, 12),
@@ -1699,130 +1374,155 @@ class CrossTrialTypeSummaryVisualizer:
             figsize: Tuple[float, float] = (40, 40),
             component_idx: int = 0,
             save_fig: bool = True
-    ) -> plt.Figure:
+    ) -> Tuple[plt.Figure, plt.Figure]:
         """
-        Create upper-triangle figure showing first component projections.
-        
-        Similar to create_temporal_projection_figure in CCA_test_all.py,
-        but showing cross-trial-type comparisons with cross-session aggregation.
-        
+        Create two upper-triangle figures showing component projections.
+
+        Creates separate figures for:
+        - Figure 1 (row): Projections for the region in the row position (u data)
+        - Figure 2 (column): Projections for the region in the column position (v data)
+
         Parameters:
             figsize: Figure dimensions
             component_idx: Which CCA component to display (0-indexed)
             save_fig: Whether to save the figure
-            
+
         Returns:
-            Matplotlib figure object
+            Tuple of (row_figure, column_figure)
         """
-        print(f"\nCreating projection matrix figure (Component {component_idx + 1})...")
-        
+        print(f"\nCreating projection matrix figures (Component {component_idx + 1})...")
+
         ordered_regions = self._get_ordered_regions()
         n_regions = len(ordered_regions)
-        
+
         if n_regions == 0:
             print("No regions available for plotting")
-            return None
-        
-        fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
-        
-        for i, region_i in enumerate(ordered_regions):
-            for j, region_j in enumerate(ordered_regions):
-                ax = axes[i, j] if n_regions > 1 else axes
-                
-                if i == j:
-                    # Diagonal: region name
-                    ax.text(0.5, 0.5, region_i, ha='center', va='center',
-                            fontsize=32, fontweight='bold')
-                    ax.set_xlim([0, 1])
-                    ax.set_ylim([0, 1])
-                    ax.axis('off')
-                elif i > j:
-                    # Lower triangle: hide
-                    ax.axis('off')
-                else:
-                    # Upper triangle: plot cross-trial-type projections
-                    self._plot_pair_projections(
-                        ax, region_i, region_j, component_idx
-                    )
-        
-        fig.suptitle(
-            f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
-            f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
-            fontsize=48, fontweight='bold', y=0.995
-        )
-        
-        plt.tight_layout(rect=[0, 0.01, 1, 0.99])
-        
-        if save_fig:
-            save_path = self.output_dir / f"projection_matrix_comp{component_idx + 1}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved: {save_path}")
-        
-        plt.close(fig)
-        return fig
-    
-    def _plot_pair_projections(
+            return None, None
+
+        figures = []
+
+        for fig_type in ['row', 'column']:
+            fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
+
+            for i, region_i in enumerate(ordered_regions):
+                for j, region_j in enumerate(ordered_regions):
+                    ax = axes[i, j] if n_regions > 1 else axes
+
+                    if i == j:
+                        # Diagonal: region name
+                        ax.text(0.5, 0.5, region_i, ha='center', va='center',
+                                fontsize=32, fontweight='bold')
+                        ax.set_xlim([0, 1])
+                        ax.set_ylim([0, 1])
+                        ax.axis('off')
+                    elif i > j:
+                        # Lower triangle: hide
+                        ax.axis('off')
+                    else:
+                        # Upper triangle: plot cross-trial-type projections
+                        # For row figure: plot data from row region (region_i → u)
+                        # For column figure: plot data from column region (region_j → v)
+                        self._plot_pair_projections_single_region(
+                            ax, region_i, region_j, component_idx, fig_type
+                        )
+
+            region_label = "Row Region" if fig_type == 'row' else "Column Region"
+            fig.suptitle(
+                f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
+                f'{region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+                fontsize=48, fontweight='bold', y=0.995
+            )
+
+            plt.tight_layout(rect=[0, 0.01, 1, 0.99])
+
+            if save_fig:
+                save_path = self.output_dir / f"projection_matrix_comp{component_idx + 1}_{fig_type}_region.png"
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Saved: {save_path}")
+
+            figures.append(fig)
+            plt.close(fig)
+
+        return tuple(figures)
+
+    def _plot_pair_projections_single_region(
             self,
             ax: plt.Axes,
             region_i: str,
             region_j: str,
-            component_idx: int
+            component_idx: int,
+            which_region: str
     ) -> None:
         """
-        Plot cross-trial-type projections for a single region pair.
-        
+        Plot cross-trial-type projections for a single region from a pair.
+
         Parameters:
             ax: Matplotlib axes
-            region_i: First region name
-            region_j: Second region name
+            region_i: Row region name (in upper triangle layout)
+            region_j: Column region name (in upper triangle layout)
             component_idx: Component to plot (0-indexed)
+            which_region: 'row' for region_i (u data), 'column' for region_j (v data)
         """
         # Find pair analyzer (check both orderings)
         pair_key = sort_pair_by_anatomy(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
-        
+
         if pair_analyzer is None:
             # Try alternate key
             alt_key = (pair_key[1], pair_key[0])
             pair_analyzer = self.pair_analyzers.get(alt_key)
-        
+
         if pair_analyzer is None or len(pair_analyzer.aggregated_projections) < 2:
             ax.set_visible(False)
             return
-        
+
         n_sessions = pair_analyzer.aggregated_projections.get(
             self.reference_type, {}).get('n_sessions', 0)
-        
+
         if n_sessions < self.min_sessions:
             ax.set_visible(False)
             return
-        
+
+        # Determine which data to use based on region position
+        # pair_key is in canonical (sorted) order
+        # pair_key[0] = row region in canonical order → u data
+        # pair_key[1] = column region in canonical order → v data
+        if which_region == 'row':
+            # We want data for region_i (the row in the matrix)
+            # Check if region_i is pair_key[0] (u) or pair_key[1] (v)
+            if region_i == pair_key[0]:
+                mean_key, sem_key = 'u_mean', 'u_sem'
+            else:
+                mean_key, sem_key = 'v_mean', 'v_sem'
+            display_region = region_i
+        else:  # 'column'
+            # We want data for region_j (the column in the matrix)
+            if region_j == pair_key[0]:
+                mean_key, sem_key = 'u_mean', 'u_sem'
+            else:
+                mean_key, sem_key = 'v_mean', 'v_sem'
+            display_region = region_j
+
         # Plot projections for each trial type
         time_vec = pair_analyzer.time_bins
-        
+
         for trial_type in pair_analyzer.available_trial_types:
             agg = pair_analyzer.aggregated_projections[trial_type]
-            
-            # Average of both regions
-            mean_u = np.abs(agg['u_mean'][:, component_idx])
-            mean_v = np.abs(agg['v_mean'][:, component_idx])
-            mean_proj = (mean_u + mean_v) / 2
-            
-            sem_u = agg['u_sem'][:, component_idx]
-            sem_v = agg['v_sem'][:, component_idx]
-            sem_proj = (sem_u + sem_v) / 2
-            
+
+            mean_proj = np.abs(agg[mean_key][:, component_idx])
+            sem_proj = agg[sem_key][:, component_idx]
+
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
             linewidth = 2.5 if trial_type == self.reference_type else 2.0
-            
-            ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth, 
+
+            ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth,
                     alpha=0.9, label=trial_type.replace('_', ' '))
             ax.fill_between(time_vec, mean_proj - sem_proj, mean_proj + sem_proj,
                             alpha=0.15, color=color)
-        
+
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
-        
+
         # Formatting
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -1833,166 +1533,397 @@ class CrossTrialTypeSummaryVisualizer:
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
-        
+
         for spine in ax.spines.values():
             spine.set_linewidth(3)
-        
-        # Add session count annotation
-        ax.text(0.02, 0.98, f'n={n_sessions}', transform=ax.transAxes,
-                fontsize=16, va='top', ha='left')
+
+        # Add session count and region annotation
+        ax.text(0.02, 0.98, f'n={n_sessions}\n{display_region}', transform=ax.transAxes,
+                fontsize=14, va='top', ha='left')
     
     def create_r2_boxplot_matrix_figure(
             self,
             figsize: Tuple[float, float] = (40, 40),
             save_fig: bool = True
-    ) -> plt.Figure:
+    ) -> Tuple[plt.Figure, plt.Figure]:
         """
-        Create upper-triangle figure showing R² boxplots for top 3 components.
-        
+        Create two upper-triangle figures showing R² boxplots for top 3 components.
+
+        Creates separate figures for:
+        - Figure 1 (row): R² for the region in the row position
+        - Figure 2 (column): R² for the region in the column position
+
         Each cell shows boxplots comparing cued_hit_long vs spont_hit_long
         and spont_miss_long across sessions.
-        
+
         Parameters:
             figsize: Figure dimensions
             save_fig: Whether to save the figure
-            
+
         Returns:
-            Matplotlib figure object
+            Tuple of (row_figure, column_figure)
         """
-        print("\nCreating R² boxplot matrix figure...")
-        
+        print("\nCreating R² boxplot matrix figures...")
+
         ordered_regions = self._get_ordered_regions()
         n_regions = len(ordered_regions)
-        
+
         if n_regions == 0:
             print("No regions available for plotting")
-            return None
-        
-        fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
-        
-        for i, region_i in enumerate(ordered_regions):
-            for j, region_j in enumerate(ordered_regions):
-                ax = axes[i, j] if n_regions > 1 else axes
-                
-                if i == j:
-                    # Diagonal: region name
-                    ax.text(0.5, 0.5, region_i, ha='center', va='center',
-                            fontsize=32, fontweight='bold')
-                    ax.set_xlim([0, 1])
-                    ax.set_ylim([0, 1])
-                    ax.axis('off')
-                elif i > j:
-                    # Lower triangle: hide
-                    ax.axis('off')
-                else:
-                    # Upper triangle: plot R² boxplots
-                    self._plot_pair_r2_boxplots(ax, region_i, region_j)
-        
-        fig.suptitle(
-            f'Cross-Session Temporal R² Distribution (Top 3 Components)\n'
-            f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
-            fontsize=48, fontweight='bold', y=0.995
-        )
-        
-        plt.tight_layout(rect=[0, 0.01, 1, 0.99])
-        
-        if save_fig:
-            save_path = self.output_dir / "r2_boxplot_matrix.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved: {save_path}")
-        
-        plt.close(fig)
-        return fig
-    
-    def _plot_pair_r2_boxplots(
+            return None, None
+
+        figures = []
+
+        for fig_type in ['row', 'column']:
+            fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
+
+            for i, region_i in enumerate(ordered_regions):
+                for j, region_j in enumerate(ordered_regions):
+                    ax = axes[i, j] if n_regions > 1 else axes
+
+                    if i == j:
+                        # Diagonal: region name
+                        ax.text(0.5, 0.5, region_i, ha='center', va='center',
+                                fontsize=32, fontweight='bold')
+                        ax.set_xlim([0, 1])
+                        ax.set_ylim([0, 1])
+                        ax.axis('off')
+                    elif i > j:
+                        # Lower triangle: hide
+                        ax.axis('off')
+                    else:
+                        # Upper triangle: plot R² boxplots for single region
+                        self._plot_pair_r2_boxplots_single_region(
+                            ax, region_i, region_j, fig_type
+                        )
+
+            region_label = "Row Region" if fig_type == 'row' else "Column Region"
+            fig.suptitle(
+                f'Cross-Session Temporal R² Distribution (Top 3 Components)\n'
+                f'{region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+                fontsize=48, fontweight='bold', y=0.995
+            )
+
+            plt.tight_layout(rect=[0, 0.01, 1, 0.99])
+
+            if save_fig:
+                save_path = self.output_dir / f"r2_boxplot_matrix_{fig_type}_region.png"
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Saved: {save_path}")
+
+            figures.append(fig)
+            plt.close(fig)
+
+        return tuple(figures)
+
+    def _plot_pair_r2_boxplots_single_region(
             self,
             ax: plt.Axes,
             region_i: str,
-            region_j: str
+            region_j: str,
+            which_region: str
     ) -> None:
         """
-        Plot R² boxplots for a single region pair.
-        
+        Plot R² boxplots for a single region from a pair.
+
         Parameters:
             ax: Matplotlib axes
-            region_i: First region name
-            region_j: Second region name
+            region_i: Row region name (in upper triangle layout)
+            region_j: Column region name (in upper triangle layout)
+            which_region: 'row' for region_i, 'column' for region_j
         """
         # Find pair analyzer
         pair_key = sort_pair_by_anatomy(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
-        
+
         if pair_analyzer is None:
             alt_key = (pair_key[1], pair_key[0])
             pair_analyzer = self.pair_analyzers.get(alt_key)
-        
+
         if pair_analyzer is None:
             ax.set_visible(False)
             return
-        
+
         if 'temporal_correlations' not in pair_analyzer.aggregated_statistics:
             ax.set_visible(False)
             return
-        
+
         correlations = pair_analyzer.aggregated_statistics['temporal_correlations']
         n_comp_show = min(3, self.n_components)
-        
+
+        # Determine which region's data to use
+        # pair_key[0] → region_i in canonical order → 'region_i' key in stats
+        # pair_key[1] → region_j in canonical order → 'region_j' key in stats
+        if which_region == 'row':
+            # We want data for region_i (the row in the matrix)
+            if region_i == pair_key[0]:
+                region_key = 'region_i'
+            else:
+                region_key = 'region_j'
+            display_region = region_i
+        else:  # 'column'
+            # We want data for region_j (the column in the matrix)
+            if region_j == pair_key[0]:
+                region_key = 'region_i'
+            else:
+                region_key = 'region_j'
+            display_region = region_j
+
         # Prepare data for boxplots
         comparisons = list(correlations.keys())
         n_comparisons = len(comparisons)
-        
+
         if n_comparisons == 0:
             ax.set_visible(False)
             return
-        
+
         positions = []
         data_to_plot = []
         colors = []
-        
+
         for comp_idx in range(n_comp_show):
             comp_key = f'comp_{comp_idx + 1}'
-            
+
             for idx, comparison in enumerate(comparisons):
-                # Average R² across both regions
-                r2_i = correlations[comparison]['region_i'].get(comp_key, [])
-                r2_j = correlations[comparison]['region_j'].get(comp_key, [])
-                
-                if r2_i and r2_j:
-                    r2_avg = [(a + b) / 2 for a, b in zip(r2_i, r2_j)]
-                    
+                # Get R² for the specific region only
+                r2_values = correlations[comparison][region_key].get(comp_key, [])
+
+                if r2_values:
                     pos = comp_idx * (n_comparisons + 0.5) + idx
                     positions.append(pos)
-                    data_to_plot.append(r2_avg)
-                    
+                    data_to_plot.append(r2_values)
+
                     other_type = comparison.replace(f"{self.reference_type}_vs_", "")
                     colors.append(TRIAL_TYPE_COLORS.get(other_type, 'gray'))
-        
+
         if not data_to_plot:
             ax.set_visible(False)
             return
-        
+
         # Create boxplots
         bp = ax.boxplot(data_to_plot, positions=positions, widths=0.4, patch_artist=True)
-        
+
         for patch, color in zip(bp['boxes'], colors):
             patch.set_facecolor(color)
             patch.set_alpha(0.7)
-        
+
         # Set x-axis labels
-        comp_positions = [(i * (n_comparisons + 0.5) + (n_comparisons - 1) / 2) 
+        comp_positions = [(i * (n_comparisons + 0.5) + (n_comparisons - 1) / 2)
                           for i in range(n_comp_show)]
         ax.set_xticks(comp_positions)
         ax.set_xticklabels([f'C{i+1}' for i in range(n_comp_show)], fontsize=18)
-        
+
         ax.set_ylim([0, 1.05])
         ax.set_yticks([0, 0.5, 1.0])
         ax.set_yticklabels(['0', '0.5', '1'], fontsize=18)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, axis='y', alpha=0.3)
-        
+
         for spine in ax.spines.values():
             spine.set_linewidth(2)
+
+        # Add region annotation
+        ax.text(0.02, 0.98, display_region, transform=ax.transAxes,
+                fontsize=14, va='top', ha='left')
+
+    def create_pvalue_heatmap_matrix_figure(
+            self,
+            figsize: Tuple[float, float] = (40, 40),
+            save_fig: bool = True
+    ) -> Tuple[plt.Figure, plt.Figure]:
+        """
+        Create two upper-triangle figures showing p-value heatmaps.
+
+        Each subplot contains a 3×3 grid showing p-values for components 1-3
+        across the three trial type comparisons.
+
+        Creates separate figures for:
+        - Figure 1 (row): P-values for the region in the row position
+        - Figure 2 (column): P-values for the region in the column position
+
+        Parameters:
+            figsize: Figure dimensions
+            save_fig: Whether to save the figure
+
+        Returns:
+            Tuple of (row_figure, column_figure)
+        """
+        print("\nCreating cross-session p-value heatmap matrix figures...")
+
+        ordered_regions = self._get_ordered_regions()
+        n_regions = len(ordered_regions)
+
+        if n_regions == 0:
+            print("No regions available for plotting")
+            return None, None
+
+        figures = []
+
+        for fig_type in ['row', 'column']:
+            fig, axes = plt.subplots(n_regions, n_regions, figsize=figsize)
+
+            for i, region_i in enumerate(ordered_regions):
+                for j, region_j in enumerate(ordered_regions):
+                    ax = axes[i, j] if n_regions > 1 else axes
+
+                    if i == j:
+                        # Diagonal: region name
+                        ax.text(0.5, 0.5, region_i, ha='center', va='center',
+                                fontsize=32, fontweight='bold')
+                        ax.set_xlim([0, 1])
+                        ax.set_ylim([0, 1])
+                        ax.axis('off')
+                    elif i > j:
+                        # Lower triangle: hide
+                        ax.axis('off')
+                    else:
+                        # Upper triangle: plot p-value heatmap for single region
+                        self._plot_pair_pvalue_heatmap(
+                            ax, region_i, region_j, fig_type
+                        )
+
+            region_label = "Row Region" if fig_type == 'row' else "Column Region"
+            fig.suptitle(
+                f'Cross-Session P-Value Heatmap (Components 1-3)\n'
+                f'{region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+                fontsize=48, fontweight='bold', y=0.995
+            )
+
+            plt.tight_layout(rect=[0, 0.01, 1, 0.99])
+
+            if save_fig:
+                save_path = self.output_dir / f"pvalue_heatmap_matrix_{fig_type}_region.png"
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Saved: {save_path}")
+
+            figures.append(fig)
+            plt.close(fig)
+
+        return tuple(figures)
+
+    def _plot_pair_pvalue_heatmap(
+            self,
+            ax: plt.Axes,
+            region_i: str,
+            region_j: str,
+            which_region: str
+    ) -> None:
+        """
+        Plot cross-session p-value heatmap for a single region from a pair.
+
+        Creates a 3×3 grid where:
+        - Rows: Trial type comparisons (cued vs spont_hit, cued vs spont_miss, spont_hit vs spont_miss)
+        - Columns: CCA Components 1-3
+
+        The heatmap shows -log10(median p-value) across sessions.
+
+        Parameters:
+            ax: Matplotlib axes
+            region_i: Row region name (in upper triangle layout)
+            region_j: Column region name (in upper triangle layout)
+            which_region: 'row' for region_i, 'column' for region_j
+        """
+        # Find pair analyzer
+        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_analyzer = self.pair_analyzers.get(pair_key)
+
+        if pair_analyzer is None:
+            alt_key = (pair_key[1], pair_key[0])
+            pair_analyzer = self.pair_analyzers.get(alt_key)
+
+        if pair_analyzer is None:
+            ax.set_visible(False)
+            return
+
+        if 'pairwise_tests' not in pair_analyzer.aggregated_statistics:
+            ax.set_visible(False)
+            return
+
+        pairwise_tests = pair_analyzer.aggregated_statistics['pairwise_tests']
+        n_comp_show = min(3, self.n_components)
+
+        # Determine which region's data to use
+        if which_region == 'row':
+            if region_i == pair_key[0]:
+                region_key = 'region_i'
+            else:
+                region_key = 'region_j'
+            display_region = region_i
+        else:  # 'column'
+            if region_j == pair_key[0]:
+                region_key = 'region_i'
+            else:
+                region_key = 'region_j'
+            display_region = region_j
+
+        # Get comparison keys
+        comparisons = list(pairwise_tests.keys())
+        n_comparisons = len(comparisons)
+
+        if n_comparisons == 0:
+            ax.set_visible(False)
+            return
+
+        # Build p-value matrix: (n_comparisons, n_components)
+        # Use median p-value across sessions
+        p_matrix = np.ones((n_comparisons, n_comp_show))
+
+        for i, comparison in enumerate(comparisons):
+            for j in range(n_comp_show):
+                comp_key = f'comp_{j + 1}'
+                p_values = pairwise_tests[comparison][region_key].get(comp_key, [])
+
+                if p_values:
+                    # Use median p-value across sessions
+                    p_matrix[i, j] = np.median(p_values)
+
+        # Convert to -log10 for visualization (higher = more significant)
+        log_p_matrix = -np.log10(p_matrix + 1e-10)
+
+        # Plot heatmap
+        im = ax.imshow(log_p_matrix, cmap='Reds', aspect='auto', vmin=0, vmax=3.0)
+
+        # Add text annotations
+        for i in range(n_comparisons):
+            for j in range(n_comp_show):
+                p_val = log_p_matrix[i, j]
+                # Show significance markers
+                text = f'{p_val:.2f}'
+                if p_val > 1.3:  # p < 0.05
+                    text += '*'
+                if p_val > 2.0:  # p < 0.01
+                    text += '*'
+                if p_val > 3.0:  # p < 0.001
+                    text += '*'
+                text_color = 'white' if p_val > 1.5 else 'black'
+                ax.text(j, i, text, ha='center', va='center',
+                        fontsize=14, color=text_color, fontweight='bold')
+
+        # Set axis labels
+        ax.set_xticks(np.arange(n_comp_show))
+        ax.set_yticks(np.arange(n_comparisons))
+        ax.set_xticklabels([f'C{i+1}' for i in range(n_comp_show)], fontsize=16)
+
+        # Format comparison labels for y-axis
+        y_labels = []
+        for comp in comparisons:
+            parts = comp.split('_vs_')
+            if len(parts) == 2:
+                label = f"{parts[0].replace('_', ' ')}\nvs\n{parts[1].replace('_', ' ')}"
+            else:
+                label = comp.replace('_', '\n')
+            y_labels.append(label)
+        ax.set_yticklabels(y_labels, fontsize=10)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        for spine in ax.spines.values():
+            spine.set_linewidth(2)
+
+        # Add region annotation
+        ax.set_title(f'{display_region}', fontsize=16, fontweight='bold')
 
 
 # =============================================================================
@@ -2114,21 +2045,14 @@ class CrossTrialTypeCCAPipeline:
                 # Compute statistics
                 analyzer.compute_statistics()
 
-                # Create visualizations (single session)
-                # analyzer.create_projection_comparison_figure(region_pair)
-                # analyzer.create_statistical_summary_figure(region_pair)
-
-                # # Create detailed figures for first 3 components
-                # for comp_idx in range(min(3, analyzer.n_components)):
-                #     analyzer.create_detailed_temporal_figure(region_pair, comp_idx)
-
-                # Generate reports
-                #analyzer.generate_summary_report(region_pair)
-                
                 # Add to cross-session analyzer if enabled
                 if self.config.get('enable_cross_session', True):
                     pair_key = sort_pair_by_anatomy(region_i, region_j)
-                    
+
+                    # Check if pair was flipped by sort_pair_by_anatomy
+                    # If flipped, u/v data need to be swapped to maintain correct region mapping
+                    is_flipped = (pair_key[0] != region_i)
+
                     if pair_key not in self.cross_session_analyzers:
                         self.cross_session_analyzers[pair_key] = CrossSessionCCAAnalyzer(
                             base_dir=self.config['base_dir'],
@@ -2137,9 +2061,9 @@ class CrossTrialTypeCCAPipeline:
                             n_components=self.config['n_components'],
                             min_sessions=self.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
                         )
-                    
+
                     self.cross_session_analyzers[pair_key].add_session_result(
-                        session_name, analyzer
+                        session_name, analyzer, swap_uv=is_flipped
                     )
 
             # Store analyzer
@@ -2218,29 +2142,31 @@ class CrossTrialTypeCCAPipeline:
             # Perform aggregation
             if cross_session_analyzer.aggregate_projections():
                 cross_session_analyzer.aggregate_temporal_correlations()
-                
-                # Create cross-session figures for this pair
-                cross_session_analyzer.create_cross_session_projection_figure()
-                cross_session_analyzer.create_temporal_correlation_boxplot_figure()
-                
+                cross_session_analyzer.aggregate_pairwise_tests()
+
                 # Add to summary visualizer
                 self.summary_visualizer.add_pair_analyzer(cross_session_analyzer)
                 valid_pairs += 1
-        
+
         print(f"\nValid pairs for summary: {valid_pairs}")
-        
+
         # Create summary figures if we have enough pairs
         if valid_pairs >= 1:
             print("\nCreating summary figures...")
-            
-            # Figure 1: First component projections
+
+            # Figures 1a & 1b: First component projections (row and column regions)
             self.summary_visualizer.create_projection_matrix_figure(
                 component_idx=0,
                 save_fig=True
             )
-            
-            # Figure 2: R² boxplots
+
+            # Figures 2a & 2b: R² boxplots (row and column regions)
             self.summary_visualizer.create_r2_boxplot_matrix_figure(
+                save_fig=True
+            )
+
+            # Figures 3a & 3b: P-value heatmaps (row and column regions)
+            self.summary_visualizer.create_pvalue_heatmap_matrix_figure(
                 save_fig=True
             )
         else:
