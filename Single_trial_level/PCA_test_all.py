@@ -84,7 +84,7 @@ class OxfordPCAVisualizer:
     def __init__(
             self,
             base_results_dir: str,
-            results_subdir: str = "sessions_cued_hit_long_results",
+            results_subdirs: Dict[str, str] = None,
             n_components: int = 10
     ):
         """
@@ -92,67 +92,91 @@ class OxfordPCAVisualizer:
 
         Parameters:
             base_results_dir: Root directory (e.g., '/path/to/Oxford_dataset')
-            results_subdir: Subdirectory containing analysis results
-                           Options: 'sessions_cued_hit_long_results' (cued state)
-                                    'sessions_spont_short_results' (spontaneous)
+            results_subdirs: Dictionary mapping trial type names to subdirectories
+                           Example: {
+                               'cued_hit_long': 'sessions_cued_hit_long_results',
+                               'spont_hit_long': 'sessions_spont_hit_long_results'
+                           }
+                           If None, defaults to single trial type for backward compatibility
             n_components: Number of PCs to include in cumulative variance
         """
         self.base_results_dir = Path(base_results_dir)
-        self.pca_results_dir = self.base_results_dir / results_subdir
         self.n_components = n_components
         self.anatomical_order = ANATOMICAL_ORDER
 
-        # Primary data container: region → [session_results]
+        # Handle backward compatibility
+        if results_subdirs is None:
+            results_subdirs = {'default': 'sessions_cued_hit_long_results'}
+
+        self.trial_types = list(results_subdirs.keys())
+        self.pca_results_dirs = {
+            trial_type: self.base_results_dir / subdir
+            for trial_type, subdir in results_subdirs.items()
+        }
+
+        # Primary data container: trial_type → region → [session_results]
         # Each session_result contains cumulative_variance, explained_variance, etc.
-        self.region_data: Dict[str, List[Dict]] = {}
+        self.region_data: Dict[str, Dict[str, List[Dict]]] = {
+            trial_type: {} for trial_type in self.trial_types
+        }
 
-        # Track which sessions contributed to each region
-        self.region_sessions: Dict[str, List[str]] = {}
+        # Track which sessions contributed to each region per trial type
+        self.region_sessions: Dict[str, Dict[str, List[str]]] = {
+            trial_type: {} for trial_type in self.trial_types
+        }
 
-        # Validate directory exists
-        if not self.pca_results_dir.exists():
-            raise ValueError(f"Results directory not found: {self.pca_results_dir}")
+        # Validate directories exist
+        for trial_type, results_dir in self.pca_results_dirs.items():
+            if not results_dir.exists():
+                raise ValueError(f"Results directory not found for {trial_type}: {results_dir}")
 
         print("=" * 70)
         print("Oxford PCA Visualizer - Independent Region Analysis")
         print("=" * 70)
-        print(f"Results directory: {self.pca_results_dir}")
+        for trial_type, results_dir in self.pca_results_dirs.items():
+            print(f"Results directory ({trial_type}): {results_dir}")
         print(f"Components to visualize: {self.n_components}")
 
     def load_all_sessions(self) -> None:
         """
-        Load PCA results from all sessions, organizing by region.
+        Load PCA results from all sessions, organizing by region and trial type.
 
-        This method iterates through all *_analysis_results.mat files,
-        extracts PCA results for each region present, and aggregates
-        them independently. A single session may contribute data to
-        multiple regions.
+        This method iterates through all *_analysis_results.mat files for each
+        trial type, extracts PCA results for each region present, and aggregates
+        them independently. A single session may contribute data to multiple regions.
         """
         print("\nLoading PCA results from all sessions...")
         print("-" * 50)
 
-        # Find all analysis result files
-        result_files = list(self.pca_results_dir.glob("*_analysis_results.mat"))
-        print(f"Found {len(result_files)} session files")
+        for trial_type in self.trial_types:
+            pca_results_dir = self.pca_results_dirs[trial_type]
+            print(f"\nProcessing trial type: {trial_type}")
 
-        for result_file in result_files:
-            session_name = result_file.stem.replace("_analysis_results", "")
-            self._process_session_file(result_file, session_name)
+            # Find all analysis result files
+            result_files = list(pca_results_dir.glob("*_analysis_results.mat"))
+            print(f"Found {len(result_files)} session files")
+
+            for result_file in result_files:
+                session_name = result_file.stem.replace("_analysis_results", "")
+                self._process_session_file(result_file, session_name, trial_type)
 
         # Report loading summary
         print("\n" + "-" * 50)
         print("Loading Summary:")
-        for region in self._get_ordered_regions():
-            n_sessions = len(self.region_data.get(region, []))
-            print(f"  {region}: {n_sessions} sessions")
+        for trial_type in self.trial_types:
+            print(f"\nTrial type: {trial_type}")
+            for region in self._get_ordered_regions(trial_type):
+                n_sessions = len(self.region_data[trial_type].get(region, []))
+                print(f"  {region}: {n_sessions} sessions")
 
-    def _process_session_file(self, file_path: Path, session_name: str) -> None:
+    def _process_session_file(self, file_path: Path, session_name: str, trial_type: str) -> None:
         """
         Process a single session file, extracting PCA results per region.
 
         Parameters:
             file_path: Path to the *_analysis_results.mat file
             session_name: Identifier for this session
+            trial_type: Trial type identifier
         """
         try:
             # Load using mat73 (handles MATLAB v7.3 files)
@@ -184,12 +208,12 @@ class OxfordPCAVisualizer:
                     extracted_data['session_name'] = session_name
 
                     # Initialize container if this is first occurrence of region
-                    if region not in self.region_data:
-                        self.region_data[region] = []
-                        self.region_sessions[region] = []
+                    if region not in self.region_data[trial_type]:
+                        self.region_data[trial_type][region] = []
+                        self.region_sessions[trial_type][region] = []
 
-                    self.region_data[region].append(extracted_data)
-                    self.region_sessions[region].append(session_name)
+                    self.region_data[trial_type][region].append(extracted_data)
+                    self.region_sessions[trial_type][region].append(session_name)
 
             print(f"  {session_name}: Extracted {len(available_regions)} regions")
 
@@ -285,14 +309,25 @@ class OxfordPCAVisualizer:
             print(f"    Warning: Could not extract PCA data for {region_name}: {e}")
             return None
 
-    def _get_ordered_regions(self) -> List[str]:
+    def _get_ordered_regions(self, trial_type: str = None) -> List[str]:
         """
         Return available regions in anatomical order.
 
         Filters ANATOMICAL_ORDER to include only regions present in the
         loaded data, ensuring consistent ordering across visualizations.
+
+        Parameters:
+            trial_type: If specified, return regions for this trial type only.
+                       If None, return union of all regions across trial types.
         """
-        return [r for r in self.anatomical_order if r in self.region_data]
+        if trial_type is not None:
+            return [r for r in self.anatomical_order if r in self.region_data[trial_type]]
+        else:
+            # Return union of all regions across trial types
+            all_regions = set()
+            for tt_data in self.region_data.values():
+                all_regions.update(tt_data.keys())
+            return [r for r in self.anatomical_order if r in all_regions]
 
     def create_cumulative_variance_figure(
             self,
@@ -373,97 +408,127 @@ class OxfordPCAVisualizer:
             fill_color: str
     ) -> None:
         """
-        Plot cumulative variance for a single region.
+        Plot cumulative variance for a single region, showing multiple trial types.
 
-        Computes mean and standard deviation across all sessions for this
-        region, then displays as a line with shaded confidence region.
+        When multiple trial types are loaded, plots each trial type with a different
+        color in the same panel for direct comparison.
 
         Parameters:
             ax: Matplotlib axes object for this subplot
             region: Name of the region to plot
-            line_color: Color for the mean line
-            fill_color: Color for the shaded std region
+            line_color: Color for the mean line (used for single trial type only)
+            fill_color: Color for the shaded std region (used for single trial type only)
         """
-        region_sessions = self.region_data[region]
-        n_sessions = len(region_sessions)
+        # Define colors for different trial types
+        trial_type_colors = {
+            'cued_hit_long': ('#2E86AB', 'Cued Hit Long'),
+            'spont_hit_long': ('#E63946', 'Spontaneous Hit Long'),
+            'default': (line_color, 'Default')
+        }
 
-        if n_sessions == 0:
+        # Track if we have any data for this region
+        has_data = False
+        max_n_plot = 0
+
+        for trial_type in self.trial_types:
+            region_sessions = self.region_data[trial_type].get(region, [])
+            n_sessions = len(region_sessions)
+
+            if n_sessions == 0:
+                continue
+
+            has_data = True
+
+            # Collect cumulative variance arrays from all sessions
+            # Note: Different sessions may have different numbers of PCs due to
+            # varying neuron counts. We truncate to the minimum length.
+            all_cum_var = [s['cumulative_variance'] for s in region_sessions]
+            min_length = min(len(cv) for cv in all_cum_var)
+
+            # Truncate all arrays to minimum length and stack
+            truncated = np.array([cv[:min_length] for cv in all_cum_var])
+
+            # Compute statistics across sessions (axis=0)
+            mean_cum_var = np.mean(truncated, axis=0)
+            std_cum_var = np.std(truncated, axis=0)
+
+            # Limit to n_components for visualization
+            n_plot = min(self.n_components, len(mean_cum_var))
+            max_n_plot = max(max_n_plot, n_plot)
+            components = np.arange(1, n_plot + 1)
+            mean_plot = mean_cum_var[:n_plot]
+            std_plot = std_cum_var[:n_plot]
+
+            # Get color and label for this trial type
+            if trial_type in trial_type_colors:
+                plot_color, label_text = trial_type_colors[trial_type]
+            else:
+                plot_color, label_text = trial_type_colors['default']
+
+            # Plot mean line with shaded standard deviation
+            ax.plot(components, mean_plot, color=plot_color, linewidth=2.5,
+                    marker='o', markersize=4, label=f'{label_text} (n={n_sessions})')
+            ax.fill_between(
+                components,
+                mean_plot - std_plot,
+                mean_plot + std_plot,
+                alpha=0.2,
+                color=plot_color
+            )
+
+            # Add annotation for final cumulative variance
+            final_var = mean_plot[-1]
+            ax.annotate(
+                f'{final_var:.1f}%',
+                xy=(n_plot, final_var),
+                xytext=(5, 0),
+                textcoords='offset points',
+                fontsize=8,
+                color=plot_color
+            )
+
+        if not has_data:
             ax.text(0.5, 0.5, f'{region}\nNo data', ha='center', va='center',
                     transform=ax.transAxes, fontsize=12)
             ax.axis('off')
             return
-
-        # Collect cumulative variance arrays from all sessions
-        # Note: Different sessions may have different numbers of PCs due to
-        # varying neuron counts. We truncate to the minimum length.
-        all_cum_var = [s['cumulative_variance'] for s in region_sessions]
-        min_length = min(len(cv) for cv in all_cum_var)
-
-        # Truncate all arrays to minimum length and stack
-        truncated = np.array([cv[:min_length] for cv in all_cum_var])
-
-        # Compute statistics across sessions (axis=0)
-        mean_cum_var = np.mean(truncated, axis=0)
-        std_cum_var = np.std(truncated, axis=0)
-
-        # Limit to n_components for visualization
-        n_plot = min(self.n_components, len(mean_cum_var))
-        components = np.arange(1, n_plot + 1)
-        mean_plot = mean_cum_var[:n_plot]
-        std_plot = std_cum_var[:n_plot]
-
-        # Plot mean line with shaded standard deviation
-        ax.plot(components, mean_plot, color=line_color, linewidth=2.5,
-                marker='o', markersize=4, label='Mean')
-        ax.fill_between(
-            components,
-            mean_plot - std_plot,
-            mean_plot + std_plot,
-            alpha=0.25,
-            color=fill_color,
-            label='±1 SD'
-        )
 
         # Add reference lines
         ax.axhline(y=80, color='gray', linestyle='--', alpha=0.5, linewidth=1)
         ax.axhline(y=90, color='gray', linestyle=':', alpha=0.5, linewidth=1)
 
         # Formatting
-        ax.set_xlim(0.5, n_plot + 0.5)
+        ax.set_xlim(0.5, max_n_plot + 0.5)
         ax.set_ylim(0, 105)
         ax.set_xlabel('Principal Component', fontsize=10)
         ax.set_ylabel('Cumulative Var. (%)', fontsize=10)
-        ax.set_title(f'{region} (n={n_sessions})', fontsize=12, fontweight='bold')
+        ax.set_title(f'{region}', fontsize=12, fontweight='bold')
 
         # Set integer x-ticks
-        ax.set_xticks(components[::2] if n_plot > 5 else components)
+        components = np.arange(1, max_n_plot + 1)
+        ax.set_xticks(components[::2] if max_n_plot > 5 else components)
 
         # Clean spines
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.3, linestyle=':')
 
-        # Add annotation for final cumulative variance
-        final_var = mean_plot[-1]
-        ax.annotate(
-            f'{final_var:.1f}%',
-            xy=(n_plot, final_var),
-            xytext=(5, 0),
-            textcoords='offset points',
-            fontsize=9,
-            color=line_color
-        )
+        # Add legend if multiple trial types
+        if len(self.trial_types) > 1:
+            ax.legend(loc='lower right', fontsize=8, framealpha=0.9)
 
     def _get_total_sessions(self) -> int:
-        """Return the total number of unique sessions loaded."""
+        """Return the total number of unique sessions loaded across all trial types."""
         all_sessions = set()
-        for sessions in self.region_sessions.values():
-            all_sessions.update(sessions)
+        for trial_type in self.trial_types:
+            for sessions in self.region_sessions[trial_type].values():
+                all_sessions.update(sessions)
         return len(all_sessions)
 
     def create_variance_summary_table(
             self,
-            save_path: Optional[str] = None
+            save_path: Optional[str] = None,
+            trial_type: str = None
     ) -> None:
         """
         Create a summary figure showing variance metrics as a table/heatmap.
@@ -475,15 +540,20 @@ class OxfordPCAVisualizer:
 
         Parameters:
             save_path: If provided, save figure to this path
+            trial_type: If specified, create table for this trial type only.
+                       If None, uses the first trial type.
         """
         print("\nCreating variance summary table...")
 
-        ordered_regions = self._get_ordered_regions()
+        if trial_type is None:
+            trial_type = self.trial_types[0]
+
+        ordered_regions = self._get_ordered_regions(trial_type)
 
         # Prepare summary statistics
         summary_data = []
         for region in ordered_regions:
-            region_sessions = self.region_data[region]
+            region_sessions = self.region_data[trial_type].get(region, [])
             n_sessions = len(region_sessions)
 
             if n_sessions == 0:
@@ -539,7 +609,7 @@ class OxfordPCAVisualizer:
         table.scale(1.2, 1.5)
 
         plt.title(
-            'PCA Variance Summary by Region',
+            f'PCA Variance Summary by Region - {trial_type}',
             fontsize=14,
             fontweight='bold',
             pad=20
@@ -558,28 +628,33 @@ class OxfordPCAVisualizer:
         print("\n" + "=" * 70)
         print("PCA Analysis Report")
         print("=" * 70)
-        print(f"Results directory: {self.pca_results_dir}")
+        for trial_type, results_dir in self.pca_results_dirs.items():
+            print(f"Results directory ({trial_type}): {results_dir}")
         print(f"Total unique sessions: {self._get_total_sessions()}")
-        print(f"Regions with data: {len(self.region_data)}")
 
-        print("\nPer-Region Statistics:")
-        print("-" * 50)
+        for trial_type in self.trial_types:
+            print(f"\n{'=' * 70}")
+            print(f"Trial Type: {trial_type}")
+            print(f"Regions with data: {len(self.region_data[trial_type])}")
 
-        for region in self._get_ordered_regions():
-            sessions = self.region_data[region]
-            n = len(sessions)
+            print("\nPer-Region Statistics:")
+            print("-" * 50)
 
-            if n > 0:
-                all_cv = [s['cumulative_variance'] for s in sessions]
-                min_len = min(len(cv) for cv in all_cv)
-                stacked = np.array([cv[:min_len] for cv in all_cv])
-                mean_cv = np.mean(stacked, axis=0)
+            for region in self._get_ordered_regions(trial_type):
+                sessions = self.region_data[trial_type].get(region, [])
+                n = len(sessions)
 
-                pc1 = mean_cv[0] if len(mean_cv) >= 1 else np.nan
-                pc5 = mean_cv[4] if len(mean_cv) >= 5 else np.nan
+                if n > 0:
+                    all_cv = [s['cumulative_variance'] for s in sessions]
+                    min_len = min(len(cv) for cv in all_cv)
+                    stacked = np.array([cv[:min_len] for cv in all_cv])
+                    mean_cv = np.mean(stacked, axis=0)
 
-                print(f"  {region:8s}: {n:3d} sessions, "
-                      f"PC1={pc1:5.1f}%, PC5_cum={pc5:5.1f}%")
+                    pc1 = mean_cv[0] if len(mean_cv) >= 1 else np.nan
+                    pc5 = mean_cv[4] if len(mean_cv) >= 5 else np.nan
+
+                    print(f"  {region:8s}: {n:3d} sessions, "
+                          f"PC1={pc1:5.1f}%, PC5_cum={pc5:5.1f}%")
 
     # =========================================================================
     # TEMPORAL PROJECTION FIGURES - INDEPENDENT REGION AGGREGATION
@@ -595,7 +670,8 @@ class OxfordPCAVisualizer:
             figsize: Tuple[float, float] = (60, 60),
             component_idx: int = 0,
             save_path: Optional[str] = None,
-            min_sessions: int = 3
+            min_sessions: int = 3,
+            trial_type: str = None
     ) -> None:
         """
         Create cross-region temporal projection matrix figure for PCA.
@@ -617,14 +693,19 @@ class OxfordPCAVisualizer:
             component_idx: Which principal component to visualize (0-based)
             save_path: Output path (without extension)
             min_sessions: Minimum sessions required per region to display
+            trial_type: If specified, use this trial type. If None, uses first trial type.
         """
+        if trial_type is None:
+            trial_type = self.trial_types[0]
+
         print(f"\nCreating PCA temporal projection figure (Component {component_idx + 1})...")
+        print(f"  Trial type: {trial_type}")
         print(f"  Using INDEPENDENT region aggregation (differs from CCA)")
 
         # Pre-compute mean projections for each region across all its sessions
         # This is done once and reused for all pairs involving that region
         region_mean_projections = self._compute_region_mean_projections(
-            component_idx, min_sessions
+            component_idx, min_sessions, trial_type
         )
 
         if not region_mean_projections:
@@ -632,7 +713,7 @@ class OxfordPCAVisualizer:
             return
 
         # Get regions that have valid projection data
-        valid_regions = [r for r in self._get_ordered_regions()
+        valid_regions = [r for r in self._get_ordered_regions(trial_type)
                          if r in region_mean_projections]
         n_regions = len(valid_regions)
 
@@ -655,7 +736,7 @@ class OxfordPCAVisualizer:
 
                 if i == j:
                     # Diagonal: display region name and session count
-                    n_sessions = len(self.region_data.get(region_i, []))
+                    n_sessions = len(self.region_data[trial_type].get(region_i, []))
                     ax.text(0.5, 0.5, f'{region_i}\n(n={n_sessions})',
                             ha='center', va='center',
                             fontsize=32, fontweight='bold')
@@ -693,7 +774,8 @@ class OxfordPCAVisualizer:
     def _compute_region_mean_projections(
             self,
             component_idx: int,
-            min_sessions: int = 3
+            min_sessions: int = 3,
+            trial_type: str = None
     ) -> Dict[str, Dict]:
         """
         Pre-compute mean temporal projections for each region independently.
@@ -705,6 +787,7 @@ class OxfordPCAVisualizer:
         Parameters:
             component_idx: Which PC to compute projections for
             min_sessions: Minimum sessions required
+            trial_type: If specified, use this trial type. If None, uses first trial type.
 
         Returns:
             Dictionary mapping region -> {
@@ -713,10 +796,13 @@ class OxfordPCAVisualizer:
                 'n_sessions': number of sessions used
             }
         """
+        if trial_type is None:
+            trial_type = self.trial_types[0]
+
         region_projections = {}
 
-        for region in self._get_ordered_regions():
-            sessions = self.region_data.get(region, [])
+        for region in self._get_ordered_regions(trial_type):
+            sessions = self.region_data[trial_type].get(region, [])
 
             # Collect projections from all sessions for this region
             proj_arrays = []
@@ -827,7 +913,8 @@ class OxfordPCAVisualizer:
             n_components_to_plot: int = 5,
             figsize: Tuple[float, float] = (40, 40),
             save_path: Optional[str] = None,
-            min_sessions: int = 3
+            min_sessions: int = 3,
+            trial_type: str = None
     ) -> None:
         """
         Create temporal projection figures for multiple components.
@@ -839,6 +926,7 @@ class OxfordPCAVisualizer:
             figsize: Figure dimensions
             save_path: Base output path
             min_sessions: Minimum sessions per region
+            trial_type: If specified, use this trial type. If None, uses first trial type.
         """
         print(f"\nGenerating temporal projection figures for {n_components_to_plot} components...")
 
@@ -847,7 +935,8 @@ class OxfordPCAVisualizer:
                 figsize=figsize,
                 component_idx=comp_idx,
                 save_path=save_path,
-                min_sessions=min_sessions
+                min_sessions=min_sessions,
+                trial_type=trial_type
             )
 
 
@@ -863,67 +952,55 @@ def main():
     print("Oxford PCA Visualization Pipeline")
     print("=" * 70)
 
-    # Option 1: Cued state analysis
-    print("\n[1] Processing CUED state sessions...")
-    pca_viz_cued = OxfordPCAVisualizer(
+    # Create combined visualizer with both trial types
+    print("\n[1] Processing both CUED and SPONTANEOUS HIT LONG trial types...")
+    pca_viz_combined = OxfordPCAVisualizer(
         base_results_dir=base_dir,
-        results_subdir="sessions_cued_hit_long_results",
+        results_subdirs={
+            'cued_hit_long': 'sessions_cued_hit_long_results',
+            'spont_hit_long': 'sessions_spont_hit_long_results'
+        },
         n_components=10
     )
-    pca_viz_cued.load_all_sessions()
-    pca_viz_cued.generate_report()
+    pca_viz_combined.load_all_sessions()
+    pca_viz_combined.generate_report()
 
-    # Create cumulative variance figure (3x4 layout)
-    pca_viz_cued.create_cumulative_variance_figure(
+    # Create combined cumulative variance figure (3x4 layout)
+    # This will show both trial types in the same panel for each region
+    pca_viz_combined.create_cumulative_variance_figure(
         figsize=(16, 12),
-        save_path=str(output_dir / "cued_long"),
+        save_path=str(output_dir / "combined_cued_spont"),
         n_rows=3,
         n_cols=4
     )
 
-    # Create variance summary table
-    pca_viz_cued.create_variance_summary_table(
-        save_path=str(output_dir / "cued_long")
+    # Create variance summary tables for each trial type
+    pca_viz_combined.create_variance_summary_table(
+        save_path=str(output_dir / "cued_long"),
+        trial_type='cued_hit_long'
+    )
+    pca_viz_combined.create_variance_summary_table(
+        save_path=str(output_dir / "spont_hit_long"),
+        trial_type='spont_hit_long'
     )
 
-    # Create temporal projection figures (INDEPENDENT region aggregation)
+    # Create temporal projection figures for each trial type
     # Each region is averaged across ALL sessions recording that region,
     # regardless of what other regions were co-recorded
-    pca_viz_cued.create_all_component_figures(
+    pca_viz_combined.create_all_component_figures(
         n_components_to_plot=10,
         figsize=(40, 40),
         save_path=str(output_dir / "cued_long"),
-        min_sessions=3
+        min_sessions=3,
+        trial_type='cued_hit_long'
     )
 
-    print("\n[2] Processing SPONTANEOUS state sessions...")
-    pca_viz_spont_hit = OxfordPCAVisualizer(
-        base_results_dir=base_dir,
-        results_subdir="sessions_spont_hit_long_results",
-        n_components=10
-    )
-    pca_viz_spont_hit.load_all_sessions()
-    pca_viz_spont_hit.generate_report()
-
-    # Create cumulative variance figure
-    pca_viz_spont_hit.create_cumulative_variance_figure(
-        figsize=(16, 12),
-        save_path=str(output_dir / "spont_hit_long"),
-        n_rows=3,
-        n_cols=4
-    )
-
-    # Create variance summary table
-    pca_viz_spont_hit.create_variance_summary_table(
-        save_path=str(output_dir / "spont_hit_long")
-    )
-
-    # Create temporal projection figures
-    pca_viz_spont_hit.create_all_component_figures(
+    pca_viz_combined.create_all_component_figures(
         n_components_to_plot=10,
         figsize=(40, 40),
         save_path=str(output_dir / "spont_hit_long"),
-        min_sessions=3
+        min_sessions=3,
+        trial_type='spont_hit_long'
     )
 
     # # Option 2: Spontaneous state analysis
