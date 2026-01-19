@@ -991,8 +991,8 @@ class CrossSessionCCAAnalyzer:
                     continue
                 
                 proj = session_proj[trial_type]
-                u_means_all.append(proj['u_mean'])
-                v_means_all.append(proj['v_mean'])
+                u_means_all.append(np.abs(proj['u_mean'][:,:]))
+                v_means_all.append(np.abs(proj['v_mean'][:,:]))
             
             if len(u_means_all) < self.min_sessions:
                 continue
@@ -1751,16 +1751,23 @@ class CrossTrialTypeSummaryVisualizer:
             sem_proj = agg[sem_key][:, component_idx]
 
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
-            linewidth = 2.5 if trial_type == self.reference_type else 2.0
-
-            # Get short label for this trial type
+            linestyle = '-' if trial_type == self.reference_type else '-'
+            linewidth = 2 if trial_type == self.reference_type else 1.0
             short_label = trial_type_short.get(trial_type, trial_type.replace('_', ' '))
             n_sess = agg['n_sessions']
 
-            ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth,
-                    alpha=0.9, label=f'{short_label} (n={n_sess})')
-            ax.fill_between(time_vec, mean_proj - sem_proj, mean_proj + sem_proj,
-                            alpha=0.15, color=color)
+            if trial_type == self.reference_type:
+                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
+                        linewidth=linewidth,  label=f'{short_label} (n={n_sess})',
+                        alpha=0.8)
+                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
+                                alpha=0.15, color=color)
+            else:
+                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
+                        linewidth=linewidth, label=f'{short_label} (n={n_sess})',
+                        alpha=0.4)
+                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
+                                alpha=0.15, color=color)
 
             # Collect session count for annotation
             session_count_labels.append(f'n_{short_label[:2]}={n_sess}')

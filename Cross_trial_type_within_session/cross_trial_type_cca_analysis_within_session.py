@@ -891,7 +891,7 @@ class CrossTrialTypeCCAAnalyzer:
 
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
             linestyle = '-' if trial_type == self.reference_type else '-'
-            linewidth = 2 if trial_type == self.reference_type else 1.0
+            linewidth = 2.5 if trial_type == self.reference_type else 1.0
             if trial_type == self.reference_type:
                 ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
                         linewidth=linewidth, label=trial_type.replace('_', ' '),
