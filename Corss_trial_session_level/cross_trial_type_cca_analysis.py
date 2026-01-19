@@ -1551,8 +1551,8 @@ class CrossTrialTypeSummaryVisualizer:
 
             region_label = "Row Region" if fig_type == 'row' else "Column Region"
             fig.suptitle(
-                f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
-                f'{region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+                # f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
+                f'Component {component_idx + 1}| {region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
                 fontsize=48, fontweight='bold', y=0.995
             )
 
@@ -1632,9 +1632,9 @@ class CrossTrialTypeSummaryVisualizer:
 
         # Define short labels for trial types (a, b, c style)
         trial_type_short = {
-            'cued_hit_long': 'cued',
-            'spont_hit_long': 'spont_hit',
-            'spont_miss_long': 'spont_miss'
+            'cued_hit_long': 'ch',
+            'spont_hit_long': 'sh',
+            'spont_miss_long': 'sm'
         }
 
         for trial_type in pair_analyzer.available_trial_types:
@@ -1659,7 +1659,7 @@ class CrossTrialTypeSummaryVisualizer:
                             alpha=0.15, color=color)
 
             # Collect session count for annotation
-            session_count_labels.append(f'n_{short_label[:1]}={n_sess}')
+            session_count_labels.append(f'n_{short_label[:2]}={n_sess}')
 
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
