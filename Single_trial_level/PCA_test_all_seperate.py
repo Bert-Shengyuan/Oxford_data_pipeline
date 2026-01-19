@@ -843,7 +843,7 @@ class OxfordPCAVisualizer:
 
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 3])
+        ax.set_ylim([-1.5, 3])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
@@ -918,42 +918,42 @@ def main():
     # Create temporal projection figures (INDEPENDENT region aggregation)
     # Each region is averaged across ALL sessions recording that region,
     # regardless of what other regions were co-recorded
-    # pca_viz_cued.create_all_component_figures(
-    #     n_components_to_plot=10,
-    #     figsize=(40, 40),
-    #     save_path=str(output_dir / "cued_long"),
-    #     min_sessions=3
-    # )
+    pca_viz_cued.create_all_component_figures(
+        n_components_to_plot=3,
+        figsize=(40, 40),
+        save_path=str(output_dir / "cued_long"),
+        min_sessions=3
+    )
 
-    # print("\n[2] Processing SPONTANEOUS state sessions...")
-    # pca_viz_spont_hit = OxfordPCAVisualizer(
-    #     base_results_dir=base_dir,
-    #     results_subdir="sessions_spont_hit_long_results",
-    #     n_components=10
-    # )
-    # pca_viz_spont_hit.load_all_sessions()
-    # pca_viz_spont_hit.generate_report()
-    #
-    # # Create cumulative variance figure
-    # pca_viz_spont_hit.create_cumulative_variance_figure(
-    #     figsize=(16, 12),
-    #     save_path=str(output_dir / "spont_hit_long"),
-    #     n_rows=3,
-    #     n_cols=4
-    # )
-    #
-    # # Create variance summary table
-    # pca_viz_spont_hit.create_variance_summary_table(
-    #     save_path=str(output_dir / "spont_hit_long")
-    # )
-    #
-    # # Create temporal projection figures
-    # pca_viz_spont_hit.create_all_component_figures(
-    #     n_components_to_plot=10,
-    #     figsize=(40, 40),
-    #     save_path=str(output_dir / "spont_hit_long"),
-    #     min_sessions=3
-    # )
+    print("\n[2] Processing SPONTANEOUS state sessions...")
+    pca_viz_spont_hit = OxfordPCAVisualizer(
+        base_results_dir=base_dir,
+        results_subdir="sessions_spont_hit_long_results",
+        n_components=10
+    )
+    pca_viz_spont_hit.load_all_sessions()
+    pca_viz_spont_hit.generate_report()
+
+    # Create cumulative variance figure
+    pca_viz_spont_hit.create_cumulative_variance_figure(
+        figsize=(16, 12),
+        save_path=str(output_dir / "spont_hit_long"),
+        n_rows=3,
+        n_cols=4
+    )
+
+    # Create variance summary table
+    pca_viz_spont_hit.create_variance_summary_table(
+        save_path=str(output_dir / "spont_hit_long")
+    )
+
+    # Create temporal projection figures
+    pca_viz_spont_hit.create_all_component_figures(
+        n_components_to_plot=3,
+        figsize=(40, 40),
+        save_path=str(output_dir / "spont_hit_long"),
+        min_sessions=3
+    )
 
     # # Option 2: Spontaneous state analysis
     # print("\n[2] Processing SPONTANEOUS state sessions...")
