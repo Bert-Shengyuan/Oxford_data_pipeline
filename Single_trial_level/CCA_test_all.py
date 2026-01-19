@@ -615,6 +615,11 @@ class OxfordCCAVisualizer:
         """
         Plot temporal projections for a single region pair.
 
+        Sign alignment is performed by:
+        - Identifying baseline latent from first session with positive peak
+        - Computing correlation of each session with baseline
+        - Flipping sessions with negative correlation
+
         Parameters:
             ax: Matplotlib axes
             region_i: First region name
@@ -646,16 +651,16 @@ class OxfordCCAVisualizer:
                 continue
             if is_flipped:
                 proj_data = session['projections'][component_idx]
-                proj_i = np.abs(proj_data.get('region_j_mean', []))
-                proj_j = np.abs(proj_data.get('region_i_mean', []))
+                proj_i = proj_data.get('region_j_mean', [])
+                proj_j = proj_data.get('region_i_mean', [])
 
                 if len(proj_i) > 0 and len(proj_j) > 0:
                     proj_i_all.append(proj_i)
                     proj_j_all.append(proj_j)
             else:
                 proj_data = session['projections'][component_idx]
-                proj_i = np.abs(proj_data.get('region_i_mean', []))
-                proj_j = np.abs(proj_data.get('region_j_mean', []))
+                proj_i = proj_data.get('region_i_mean', [])
+                proj_j = proj_data.get('region_j_mean', [])
 
                 if len(proj_i) > 0 and len(proj_j) > 0:
                     proj_i_all.append(proj_i)
@@ -666,11 +671,52 @@ class OxfordCCAVisualizer:
             ax.set_visible(False)
             return
 
-        # Compute statistics
+        # Truncate to minimum length
         min_len = min(min(len(p) for p in proj_i_all), min(len(p) for p in proj_j_all))
-        proj_i_arr = np.array([p[:min_len] for p in proj_i_all])
-        proj_j_arr = np.array([p[:min_len] for p in proj_j_all])
+        proj_i_arr_raw = np.array([p[:min_len] for p in proj_i_all])
+        proj_j_arr_raw = np.array([p[:min_len] for p in proj_j_all])
 
+        # Align signs based on correlation with baseline
+        # Find baseline for region_i (first session with positive peak)
+        baseline_i_idx = None
+        for idx, proj in enumerate(proj_i_arr_raw):
+            peak_val = proj[np.argmax(np.abs(proj))]
+            if peak_val > 0:
+                baseline_i_idx = idx
+                break
+
+        if baseline_i_idx is None:
+            baseline_i_idx = 0
+
+        baseline_i = proj_i_arr_raw[baseline_i_idx]
+
+        # Find baseline for region_j
+        baseline_j_idx = None
+        for idx, proj in enumerate(proj_j_arr_raw):
+            peak_val = proj[np.argmax(np.abs(proj))]
+            if peak_val > 0:
+                baseline_j_idx = idx
+                break
+
+        if baseline_j_idx is None:
+            baseline_j_idx = 0
+
+        baseline_j = proj_j_arr_raw[baseline_j_idx]
+
+        # Align all sessions based on correlation with baseline
+        proj_i_arr = np.zeros_like(proj_i_arr_raw)
+        proj_j_arr = np.zeros_like(proj_j_arr_raw)
+
+        for idx in range(len(proj_i_arr_raw)):
+            # Align region_i
+            corr_i = np.corrcoef(baseline_i, proj_i_arr_raw[idx])[0, 1]
+            proj_i_arr[idx] = proj_i_arr_raw[idx] if corr_i >= 0 else -proj_i_arr_raw[idx]
+
+            # Align region_j
+            corr_j = np.corrcoef(baseline_j, proj_j_arr_raw[idx])[0, 1]
+            proj_j_arr[idx] = proj_j_arr_raw[idx] if corr_j >= 0 else -proj_j_arr_raw[idx]
+
+        # Compute statistics
         mean_i = np.mean(proj_i_arr, axis=0)
         mean_j = np.mean(proj_j_arr, axis=0)
         std_i = np.std(proj_i_arr, axis=0)
