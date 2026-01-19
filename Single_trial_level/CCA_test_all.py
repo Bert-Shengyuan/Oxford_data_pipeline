@@ -695,7 +695,7 @@ class OxfordCCAVisualizer:
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 5])
+        ax.set_ylim([-2, 5])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
