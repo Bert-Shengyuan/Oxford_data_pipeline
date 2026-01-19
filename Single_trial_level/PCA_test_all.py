@@ -457,7 +457,7 @@ class OxfordPCAVisualizer:
             max_n_plot = max(max_n_plot, n_plot)
             components = np.arange(1, n_plot + 1)
             mean_plot = mean_cum_var[:n_plot]
-            std_plot = std_cum_var[:n_plot]
+            std_plot = std_cum_var[:n_plot]/np.sqrt(n_sessions)
 
             # Get color and label for this trial type
             if trial_type in trial_type_colors:
@@ -987,21 +987,21 @@ def main():
     # Create temporal projection figures for each trial type
     # Each region is averaged across ALL sessions recording that region,
     # regardless of what other regions were co-recorded
-    pca_viz_combined.create_all_component_figures(
-        n_components_to_plot=10,
-        figsize=(40, 40),
-        save_path=str(output_dir / "cued_long"),
-        min_sessions=3,
-        trial_type='cued_hit_long'
-    )
-
-    pca_viz_combined.create_all_component_figures(
-        n_components_to_plot=10,
-        figsize=(40, 40),
-        save_path=str(output_dir / "spont_hit_long"),
-        min_sessions=3,
-        trial_type='spont_hit_long'
-    )
+    # pca_viz_combined.create_all_component_figures(
+    #     n_components_to_plot=1,
+    #     figsize=(40, 40),
+    #     save_path=str(output_dir / "cued_long"),
+    #     min_sessions=3,
+    #     trial_type='cued_hit_long'
+    # )
+    #
+    # pca_viz_combined.create_all_component_figures(
+    #     n_components_to_plot=1,
+    #     figsize=(40, 40),
+    #     save_path=str(output_dir / "spont_hit_long"),
+    #     min_sessions=3,
+    #     trial_type='spont_hit_long'
+    # )
 
     # # Option 2: Spontaneous state analysis
     # print("\n[2] Processing SPONTANEOUS state sessions...")
