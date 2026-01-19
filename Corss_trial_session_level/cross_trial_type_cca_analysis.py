@@ -477,6 +477,34 @@ class CrossTrialTypeCCAAnalyzer:
     # PROJECTION COMPUTATION
     # =========================================================================
 
+    def _extract_projections(self, projections_data: dict) -> Optional[Dict]:
+        """
+        Extract temporal projection data from CCA results.
+
+        Parameters:
+            projections_data: Dictionary containing projection components
+
+        Returns:
+            Dictionary with region_i and region_j projections per component
+        """
+        try:
+            components = projections_data['components']
+            extracted = {}
+
+            for comp_idx, comp_list in enumerate(components):
+                if len(comp_list) > 0:
+                    comp_data = comp_list[0]
+                    if isinstance(comp_data, dict):
+                        extracted[comp_idx] = {
+                            'region_i_mean': np.array(comp_data.get('region_i_mean', [])).flatten(),
+                            'region_j_mean': np.array(comp_data.get('region_j_mean', [])).flatten()
+                        }
+
+            return extracted if extracted else None
+
+        except:
+            return None
+
     def compute_projections(self) -> bool:
         """
         Project neural activity from all trial types onto CCA subspace.
@@ -507,6 +535,53 @@ class CrossTrialTypeCCAAnalyzer:
         self.projections = {}
 
         for trial_type in self.available_trial_types:
+            # For cued_hit_long, use pre-computed projections if available
+            if trial_type == 'cued_hit_long':
+                trial_data = self.trial_type_data[trial_type]
+                if 'cca_results' in trial_data and 'pair_results' in trial_data['cca_results']:
+                    # Find the correct pair index
+                    pair_idx = None
+                    for r1, r2, idx in self.available_pairs:
+                        if (r1 == region_i and r2 == region_j) or (r1 == region_j and r2 == region_i):
+                            pair_idx = idx
+                            break
+
+                    if pair_idx is not None:
+                        pair_result = trial_data['cca_results']['pair_results'][pair_idx]
+                        if 'projections' in pair_result and 'components' in pair_result['projections']:
+                            # Extract pre-computed projections
+                            extracted_proj = self._extract_projections(pair_result['projections'])
+                            if extracted_proj is not None:
+                                # Reshape extracted projections to match expected format
+                                # extracted_proj[comp_idx] = {'region_i_mean': array, 'region_j_mean': array}
+                                n_components = len(extracted_proj)
+                                n_timepoints = len(extracted_proj[0]['region_i_mean']) if 0 in extracted_proj else len(self.time_bins)
+
+                                # Initialize arrays
+                                u_mean = np.zeros((n_timepoints, n_components))
+                                v_mean = np.zeros((n_timepoints, n_components))
+
+                                # Fill in projection data
+                                for comp_idx in range(n_components):
+                                    if comp_idx in extracted_proj:
+                                        u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                        v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
+
+                                # Store projections (without trial-level data since we only have averages)
+                                self.projections[trial_type] = {
+                                    'u_mean': u_mean,
+                                    'v_mean': v_mean,
+                                    'u_trials': None,  # Not available in extracted projections
+                                    'v_trials': None,  # Not available in extracted projections
+                                    'u_std': None,
+                                    'v_std': None,
+                                    'u_sem': None,
+                                    'v_sem': None,
+                                    'n_trials': None
+                                }
+
+                                print(f"  {trial_type}: Using pre-computed projections from CCA results")
+                                continue
             if trial_type not in self.neural_data:
                 continue
 
