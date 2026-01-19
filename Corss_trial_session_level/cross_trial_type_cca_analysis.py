@@ -643,72 +643,8 @@ class CrossTrialTypeCCAAnalyzer:
 
             print(f"\n  Temporal correlation ({self.reference_type} vs {trial_type}):")
 
-        # # Pairwise statistical tests on peak values
-        # trial_types = list(self.projections.keys())
-        #
-        # for i, type1 in enumerate(trial_types):
-        #     for type2 in trial_types[i + 1:]:
-        #         comparison_key = f"{type1}_vs_{type2}"
-        #
-        #         test_results = {
-        #             'region_i': [],
-        #             'region_j': []
-        #         }
-        #
-        #         proj1 = self.projections[type1]
-        #         proj2 = self.projections[type2]
-        #
-        #         for comp_idx in range(self.n_components):
-        #             # Compute per-trial peak values
-        #             peaks1_u = np.max(np.abs(proj1['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
-        #             peaks2_u = np.max(np.abs(proj2['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
-        #             peaks1_v = np.max(np.abs(proj1['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
-        #             peaks2_v = np.max(np.abs(proj2['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
-        #
-        #             # Use minimum number of trials for paired comparison
-        #             n_min = min(len(peaks1_u), len(peaks2_u))
-        #
-        #             if n_min >= 5:
-        #                 # Wilcoxon signed-rank test
-        #                 stat_u, p_wilcox_u = wilcoxon(peaks1_u[:n_min], peaks2_u[:n_min])
-        #                 stat_v, p_wilcox_v = wilcoxon(peaks1_v[:n_min], peaks2_v[:n_min])
-        #
-        #                 # Paired t-test
-        #                 t_u, p_ttest_u = ttest_rel(peaks1_u[:n_min], peaks2_u[:n_min])
-        #                 t_v, p_ttest_v = ttest_rel(peaks1_v[:n_min], peaks2_v[:n_min])
-        #
-        #                 # Effect size (Cohen's d)
-        #                 diff_u = peaks1_u[:n_min] - peaks2_u[:n_min]
-        #                 diff_v = peaks1_v[:n_min] - peaks2_v[:n_min]
-        #                 d_u = np.mean(diff_u) / np.std(diff_u) if np.std(diff_u) > 0 else 0
-        #                 d_v = np.mean(diff_v) / np.std(diff_v) if np.std(diff_v) > 0 else 0
-        #
-        #                 test_results['region_i'].append({
-        #                     'component': comp_idx + 1,
-        #                     'wilcoxon_p': p_wilcox_u,
-        #                     'ttest_p': p_ttest_u,
-        #                     'cohens_d': d_u,
-        #                     'mean_diff': np.mean(diff_u),
-        #                     'n_trials': n_min
-        #                 })
-        #
-        #                 test_results['region_j'].append({
-        #                     'component': comp_idx + 1,
-        #                     'wilcoxon_p': p_wilcox_v,
-        #                     'ttest_p': p_ttest_v,
-        #                     'cohens_d': d_v,
-        #                     'mean_diff': np.mean(diff_v),
-        #                     'n_trials': n_min
-        #                 })
-        #
-        #         results['pairwise_tests'][comparison_key] = test_results
-        #
-        #         print(f"\n  Statistical tests ({comparison_key}):")
-        #         for r in test_results['region_i'][:3]:
-        #             sig = '*' if r['wilcoxon_p'] < 0.05 else ''
-        #             print(f"    Comp {r['component']}: Wilcoxon p={r['wilcoxon_p']:.4f}{sig}, d={r['cohens_d']:.2f}")
-        #
-        # self.statistical_results = results
+        # Store statistical results (significance tests are performed at cross-session level)
+        self.statistical_results = results
         return results
 
 # =============================================================================
@@ -903,11 +839,18 @@ class CrossSessionCCAAnalyzer:
     def aggregate_projections(self) -> bool:
         """
         Aggregate projections across all sessions.
-        
+
         Computes mean ± SEM by:
         1. First averaging within each session (already done in per-session analysis)
-        2. Then averaging across sessions
-        
+        2. Then averaging across sessions independently for each trial type
+
+        Note: Sessions do NOT need to contain all trial types simultaneously.
+        Each trial type is aggregated independently using only sessions that
+        contain that trial type. For example:
+        - cued_hit_long: averaged across 15 sessions
+        - spont_hit_long: averaged across 8 sessions
+        - spont_miss_long: averaged across 6 sessions
+
         Returns:
             True if aggregation successful
         """
@@ -915,26 +858,23 @@ class CrossSessionCCAAnalyzer:
         if n_sessions < self.min_sessions:
             print(f"Insufficient sessions: {n_sessions} < {self.min_sessions}")
             return False
-        
+
         print(f"\n" + "-" * 50)
         print(f"Aggregating projections across {n_sessions} sessions")
         print("-" * 50)
-        
-        # Find common trial types across all sessions
-        common_trial_types = None
+
+        # Collect ALL trial types that appear in ANY session (union, not intersection)
+        # Each trial type will be aggregated independently
+        all_trial_types = set()
         for session_proj in self.session_projections.values():
-            session_types = set(session_proj.keys())
-            if common_trial_types is None:
-                common_trial_types = session_types
-            else:
-                common_trial_types |= session_types
-        
-        if not common_trial_types:
-            print("No common trial types across sessions")
+            all_trial_types |= set(session_proj.keys())
+
+        if not all_trial_types:
+            print("No trial types found across sessions")
             return False
-        
-        self.available_trial_types = list(common_trial_types)
-        print(f"Common trial types: {', '.join(self.available_trial_types)}")
+
+        self.available_trial_types = list(all_trial_types)
+        print(f"Available trial types (aggregated independently): {', '.join(self.available_trial_types)}")
         
         # Aggregate for each trial type
         for trial_type in self.available_trial_types:
@@ -1069,6 +1009,172 @@ class CrossSessionCCAAnalyzer:
 
         return aggregated_pvals
 
+    def compute_r2_based_significance(self) -> Dict:
+        """
+        Compute significance tests based on R² values across all sessions.
+
+        Uses Wilcoxon signed-rank test to compare R² distributions between
+        different trial type comparisons across sessions. For each pairwise
+        comparison (e.g., cued_hit vs spont_hit), collects R² values from all
+        sessions and tests if they are significantly different.
+
+        Statistical approach:
+        - For each component and region, collect R² values across sessions
+        - Use Wilcoxon signed-rank test between R² distributions of different comparisons
+        - Also test if R² is significantly above 0.5 (one-sample Wilcoxon)
+
+        Returns:
+            Dictionary containing:
+            - 'pairwise_r2_tests': p-values from comparing R² between trial type pairs
+            - 'r2_above_threshold': p-values testing if R² > 0.5
+        """
+        print(f"\n" + "-" * 50)
+        print("Computing R²-based significance tests across sessions")
+        print("-" * 50)
+
+        if 'temporal_correlations' not in self.aggregated_statistics:
+            print("  Warning: No temporal correlations available. Run aggregate_temporal_correlations() first.")
+            return {}
+
+        correlations = self.aggregated_statistics['temporal_correlations']
+        n_comp_show = min(3, self.n_components)
+
+        r2_significance = {
+            'pairwise_r2_tests': {},  # Wilcoxon between different comparison R² values
+            'r2_above_threshold': {}   # One-sample test if R² > 0.5
+        }
+
+        # Get comparison keys (e.g., 'cued_hit_long_vs_spont_hit_long')
+        comparison_keys = list(correlations.keys())
+
+        # Test 1: Compare R² values between different trial type comparisons
+        # e.g., is R² for cued_vs_spont_hit different from R² for cued_vs_spont_miss?
+        for i, comp1 in enumerate(comparison_keys):
+            for comp2 in comparison_keys[i + 1:]:
+                test_key = f"{comp1}_VS_{comp2}"
+                r2_significance['pairwise_r2_tests'][test_key] = {
+                    'region_i': {},
+                    'region_j': {}
+                }
+
+                for comp_idx in range(n_comp_show):
+                    comp_key = f'comp_{comp_idx + 1}'
+
+                    # Get R² values for both comparisons
+                    r2_comp1_i = np.array(correlations[comp1]['region_i'].get(comp_key, []))
+                    r2_comp2_i = np.array(correlations[comp2]['region_i'].get(comp_key, []))
+                    r2_comp1_j = np.array(correlations[comp1]['region_j'].get(comp_key, []))
+                    r2_comp2_j = np.array(correlations[comp2]['region_j'].get(comp_key, []))
+
+                    # Use minimum length for paired comparison
+                    n_min_i = min(len(r2_comp1_i), len(r2_comp2_i))
+                    n_min_j = min(len(r2_comp1_j), len(r2_comp2_j))
+
+                    # Wilcoxon signed-rank test for region_i
+                    if n_min_i >= 5:
+                        try:
+                            stat_i, p_i = wilcoxon(r2_comp1_i[:n_min_i], r2_comp2_i[:n_min_i])
+                            mean_diff_i = np.mean(r2_comp1_i[:n_min_i] - r2_comp2_i[:n_min_i])
+                        except ValueError:
+                            p_i, mean_diff_i = 1.0, 0.0
+                    else:
+                        p_i, mean_diff_i = 1.0, 0.0
+
+                    # Wilcoxon signed-rank test for region_j
+                    if n_min_j >= 5:
+                        try:
+                            stat_j, p_j = wilcoxon(r2_comp1_j[:n_min_j], r2_comp2_j[:n_min_j])
+                            mean_diff_j = np.mean(r2_comp1_j[:n_min_j] - r2_comp2_j[:n_min_j])
+                        except ValueError:
+                            p_j, mean_diff_j = 1.0, 0.0
+                    else:
+                        p_j, mean_diff_j = 1.0, 0.0
+
+                    r2_significance['pairwise_r2_tests'][test_key]['region_i'][comp_key] = {
+                        'wilcoxon_p': p_i,
+                        'mean_diff': mean_diff_i,
+                        'n_sessions': n_min_i,
+                        'mean_r2_comp1': np.mean(r2_comp1_i) if len(r2_comp1_i) > 0 else 0,
+                        'mean_r2_comp2': np.mean(r2_comp2_i) if len(r2_comp2_i) > 0 else 0
+                    }
+
+                    r2_significance['pairwise_r2_tests'][test_key]['region_j'][comp_key] = {
+                        'wilcoxon_p': p_j,
+                        'mean_diff': mean_diff_j,
+                        'n_sessions': n_min_j,
+                        'mean_r2_comp1': np.mean(r2_comp1_j) if len(r2_comp1_j) > 0 else 0,
+                        'mean_r2_comp2': np.mean(r2_comp2_j) if len(r2_comp2_j) > 0 else 0
+                    }
+
+        # Test 2: Test if R² is significantly above 0.5 (one-sample test)
+        threshold = 0.5
+        for comparison in comparison_keys:
+            r2_significance['r2_above_threshold'][comparison] = {
+                'region_i': {},
+                'region_j': {}
+            }
+
+            for comp_idx in range(n_comp_show):
+                comp_key = f'comp_{comp_idx + 1}'
+
+                r2_values_i = np.array(correlations[comparison]['region_i'].get(comp_key, []))
+                r2_values_j = np.array(correlations[comparison]['region_j'].get(comp_key, []))
+
+                # One-sample Wilcoxon test against threshold
+                if len(r2_values_i) >= 5:
+                    try:
+                        # Test if values are significantly > threshold
+                        shifted_i = r2_values_i - threshold
+                        stat_i, p_i = wilcoxon(shifted_i, alternative='greater')
+                    except ValueError:
+                        p_i = 1.0
+                else:
+                    p_i = 1.0
+
+                if len(r2_values_j) >= 5:
+                    try:
+                        shifted_j = r2_values_j - threshold
+                        stat_j, p_j = wilcoxon(shifted_j, alternative='greater')
+                    except ValueError:
+                        p_j = 1.0
+                else:
+                    p_j = 1.0
+
+                r2_significance['r2_above_threshold'][comparison]['region_i'][comp_key] = {
+                    'wilcoxon_p': p_i,
+                    'mean_r2': np.mean(r2_values_i) if len(r2_values_i) > 0 else 0,
+                    'n_sessions': len(r2_values_i)
+                }
+
+                r2_significance['r2_above_threshold'][comparison]['region_j'][comp_key] = {
+                    'wilcoxon_p': p_j,
+                    'mean_r2': np.mean(r2_values_j) if len(r2_values_j) > 0 else 0,
+                    'n_sessions': len(r2_values_j)
+                }
+
+        self.aggregated_statistics['r2_significance'] = r2_significance
+
+        # Print summary
+        print("\n  R² significance test results:")
+        for comparison, data in r2_significance['r2_above_threshold'].items():
+            for comp_idx in range(n_comp_show):
+                comp_key = f'comp_{comp_idx + 1}'
+                p_i = data['region_i'][comp_key]['wilcoxon_p']
+                p_j = data['region_j'][comp_key]['wilcoxon_p']
+                mean_i = data['region_i'][comp_key]['mean_r2']
+                mean_j = data['region_j'][comp_key]['mean_r2']
+                n_i = data['region_i'][comp_key]['n_sessions']
+                n_j = data['region_j'][comp_key]['n_sessions']
+
+                sig_i = '*' if p_i < 0.05 else ''
+                sig_j = '*' if p_j < 0.05 else ''
+
+                print(f"    {comparison} - {comp_key}:")
+                print(f"      Region I: R²={mean_i:.3f}, p={p_i:.4f}{sig_i} (n={n_i})")
+                print(f"      Region J: R²={mean_j:.3f}, p={p_j:.4f}{sig_j} (n={n_j})")
+
+        return r2_significance
+
     def create_cross_session_projection_figure(
             self,
             figsize: Tuple[float, float] = (16, 12),
@@ -1143,23 +1249,31 @@ class CrossSessionCCAAnalyzer:
             fontsize: int
     ) -> None:
         """Plot cross-session aggregated projections for a single component."""
+        # Build session count annotation (n_a, n_b, n_c format)
+        session_counts = []
+
         for trial_type in self.available_trial_types:
             if trial_type not in self.aggregated_projections:
                 continue
-            
+
             agg = self.aggregated_projections[trial_type]
             mean_proj = np.abs(agg[mean_key][:, comp_idx])
             sem_proj = agg[sem_key][:, comp_idx]
-            
+
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
             linewidth = 2 if trial_type == self.reference_type else 1.5
-            
+
+            # Shorter label for legend
+            short_label = trial_type.replace('_long', '').replace('_', ' ')
             ax.plot(self.time_bins, mean_proj, color=color, linewidth=linewidth,
-                    label=f'{trial_type.replace("_", " ")} (n={agg["n_sessions"]})',
+                    label=f'{short_label} (n={agg["n_sessions"]})',
                     alpha=0.9)
             ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
                             alpha=0.2, color=color)
-        
+
+            # Collect session counts for annotation
+            session_counts.append(f'{agg["n_sessions"]}')
+
         # Add stimulus onset marker
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
         ax.axvspan(0, 1.5, alpha=0.05, color='gray')
@@ -1512,10 +1626,21 @@ class CrossTrialTypeSummaryVisualizer:
             #     mean_key, sem_key = 'v_mean', 'v_sem'
             display_region = region_j
 
-        # Plot projections for each trial type
+        # Plot projections for each trial type and collect session counts
         time_vec = pair_analyzer.time_bins
+        session_count_labels = []
+
+        # Define short labels for trial types (a, b, c style)
+        trial_type_short = {
+            'cued_hit_long': 'cued',
+            'spont_hit_long': 'spont_hit',
+            'spont_miss_long': 'spont_miss'
+        }
 
         for trial_type in pair_analyzer.available_trial_types:
+            if trial_type not in pair_analyzer.aggregated_projections:
+                continue
+
             agg = pair_analyzer.aggregated_projections[trial_type]
 
             mean_proj = np.abs(agg[mean_key][:, component_idx])
@@ -1524,10 +1649,17 @@ class CrossTrialTypeSummaryVisualizer:
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
             linewidth = 2.5 if trial_type == self.reference_type else 2.0
 
+            # Get short label for this trial type
+            short_label = trial_type_short.get(trial_type, trial_type.replace('_', ' '))
+            n_sess = agg['n_sessions']
+
             ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth,
-                    alpha=0.9, label=trial_type.replace('_', ' '))
+                    alpha=0.9, label=f'{short_label} (n={n_sess})')
             ax.fill_between(time_vec, mean_proj - sem_proj, mean_proj + sem_proj,
                             alpha=0.15, color=color)
+
+            # Collect session count for annotation
+            session_count_labels.append(f'n_{short_label[:1]}={n_sess}')
 
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
@@ -1546,9 +1678,10 @@ class CrossTrialTypeSummaryVisualizer:
         for spine in ax.spines.values():
             spine.set_linewidth(3)
 
-        # Add session count and region annotation
-        ax.text(0.02, 0.98, f'n={n_sessions}\n{display_region}', transform=ax.transAxes,
-                fontsize=14, va='top', ha='left')
+        # Add session counts annotation for each trial type (n_a, n_b, n_c format)
+        session_count_text = ', '.join(session_count_labels)
+        ax.text(0.02, 0.98, f'{display_region}\n{session_count_text}', transform=ax.transAxes,
+                fontsize=12, va='top', ha='left')
     
     def create_r2_boxplot_matrix_figure(
             self,
@@ -1821,11 +1954,11 @@ class CrossTrialTypeSummaryVisualizer:
         """
         Plot cross-session p-value heatmap for a single region from a pair.
 
-        Creates a 3×3 grid where:
-        - Rows: Trial type comparisons (cued vs spont_hit, cued vs spont_miss, spont_hit vs spont_miss)
+        Creates a grid where:
+        - Rows: Trial type comparisons (R² tests for cued vs spont_hit, cued vs spont_miss)
         - Columns: CCA Components 1-3
 
-        The heatmap shows -log10(median p-value) across sessions.
+        The heatmap shows -log10(p-value) from Wilcoxon tests on R² values across sessions.
 
         Parameters:
             ax: Matplotlib axes
@@ -1837,19 +1970,16 @@ class CrossTrialTypeSummaryVisualizer:
         pair_key = sort_pair_by_anatomy(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
 
-        # if pair_analyzer is None:
-        #     alt_key = (pair_key[1], pair_key[0])
-        #     pair_analyzer = self.pair_analyzers.get(alt_key)
-
         if pair_analyzer is None:
             ax.set_visible(False)
             return
 
-        if 'pairwise_tests' not in pair_analyzer.aggregated_statistics:
+        # Use R²-based significance tests (Wilcoxon on R² across sessions)
+        if 'r2_significance' not in pair_analyzer.aggregated_statistics:
             ax.set_visible(False)
             return
 
-        pairwise_tests = pair_analyzer.aggregated_statistics['pairwise_tests']
+        r2_significance = pair_analyzer.aggregated_statistics['r2_significance']
         n_comp_show = min(3, self.n_components)
 
         # Determine which region's data to use
@@ -1866,8 +1996,9 @@ class CrossTrialTypeSummaryVisualizer:
                 region_key = 'region_j'
             display_region = region_j
 
-        # Get comparison keys
-        comparisons = list(pairwise_tests.keys())
+        # Get comparisons from R² above threshold tests
+        r2_threshold_tests = r2_significance.get('r2_above_threshold', {})
+        comparisons = list(r2_threshold_tests.keys())
         n_comparisons = len(comparisons)
 
         if n_comparisons == 0:
@@ -1875,17 +2006,16 @@ class CrossTrialTypeSummaryVisualizer:
             return
 
         # Build p-value matrix: (n_comparisons, n_components)
-        # Use median p-value across sessions
+        # Use Wilcoxon p-values from R² significance tests
         p_matrix = np.ones((n_comparisons, n_comp_show))
 
         for i, comparison in enumerate(comparisons):
             for j in range(n_comp_show):
                 comp_key = f'comp_{j + 1}'
-                p_values = pairwise_tests[comparison][region_key].get(comp_key, [])
+                test_result = r2_threshold_tests[comparison][region_key].get(comp_key, {})
 
-                if p_values:
-                    # Use median p-value across sessions
-                    p_matrix[i, j] = np.median(p_values)
+                if test_result:
+                    p_matrix[i, j] = test_result.get('wilcoxon_p', 1.0)
 
         # Convert to -log10 for visualization (higher = more significant)
         log_p_matrix = -np.log10(p_matrix + 1e-10)
@@ -1914,14 +2044,16 @@ class CrossTrialTypeSummaryVisualizer:
         ax.set_yticks(np.arange(n_comparisons))
         ax.set_xticklabels([f'C{i+1}' for i in range(n_comp_show)], fontsize=16)
 
-        # Format comparison labels for y-axis
+        # Format comparison labels for y-axis (simplified for R² tests)
         y_labels = []
         for comp in comparisons:
-            parts = comp.split('_vs_')
+            # Simplify trial type names
+            short_name = comp.replace('_long', '').replace('cued_hit', 'cued').replace('spont_', 's_')
+            parts = short_name.split('_vs_')
             if len(parts) == 2:
-                label = f"{parts[0].replace('_', ' ')}\nvs\n{parts[1].replace('_', ' ')}"
+                label = f"R²>{0.5}\n{parts[0]} vs {parts[1]}"
             else:
-                label = comp.replace('_', '\n')
+                label = f"R²>{0.5}\n{short_name}"
             y_labels.append(label)
         ax.set_yticklabels(y_labels, fontsize=10)
 
@@ -2152,6 +2284,8 @@ class CrossTrialTypeCCAPipeline:
             if cross_session_analyzer.aggregate_projections():
                 cross_session_analyzer.aggregate_temporal_correlations()
                 cross_session_analyzer.aggregate_pairwise_tests()
+                # Compute R²-based significance using Wilcoxon test across sessions
+                cross_session_analyzer.compute_r2_based_significance()
 
                 # Add to summary visualizer
                 self.summary_visualizer.add_pair_analyzer(cross_session_analyzer)
