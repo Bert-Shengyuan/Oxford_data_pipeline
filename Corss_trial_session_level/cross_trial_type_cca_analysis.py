@@ -1692,15 +1692,15 @@ class CrossTrialTypeSummaryVisualizer:
             # Check if region_i is pair_key[0] (u) or pair_key[1] (v)
             if region_i == pair_key[0]:
                 mean_key, sem_key = 'u_mean', 'u_sem'
-            # else:
-            #     mean_key, sem_key = 'v_mean', 'v_sem'
+            else:
+                mean_key, sem_key = 'v_mean', 'v_sem'
             display_region = region_i
         else:  # 'column'
             # We want data for region_j (the column in the matrix)
             if region_j == pair_key[1]:
                 mean_key, sem_key = 'v_mean', 'v_sem'
-            # else:
-            #     mean_key, sem_key = 'v_mean', 'v_sem'
+            else:
+                mean_key, sem_key = 'u_mean', 'u_sem'
             display_region = region_j
 
         # Plot projections for each trial type and collect session counts
