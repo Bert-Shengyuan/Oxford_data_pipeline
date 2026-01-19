@@ -687,6 +687,11 @@ class CrossSessionPCAAnalyzer:
         """
         Aggregate projections across all sessions for this region.
 
+        Sign alignment is performed by:
+        - Identifying baseline latent from first session with positive peak
+        - Computing correlation of each session with baseline
+        - Flipping sessions with negative correlation
+
         Returns:
             True if aggregation successful
         """
@@ -716,20 +721,44 @@ class CrossSessionPCAAnalyzer:
                     continue
 
                 proj = session_proj[trial_type]
-                z_means_all.append(np.abs(proj['z_mean']))
+                z_means_all.append(proj['z_mean'])
 
             if len(z_means_all) < self.min_sessions:
                 continue
 
             # Stack into array: (n_sessions, n_time, n_components)
-            z_stack = np.stack(z_means_all, axis=0)
-            n_sess = z_stack.shape[0]
+            z_stack_raw = np.stack(z_means_all, axis=0)
+            n_sess, n_time, n_comp = z_stack_raw.shape
+
+            # Align signs based on correlation with baseline for each component
+            z_stack_aligned = np.zeros_like(z_stack_raw)
+
+            for comp_idx in range(n_comp):
+                # Find baseline session (first with positive peak)
+                baseline_idx = None
+                for sess_idx in range(n_sess):
+                    z_proj = z_stack_raw[sess_idx, :, comp_idx]
+                    peak_val = z_proj[np.argmax(np.abs(z_proj))]
+                    if peak_val > 0:
+                        baseline_idx = sess_idx
+                        break
+
+                if baseline_idx is None:
+                    baseline_idx = 0
+
+                baseline = z_stack_raw[baseline_idx, :, comp_idx]
+
+                # Align all sessions based on correlation with baseline
+                for sess_idx in range(n_sess):
+                    z_proj = z_stack_raw[sess_idx, :, comp_idx]
+                    correlation = np.corrcoef(baseline, z_proj)[0, 1]
+                    z_stack_aligned[sess_idx, :, comp_idx] = z_proj if correlation >= 0 else -z_proj
 
             self.aggregated_projections[trial_type] = {
-                'z_mean': np.mean(z_stack, axis=0),
-                'z_std': np.std(z_stack, axis=0),
-                'z_sem': np.std(z_stack, axis=0) / np.sqrt(n_sess),
-                'z_sessions': z_stack,
+                'z_mean': np.mean(z_stack_aligned, axis=0),
+                'z_std': np.std(z_stack_aligned, axis=0),
+                'z_sem': np.std(z_stack_aligned, axis=0) / np.sqrt(n_sess),
+                'z_sessions': z_stack_aligned,
                 'n_sessions': n_sess
             }
 

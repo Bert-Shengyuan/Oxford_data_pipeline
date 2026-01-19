@@ -947,6 +947,12 @@ class CrossSessionCCAAnalyzer:
         Computes mean ± SEM by:
         1. First averaging within each session (already done in per-session analysis)
         2. Then averaging across sessions independently for each trial type
+        3. Aligning signs based on correlation with baseline latent
+
+        Sign alignment is performed by:
+        - Identifying baseline latent from first session with positive peak
+        - Computing correlation of each session with baseline
+        - Flipping sessions with negative correlation
 
         Note: Sessions do NOT need to contain all trial types simultaneously.
         Each trial type is aggregated independently using only sessions that
@@ -979,45 +985,87 @@ class CrossSessionCCAAnalyzer:
 
         self.available_trial_types = list(all_trial_types)
         print(f"Available trial types (aggregated independently): {', '.join(self.available_trial_types)}")
-        
+
         # Aggregate for each trial type
         for trial_type in self.available_trial_types:
             # Collect session-level means
             u_means_all = []
             v_means_all = []
-            
+
             for session_name, session_proj in self.session_projections.items():
                 if trial_type not in session_proj:
                     continue
-                
+
                 proj = session_proj[trial_type]
-                u_means_all.append(np.abs(proj['u_mean'][:,:]))
-                v_means_all.append(np.abs(proj['v_mean'][:,:]))
-            
+                u_means_all.append(proj['u_mean'][:,:])
+                v_means_all.append(proj['v_mean'][:,:])
+
             if len(u_means_all) < self.min_sessions:
                 continue
-            
+
             # Stack into arrays: (n_sessions, n_time, n_components)
-            u_stack = np.stack(u_means_all, axis=0)
-            v_stack = np.stack(v_means_all, axis=0)
-            
+            u_stack_raw = np.stack(u_means_all, axis=0)
+            v_stack_raw = np.stack(v_means_all, axis=0)
+
+            # Align signs based on correlation with baseline for each component
+            n_sess, n_time, n_comp = u_stack_raw.shape
+            u_stack_aligned = np.zeros_like(u_stack_raw)
+            v_stack_aligned = np.zeros_like(v_stack_raw)
+
+            for comp_idx in range(n_comp):
+                # Find baseline session (first with positive peak) for u
+                u_baseline_idx = None
+                for sess_idx in range(n_sess):
+                    u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                    peak_val = u_proj[np.argmax(np.abs(u_proj))]
+                    if peak_val > 0:
+                        u_baseline_idx = sess_idx
+                        break
+
+                if u_baseline_idx is None:
+                    u_baseline_idx = 0
+
+                u_baseline = u_stack_raw[u_baseline_idx, :, comp_idx]
+
+                # Find baseline session for v
+                v_baseline_idx = None
+                for sess_idx in range(n_sess):
+                    v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                    peak_val = v_proj[np.argmax(np.abs(v_proj))]
+                    if peak_val > 0:
+                        v_baseline_idx = sess_idx
+                        break
+
+                if v_baseline_idx is None:
+                    v_baseline_idx = 0
+
+                v_baseline = v_stack_raw[v_baseline_idx, :, comp_idx]
+
+                # Align all sessions based on correlation with baseline
+                for sess_idx in range(n_sess):
+                    u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                    u_corr = np.corrcoef(u_baseline, u_proj)[0, 1]
+                    u_stack_aligned[sess_idx, :, comp_idx] = u_proj if u_corr >= 0 else -u_proj
+
+                    v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                    v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
+                    v_stack_aligned[sess_idx, :, comp_idx] = v_proj if v_corr >= 0 else -v_proj
+
             # Compute cross-session statistics
-            n_sessions = u_stack.shape[0]
-            
             self.aggregated_projections[trial_type] = {
-                'u_mean': np.mean(u_stack, axis=0),  # (n_time, n_components)
-                'v_mean': np.mean(v_stack, axis=0),
-                'u_std': np.std(u_stack, axis=0),
-                'v_std': np.std(v_stack, axis=0),
-                'u_sem': np.std(u_stack, axis=0) / np.sqrt(n_sessions),
-                'v_sem': np.std(v_stack, axis=0) / np.sqrt(n_sessions),
-                'u_sessions': u_stack,  # Keep individual session data for plotting
-                'v_sessions': v_stack,
-                'n_sessions': n_sessions
+                'u_mean': np.mean(u_stack_aligned, axis=0),  # (n_time, n_components)
+                'v_mean': np.mean(v_stack_aligned, axis=0),
+                'u_std': np.std(u_stack_aligned, axis=0),
+                'v_std': np.std(v_stack_aligned, axis=0),
+                'u_sem': np.std(u_stack_aligned, axis=0) / np.sqrt(n_sess),
+                'v_sem': np.std(v_stack_aligned, axis=0) / np.sqrt(n_sess),
+                'u_sessions': u_stack_aligned,  # Keep individual session data for plotting
+                'v_sessions': v_stack_aligned,
+                'n_sessions': n_sess
             }
-            
-            print(f"  {trial_type}: aggregated {n_sessions} sessions")
-        
+
+            print(f"  {trial_type}: aggregated {n_sess} sessions")
+
         return len(self.aggregated_projections) >= 2
     
     def aggregate_temporal_correlations(self) -> Dict:
