@@ -624,9 +624,11 @@ class OxfordCCAVisualizer:
         # Find pair data
         pair_key = (region_i, region_j)
         sessions = self.pair_data.get(pair_key, [])
+        # Reset is_flipped flag for each pair
+        is_flipped = False
         if not sessions:
             pair_key = (region_j, region_i)
-            self.is_flipped =True
+            is_flipped = True
             sessions = self.pair_data.get(pair_key, [])
 
         if len(sessions) < self.min_sessions:
@@ -642,7 +644,7 @@ class OxfordCCAVisualizer:
                 continue
             if component_idx not in session['projections']:
                 continue
-            if self.is_flipped:
+            if is_flipped:
                 proj_data = session['projections'][component_idx]
                 proj_i = np.abs(proj_data.get('region_j_mean', []))
                 proj_j = np.abs(proj_data.get('region_i_mean', []))
