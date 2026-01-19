@@ -431,11 +431,17 @@ class CrossTrialTypeCCAAnalyzer:
             print("ERROR: No pair_results in CCA results")
             return False
 
-        # Find the correct pair index
+        # Find the correct pair index and track if order is reversed
         pair_idx = None
+        pair_is_reversed = False
         for r1, r2, idx in self.available_pairs:
-            if (r1 == region_i and r2 == region_j) or (r1 == region_j and r2 == region_i):
+            if r1 == region_i and r2 == region_j:
                 pair_idx = idx
+                pair_is_reversed = False
+                break
+            elif r1 == region_j and r2 == region_i:
+                pair_idx = idx
+                pair_is_reversed = True
                 break
 
         if pair_idx is None:
@@ -456,6 +462,14 @@ class CrossTrialTypeCCAAnalyzer:
         mu_A = pair_result.get('mean_A', None)
         mu_B = pair_result.get('mean_B', None)
 
+        # If pair was found in reversed order, swap A↔B to match input region order
+        # A_matrix in file corresponds to stored region_i, B_matrix to stored region_j
+        # If reversed: stored region_i = input region_j, so we need to swap
+        if pair_is_reversed:
+            A_matrix, B_matrix = B_matrix, A_matrix
+            mu_A, mu_B = mu_B, mu_A
+            print(f"  Note: Pair found in reversed order, swapping A↔B matrices")
+
         # Store weights
         self.cca_weights = {
             'region_i': region_i,
@@ -464,7 +478,8 @@ class CrossTrialTypeCCAAnalyzer:
             'B': B_matrix,
             'mu_A': mu_A,
             'mu_B': mu_B,
-            'n_components': A_matrix.shape[1] if A_matrix.ndim > 1 else 1
+            'n_components': A_matrix.shape[1] if A_matrix.ndim > 1 else 1,
+            'pair_is_reversed': pair_is_reversed  # Track for projection extraction
         }
 
         print(f"  Region i ({region_i}): A matrix shape = {A_matrix.shape}")
@@ -561,11 +576,20 @@ class CrossTrialTypeCCAAnalyzer:
                                 u_mean = np.zeros((n_timepoints, n_components))
                                 v_mean = np.zeros((n_timepoints, n_components))
 
+                                # Check if pair was reversed - if so, swap region_i_mean ↔ region_j_mean
+                                # to maintain correct mapping: u→region_i, v→region_j
+                                pair_is_reversed = self.cca_weights.get('pair_is_reversed', False)
+
                                 # Fill in projection data
                                 for comp_idx in range(n_components):
                                     if comp_idx in extracted_proj:
-                                        u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
-                                        v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
+                                        if pair_is_reversed:
+                                            # Swap: stored region_i = input region_j, so assign region_j_mean to u
+                                            u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
+                                            v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                        else:
+                                            u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                            v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
 
                                 # Store projections (without trial-level data since we only have averages)
                                 self.projections[trial_type] = {
@@ -580,7 +604,10 @@ class CrossTrialTypeCCAAnalyzer:
                                     'n_trials': None
                                 }
 
-                                print(f"  {trial_type}: Using pre-computed projections from CCA results")
+                                if pair_is_reversed:
+                                    print(f"  {trial_type}: Using pre-computed projections (swapped for reversed pair order)")
+                                else:
+                                    print(f"  {trial_type}: Using pre-computed projections from CCA results")
                                 continue
             elif trial_type not in self.neural_data:
                 continue
