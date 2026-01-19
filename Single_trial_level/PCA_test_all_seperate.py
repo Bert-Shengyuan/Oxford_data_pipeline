@@ -702,6 +702,11 @@ class OxfordPCAVisualizer:
         across ALL sessions that recorded that region, regardless of what
         other regions were co-recorded in those sessions.
 
+        Sign alignment is performed by:
+        1. Identifying a baseline latent from a session with positive peak
+        2. Computing correlation of each session's latent with the baseline
+        3. Flipping latents with negative correlation
+
         Parameters:
             component_idx: Which PC to compute projections for
             min_sessions: Minimum sessions required
@@ -733,20 +738,44 @@ class OxfordPCAVisualizer:
                 comp_data = temp_proj[component_idx]
 
                 if 'mean' in comp_data and len(comp_data['mean']) > 0:
-                    proj_arrays.append(np.abs(comp_data['mean']))
+                    proj_arrays.append(comp_data['mean'])
 
             # Require minimum number of sessions
             if len(proj_arrays) < min_sessions:
                 continue
 
-            # Compute mean and std across sessions
             # Handle potentially different lengths by truncating to minimum
             min_len = min(len(p) for p in proj_arrays)
             truncated = np.array([p[:min_len] for p in proj_arrays])
 
+            # Identify baseline latent (session with positive peak value)
+            baseline_idx = None
+            for idx, proj in enumerate(truncated):
+                peak_val = proj[np.argmax(np.abs(proj))]
+                if peak_val > 0:
+                    baseline_idx = idx
+                    break
+
+            # If no session has positive peak, use the first session
+            if baseline_idx is None:
+                baseline_idx = 0
+
+            baseline = truncated[baseline_idx]
+
+            # Align all sessions based on correlation with baseline
+            aligned_projections = []
+            for proj in truncated:
+                correlation = np.corrcoef(baseline, proj)[0, 1]
+                if correlation < 0:
+                    aligned_projections.append(-proj)
+                else:
+                    aligned_projections.append(proj)
+
+            aligned_projections = np.array(aligned_projections)
+
             region_projections[region] = {
-                'mean': np.mean(truncated, axis=0),
-                'std': np.std(truncated, axis=0),
+                'mean': np.mean(aligned_projections, axis=0),
+                'std': np.std(aligned_projections, axis=0),
                 'n_sessions': len(proj_arrays),
                 'length': min_len
             }
