@@ -967,6 +967,30 @@ def main():
         )
 
 
+    print("\n[2] Processing SPONTANEOUS state sessions...")
+    cca_viz_spont = OxfordCCAVisualizer(
+        base_results_dir=base_dir,
+        results_subdir="sessions_spont_hit_long_results",
+        n_components=5,
+        min_sessions_threshold=3
+    )
+    cca_viz_spont.load_all_sessions()
+    cca_viz_spont.generate_report()
+    cca_viz_spont.create_connectivity_matrices_figure(
+        figsize=(20, 12),
+        save_path=str(output_dir / "spont_long_hit")
+    )
+    cca_viz_spont.create_population_summary_figure(
+        figsize=(18, 10),
+        save_path=str(output_dir / "spont_long_hit")
+    )
+    for comp_idx in range(min(3, cca_viz_spont.n_components)):
+        cca_viz_spont.create_temporal_projection_figure(
+            figsize=(40, 40),
+            component_idx=comp_idx,
+            save_path=str(output_dir / "spont_long_hit")
+        )
+
     print("\n" + "=" * 70)
     print("CCA Visualization Pipeline Complete")
     print(f"Output directory: {output_dir}")

@@ -344,7 +344,7 @@ class CrossTrialTypeCCAAnalyzer:
             True if extraction successful for all available trial types
         """
         region_i, region_j = region_pair
-        self.current_region_pair = region_pair
+        #self.current_region_pair = region_pair
         print(f"\n" + "-" * 50)
         print(f"Extracting neural data for: {region_i} vs {region_j}")
         print("-" * 50)
@@ -528,6 +528,8 @@ class CrossTrialTypeCCAAnalyzer:
             # Project onto CCA subspace: (n_time, n_components)
             u = (X_i_norm @ A[:, :self.n_components]).T
             v = (X_j_norm @ B[:, :self.n_components]).T
+
+
             u_trials_p = u.reshape(self.n_components, n_timepoints, n_trials)
             v_trials_p = v.reshape(self.n_components, n_timepoints, n_trials)
 
@@ -779,8 +781,8 @@ class CrossSessionCCAAnalyzer:
         
         # Output directory
         region_i, region_j = self.region_pair
-        self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'cross_session' / f'{region_i}_{region_j}'
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'cross_session' / f'{region_i}_{region_j}'
+        # self.output_dir.mkdir(parents=True, exist_ok=True)
         
         print("=" * 70)
         print("Cross-Session CCA Analyzer")
@@ -788,7 +790,7 @@ class CrossSessionCCAAnalyzer:
         print(f"Region pair: {region_i} vs {region_j}")
         print(f"Reference condition: {reference_type}")
         print(f"Minimum sessions: {min_sessions}")
-        print(f"Output directory: {self.output_dir}")
+        # print(f"Output directory: {self.output_dir}")
     
     def add_session_result(
             self,
@@ -1492,15 +1494,15 @@ class CrossTrialTypeSummaryVisualizer:
             # Check if region_i is pair_key[0] (u) or pair_key[1] (v)
             if region_i == pair_key[0]:
                 mean_key, sem_key = 'u_mean', 'u_sem'
-            else:
-                mean_key, sem_key = 'v_mean', 'v_sem'
+            # else:
+            #     mean_key, sem_key = 'v_mean', 'v_sem'
             display_region = region_i
         else:  # 'column'
             # We want data for region_j (the column in the matrix)
-            if region_j == pair_key[0]:
-                mean_key, sem_key = 'u_mean', 'u_sem'
-            else:
+            if region_j == pair_key[1]:
                 mean_key, sem_key = 'v_mean', 'v_sem'
+            # else:
+            #     mean_key, sem_key = 'v_mean', 'v_sem'
             display_region = region_j
 
         # Plot projections for each trial type
