@@ -626,6 +626,7 @@ class OxfordCCAVisualizer:
         sessions = self.pair_data.get(pair_key, [])
         if not sessions:
             pair_key = (region_j, region_i)
+            self.is_flipped =True
             sessions = self.pair_data.get(pair_key, [])
 
         if len(sessions) < self.min_sessions:
@@ -641,14 +642,23 @@ class OxfordCCAVisualizer:
                 continue
             if component_idx not in session['projections']:
                 continue
+            if self.is_flipped:
+                proj_data = session['projections'][component_idx]
+                proj_i = np.abs(proj_data.get('region_j_mean', []))
+                proj_j = np.abs(proj_data.get('region_i_mean', []))
 
-            proj_data = session['projections'][component_idx]
-            proj_i = np.abs(proj_data.get('region_i_mean', []))
-            proj_j = np.abs(proj_data.get('region_j_mean', []))
+                if len(proj_i) > 0 and len(proj_j) > 0:
+                    proj_i_all.append(proj_i)
+                    proj_j_all.append(proj_j)
+            else:
+                proj_data = session['projections'][component_idx]
+                proj_i = np.abs(proj_data.get('region_i_mean', []))
+                proj_j = np.abs(proj_data.get('region_j_mean', []))
 
-            if len(proj_i) > 0 and len(proj_j) > 0:
-                proj_i_all.append(proj_i)
-                proj_j_all.append(proj_j)
+                if len(proj_i) > 0 and len(proj_j) > 0:
+                    proj_i_all.append(proj_i)
+                    proj_j_all.append(proj_j)
+
 
         if len(proj_i_all) < self.min_sessions:
             ax.set_visible(False)

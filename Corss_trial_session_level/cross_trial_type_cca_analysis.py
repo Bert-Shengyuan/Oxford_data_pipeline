@@ -70,6 +70,12 @@ TRIAL_TYPES = {
     'spont_miss_long': 'sessions_spont_miss_long_results'
 }
 
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     # 'spont_hit_long': 'sessions_spont_hit_long_results',
+#     # 'spont_miss_long': 'sessions_spont_miss_long_results'
+# }
+
 # Colors for visualization (consistent across figures)
 TRIAL_TYPE_COLORS = {
     'cued_hit_long': '#1E88E5',  # Blue
@@ -86,7 +92,7 @@ ANATOMICAL_ORDER = [
 ]
 
 # Minimum sessions threshold for cross-session analysis
-MIN_SESSIONS_THRESHOLD = 5
+MIN_SESSIONS_THRESHOLD = 3
 
 
 # =============================================================================
@@ -494,6 +500,7 @@ class CrossTrialTypeCCAAnalyzer:
 
         region_i = self.cca_weights['region_i']
         region_j = self.cca_weights['region_j']
+
         A = self.cca_weights['A']
         B = self.cca_weights['B']
 
@@ -636,72 +643,72 @@ class CrossTrialTypeCCAAnalyzer:
 
             print(f"\n  Temporal correlation ({self.reference_type} vs {trial_type}):")
 
-        # Pairwise statistical tests on peak values
-        trial_types = list(self.projections.keys())
-
-        for i, type1 in enumerate(trial_types):
-            for type2 in trial_types[i + 1:]:
-                comparison_key = f"{type1}_vs_{type2}"
-
-                test_results = {
-                    'region_i': [],
-                    'region_j': []
-                }
-
-                proj1 = self.projections[type1]
-                proj2 = self.projections[type2]
-
-                for comp_idx in range(self.n_components):
-                    # Compute per-trial peak values
-                    peaks1_u = np.max(np.abs(proj1['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
-                    peaks2_u = np.max(np.abs(proj2['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
-                    peaks1_v = np.max(np.abs(proj1['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
-                    peaks2_v = np.max(np.abs(proj2['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
-
-                    # Use minimum number of trials for paired comparison
-                    n_min = min(len(peaks1_u), len(peaks2_u))
-
-                    if n_min >= 5:
-                        # Wilcoxon signed-rank test
-                        stat_u, p_wilcox_u = wilcoxon(peaks1_u[:n_min], peaks2_u[:n_min])
-                        stat_v, p_wilcox_v = wilcoxon(peaks1_v[:n_min], peaks2_v[:n_min])
-
-                        # Paired t-test
-                        t_u, p_ttest_u = ttest_rel(peaks1_u[:n_min], peaks2_u[:n_min])
-                        t_v, p_ttest_v = ttest_rel(peaks1_v[:n_min], peaks2_v[:n_min])
-
-                        # Effect size (Cohen's d)
-                        diff_u = peaks1_u[:n_min] - peaks2_u[:n_min]
-                        diff_v = peaks1_v[:n_min] - peaks2_v[:n_min]
-                        d_u = np.mean(diff_u) / np.std(diff_u) if np.std(diff_u) > 0 else 0
-                        d_v = np.mean(diff_v) / np.std(diff_v) if np.std(diff_v) > 0 else 0
-
-                        test_results['region_i'].append({
-                            'component': comp_idx + 1,
-                            'wilcoxon_p': p_wilcox_u,
-                            'ttest_p': p_ttest_u,
-                            'cohens_d': d_u,
-                            'mean_diff': np.mean(diff_u),
-                            'n_trials': n_min
-                        })
-
-                        test_results['region_j'].append({
-                            'component': comp_idx + 1,
-                            'wilcoxon_p': p_wilcox_v,
-                            'ttest_p': p_ttest_v,
-                            'cohens_d': d_v,
-                            'mean_diff': np.mean(diff_v),
-                            'n_trials': n_min
-                        })
-
-                results['pairwise_tests'][comparison_key] = test_results
-
-                print(f"\n  Statistical tests ({comparison_key}):")
-                for r in test_results['region_i'][:3]:
-                    sig = '*' if r['wilcoxon_p'] < 0.05 else ''
-                    print(f"    Comp {r['component']}: Wilcoxon p={r['wilcoxon_p']:.4f}{sig}, d={r['cohens_d']:.2f}")
-
-        self.statistical_results = results
+        # # Pairwise statistical tests on peak values
+        # trial_types = list(self.projections.keys())
+        #
+        # for i, type1 in enumerate(trial_types):
+        #     for type2 in trial_types[i + 1:]:
+        #         comparison_key = f"{type1}_vs_{type2}"
+        #
+        #         test_results = {
+        #             'region_i': [],
+        #             'region_j': []
+        #         }
+        #
+        #         proj1 = self.projections[type1]
+        #         proj2 = self.projections[type2]
+        #
+        #         for comp_idx in range(self.n_components):
+        #             # Compute per-trial peak values
+        #             peaks1_u = np.max(np.abs(proj1['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
+        #             peaks2_u = np.max(np.abs(proj2['u_trials'][:, post_stim_mask, comp_idx]), axis=1)
+        #             peaks1_v = np.max(np.abs(proj1['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
+        #             peaks2_v = np.max(np.abs(proj2['v_trials'][:, post_stim_mask, comp_idx]), axis=1)
+        #
+        #             # Use minimum number of trials for paired comparison
+        #             n_min = min(len(peaks1_u), len(peaks2_u))
+        #
+        #             if n_min >= 5:
+        #                 # Wilcoxon signed-rank test
+        #                 stat_u, p_wilcox_u = wilcoxon(peaks1_u[:n_min], peaks2_u[:n_min])
+        #                 stat_v, p_wilcox_v = wilcoxon(peaks1_v[:n_min], peaks2_v[:n_min])
+        #
+        #                 # Paired t-test
+        #                 t_u, p_ttest_u = ttest_rel(peaks1_u[:n_min], peaks2_u[:n_min])
+        #                 t_v, p_ttest_v = ttest_rel(peaks1_v[:n_min], peaks2_v[:n_min])
+        #
+        #                 # Effect size (Cohen's d)
+        #                 diff_u = peaks1_u[:n_min] - peaks2_u[:n_min]
+        #                 diff_v = peaks1_v[:n_min] - peaks2_v[:n_min]
+        #                 d_u = np.mean(diff_u) / np.std(diff_u) if np.std(diff_u) > 0 else 0
+        #                 d_v = np.mean(diff_v) / np.std(diff_v) if np.std(diff_v) > 0 else 0
+        #
+        #                 test_results['region_i'].append({
+        #                     'component': comp_idx + 1,
+        #                     'wilcoxon_p': p_wilcox_u,
+        #                     'ttest_p': p_ttest_u,
+        #                     'cohens_d': d_u,
+        #                     'mean_diff': np.mean(diff_u),
+        #                     'n_trials': n_min
+        #                 })
+        #
+        #                 test_results['region_j'].append({
+        #                     'component': comp_idx + 1,
+        #                     'wilcoxon_p': p_wilcox_v,
+        #                     'ttest_p': p_ttest_v,
+        #                     'cohens_d': d_v,
+        #                     'mean_diff': np.mean(diff_v),
+        #                     'n_trials': n_min
+        #                 })
+        #
+        #         results['pairwise_tests'][comparison_key] = test_results
+        #
+        #         print(f"\n  Statistical tests ({comparison_key}):")
+        #         for r in test_results['region_i'][:3]:
+        #             sig = '*' if r['wilcoxon_p'] < 0.05 else ''
+        #             print(f"    Comp {r['component']}: Wilcoxon p={r['wilcoxon_p']:.4f}{sig}, d={r['cohens_d']:.2f}")
+        #
+        # self.statistical_results = results
         return results
 
 # =============================================================================
@@ -920,7 +927,7 @@ class CrossSessionCCAAnalyzer:
             if common_trial_types is None:
                 common_trial_types = session_types
             else:
-                common_trial_types &= session_types
+                common_trial_types |= session_types
         
         if not common_trial_types:
             print("No common trial types across sessions")
@@ -1830,9 +1837,9 @@ class CrossTrialTypeSummaryVisualizer:
         pair_key = sort_pair_by_anatomy(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
 
-        if pair_analyzer is None:
-            alt_key = (pair_key[1], pair_key[0])
-            pair_analyzer = self.pair_analyzers.get(alt_key)
+        # if pair_analyzer is None:
+        #     alt_key = (pair_key[1], pair_key[0])
+        #     pair_analyzer = self.pair_analyzers.get(alt_key)
 
         if pair_analyzer is None:
             ax.set_visible(False)
