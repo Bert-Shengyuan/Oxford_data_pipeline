@@ -582,60 +582,62 @@ class CrossTrialTypeCCAAnalyzer:
 
                                 print(f"  {trial_type}: Using pre-computed projections from CCA results")
                                 continue
-            if trial_type not in self.neural_data:
+            elif trial_type not in self.neural_data:
                 continue
 
-            neural = self.neural_data[trial_type]
 
-            # Get neural activity for each region
-            X_i = neural[region_i]  # shape: (n_trials, n_neurons, n_time)
-            X_j = neural[region_j]
+            else:
+                neural = self.neural_data[trial_type]
 
-            n_trials, n_neurons, n_timepoints = X_i.shape
+                # Get neural activity for each region
+                X_i = neural[region_i]  # shape: (n_trials, n_neurons, n_time)
+                X_j = neural[region_j]
 
-            region_i_sampled_p = np.transpose(X_i, (1, 2, 0))
-            region_j_sampled_p = np.transpose(X_j, (1, 2, 0))
+                n_trials, n_neurons, n_timepoints = X_i.shape
 
-            # Reshape and transpose: (neurons, timepoints, trials) → (trials×timepoints, neurons)
-            X = region_i_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
-            Y = region_j_sampled_p.reshape(region_j_sampled_p.shape[0], n_trials * n_timepoints).T
+                region_i_sampled_p = np.transpose(X_i, (1, 2, 0))
+                region_j_sampled_p = np.transpose(X_j, (1, 2, 0))
 
-            X_i_norm = zscore(X, axis=0, nan_policy='omit')
-            X_j_norm = zscore(Y, axis=0, nan_policy='omit')
+                # Reshape and transpose: (neurons, timepoints, trials) → (trials×timepoints, neurons)
+                X = region_i_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
+                Y = region_j_sampled_p.reshape(region_j_sampled_p.shape[0], n_trials * n_timepoints).T
 
-
-            X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
-            X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
-
-            # Project onto CCA subspace: (n_time, n_components)
-            u = (X_i_norm @ A[:, :self.n_components]).T
-            v = (X_j_norm @ B[:, :self.n_components]).T
+                X_i_norm = zscore(X, axis=0, nan_policy='omit')
+                X_j_norm = zscore(Y, axis=0, nan_policy='omit')
 
 
-            u_trials_p = u.reshape(self.n_components, n_timepoints, n_trials)
-            v_trials_p = v.reshape(self.n_components, n_timepoints, n_trials)
+                X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
+                X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
 
-            # Compute trial-averaged activity
-            u_final = np.mean(u_trials_p, axis=2).T
-            v_final = np.mean(v_trials_p, axis=2).T
+                # Project onto CCA subspace: (n_time, n_components)
+                u = (X_i_norm @ A[:, :self.n_components]).T
+                v = (X_j_norm @ B[:, :self.n_components]).T
 
-            u_trials = np.transpose(u_trials_p, (2, 1, 0))
-            v_trials = np.transpose(v_trials_p, (2, 1, 0))
 
-            # Store projections
-            self.projections[trial_type] = {
-                'u_mean': u_final,  # Trial-averaged projection region i
-                'v_mean': v_final,  # Trial-averaged projection region j
-                'u_trials': u_trials,  # Per-trial projections region i
-                'v_trials': v_trials,  # Per-trial projections region j
-                'u_std': np.std(u_trials, axis=0),
-                'v_std': np.std(v_trials, axis=0),
-                'u_sem': np.std(u_trials, axis=0) / np.sqrt(n_trials),
-                'v_sem': np.std(v_trials, axis=0) / np.sqrt(n_trials),
-                'n_trials': n_trials
-            }
+                u_trials_p = u.reshape(self.n_components, n_timepoints, n_trials)
+                v_trials_p = v.reshape(self.n_components, n_timepoints, n_trials)
 
-            print(f"  {trial_type}: {n_trials} trials projected")
+                # Compute trial-averaged activity
+                u_final = np.mean(u_trials_p, axis=2).T
+                v_final = np.mean(v_trials_p, axis=2).T
+
+                u_trials = np.transpose(u_trials_p, (2, 1, 0))
+                v_trials = np.transpose(v_trials_p, (2, 1, 0))
+
+                # Store projections
+                self.projections[trial_type] = {
+                    'u_mean': u_final,  # Trial-averaged projection region i
+                    'v_mean': v_final,  # Trial-averaged projection region j
+                    'u_trials': u_trials,  # Per-trial projections region i
+                    'v_trials': v_trials,  # Per-trial projections region j
+                    'u_std': np.std(u_trials, axis=0),
+                    'v_std': np.std(v_trials, axis=0),
+                    'u_sem': np.std(u_trials, axis=0) / np.sqrt(n_trials),
+                    'v_sem': np.std(v_trials, axis=0) / np.sqrt(n_trials),
+                    'n_trials': n_trials
+                }
+
+                print(f"  {trial_type}: {n_trials} trials projected")
 
         return len(self.projections) >= 2
 
