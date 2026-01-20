@@ -591,10 +591,10 @@ class OxfordCCAVisualizer:
                         ax, region_i, region_j, component_idx
                     )
 
-        fig.suptitle(
-            f'CCA Temporal Projections - Component {component_idx + 1}',
-            fontsize=48, fontweight='bold', y=0.995
-        )
+        # fig.suptitle(
+        #     f'CCA Temporal Projections - Component {component_idx + 1}',
+        #     fontsize=48, fontweight='bold', y=0.995
+        # )
 
         plt.tight_layout(rect=[0, 0.01, 1, 0.99])
 
@@ -693,7 +693,7 @@ class OxfordCCAVisualizer:
         # Find baseline for region_j
         baseline_j_idx = None
         for idx, proj in enumerate(proj_j_arr_raw):
-            peak_val = proj[np.argmax(np.abs(proj))]
+            peak_val = proj[np.argmax(np.abs(proj)[74:125])+ 74]
             if peak_val > 0:
                 baseline_j_idx = idx
                 break
@@ -721,6 +721,10 @@ class OxfordCCAVisualizer:
         mean_j = np.mean(proj_j_arr, axis=0)
         std_i = np.std(proj_i_arr, axis=0)
         std_j = np.std(proj_j_arr, axis=0)
+
+        mean_i = mean_i if mean_i[np.argmax(np.abs(mean_i)[74:150])+ 74] >0 else -mean_i
+        mean_j = mean_j if mean_j[np.argmax(np.abs(mean_j)[74:150])+ 74] >0 else -mean_j
+
 
         # Adjust time vector
         time_vec = self.time_vec[:min_len] if len(self.time_vec) >= min_len else np.linspace(-1.5, 3.0, min_len)

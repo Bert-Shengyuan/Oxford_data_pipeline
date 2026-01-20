@@ -67,7 +67,6 @@ except ImportError:
 TRIAL_TYPES = {
     'cued_hit_long': 'sessions_cued_hit_long_results',
     'spont_hit_long': 'sessions_spont_hit_long_results',
-    'spont_miss_long': 'sessions_spont_miss_long_results'
 }
 
 # TRIAL_TYPES = {
@@ -1031,7 +1030,7 @@ class CrossSessionCCAAnalyzer:
                 v_baseline_idx = None
                 for sess_idx in range(n_sess):
                     v_proj = v_stack_raw[sess_idx, :, comp_idx]
-                    peak_val = v_proj[np.argmax(np.abs(v_proj))]
+                    peak_val = v_proj[np.argmax(np.abs(v_proj)[74:150])+ 74]
                     if peak_val > 0:
                         v_baseline_idx = sess_idx
                         break
@@ -1051,10 +1050,21 @@ class CrossSessionCCAAnalyzer:
                     v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
                     v_stack_aligned[sess_idx, :, comp_idx] = v_proj if v_corr >= 0 else -v_proj
 
+            u_mean_final = np.mean(u_stack_aligned, axis=0)
+            v_mean_final = np.mean(v_stack_aligned, axis=0)
+
+            max_idx = np.argmax(np.abs(u_mean_final)[74:150,0]) + 74
+            u_mean_final = u_mean_final if u_mean_final[max_idx,0] > 0 else -u_mean_final
+
+            max_idx = np.argmax(np.abs(v_mean_final)[74:150,0]) + 74
+            v_mean_final = u_mean_final if v_mean_final[max_idx,0] > 0 else -v_mean_final
+
+            #v_mean_final = v_mean_final if v_mean_final[np.argmax(np.abs(v_mean_final)[74:150,0])+ 74,0] >0 else -v_mean_final
             # Compute cross-session statistics
+
             self.aggregated_projections[trial_type] = {
-                'u_mean': np.mean(u_stack_aligned, axis=0),  # (n_time, n_components)
-                'v_mean': np.mean(v_stack_aligned, axis=0),
+                'u_mean': u_mean_final,  # (n_time, n_components)
+                'v_mean': v_mean_final,
                 'u_std': np.std(u_stack_aligned, axis=0),
                 'v_std': np.std(v_stack_aligned, axis=0),
                 'u_sem': np.std(u_stack_aligned, axis=0) / np.sqrt(n_sess),
@@ -1795,7 +1805,7 @@ class CrossTrialTypeSummaryVisualizer:
 
             agg = pair_analyzer.aggregated_projections[trial_type]
 
-            mean_proj = np.abs(agg[mean_key][:, component_idx])
+            mean_proj = agg[mean_key][:, component_idx]
             sem_proj = agg[sem_key][:, component_idx]
 
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
@@ -1829,7 +1839,7 @@ class CrossTrialTypeSummaryVisualizer:
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 5])
+        ax.set_ylim([-1.5, 5])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
@@ -2467,10 +2477,10 @@ class CrossTrialTypeCCAPipeline:
                 save_fig=True
             )
 
-            # Figures 3a & 3b: P-value heatmaps (row and column regions)
-            self.summary_visualizer.create_pvalue_heatmap_matrix_figure(
-                save_fig=True
-            )
+            # # Figures 3a & 3b: P-value heatmaps (row and column regions)
+            # self.summary_visualizer.create_pvalue_heatmap_matrix_figure(
+            #     save_fig=True
+            # )
         else:
             print("Not enough valid pairs for summary figures")
 

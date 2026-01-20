@@ -61,10 +61,15 @@ warnings.filterwarnings('ignore')
 # =============================================================================
 
 # Trial type labels and their data directories
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     'spont_hit_long': 'sessions_spont_hit_long_results',
+#     'spont_miss_long': 'sessions_spont_miss_long_results'
+# }
+
 TRIAL_TYPES = {
     'cued_hit_long': 'sessions_cued_hit_long_results',
     'spont_hit_long': 'sessions_spont_hit_long_results',
-    'spont_miss_long': 'sessions_spont_miss_long_results'
 }
 
 # Colors for visualization (consistent across figures)
@@ -738,7 +743,7 @@ class CrossSessionPCAAnalyzer:
                 baseline_idx = None
                 for sess_idx in range(n_sess):
                     z_proj = z_stack_raw[sess_idx, :, comp_idx]
-                    peak_val = z_proj[np.argmax(np.abs(z_proj))]
+                    peak_val = z_proj[np.argmax(np.abs(z_proj)[74:150])+ 74]
                     if peak_val > 0:
                         baseline_idx = sess_idx
                         break
@@ -998,7 +1003,7 @@ class CrossTrialTypePCASummaryVisualizer:
             if component_idx >= agg['z_mean'].shape[1]:
                 continue
 
-            mean_proj = np.abs(agg['z_mean'][:, component_idx])
+            mean_proj = agg['z_mean'][:, component_idx]
             sem_proj = agg['z_sem'][:, component_idx]
 
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
@@ -1023,7 +1028,7 @@ class CrossTrialTypePCASummaryVisualizer:
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([0, 5])
+        ax.set_ylim([-1.5, 3])
         ax.set_xticks([-1.5, 0, 2, 3])
         ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
