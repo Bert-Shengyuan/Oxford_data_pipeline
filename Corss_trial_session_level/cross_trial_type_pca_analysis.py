@@ -1012,10 +1012,19 @@ class CrossTrialTypePCASummaryVisualizer:
             short_label = trial_type_short.get(trial_type, trial_type.replace('_', ' '))
             n_sess = agg['n_sessions']
 
+            # Plot individual session lines (thin, low alpha)
+            if 'z_sessions' in agg:
+                session_data = agg['z_sessions']  # Shape: (n_sessions, n_time, n_components)
+                for sess_idx in range(session_data.shape[0]):
+                    sess_proj = session_data[sess_idx, :, component_idx]
+                    ax.plot(time_vec, sess_proj, color=color, linewidth=0.5,
+                            alpha=0.2, zorder=1)
+
+            # Plot mean projection on top
             ax.plot(time_vec, mean_proj, color=color, linewidth=linewidth,
-                    label=f'{short_label} (n={n_sess})', alpha=alpha)
+                    label=f'{short_label} (n={n_sess})', alpha=alpha, zorder=3)
             ax.fill_between(time_vec, mean_proj - sem_proj, mean_proj + sem_proj,
-                            alpha=0.15, color=color)
+                            alpha=0.15, color=color, zorder=2)
 
             session_count_labels.append(f'n_{short_label[:2]}={n_sess}')
 

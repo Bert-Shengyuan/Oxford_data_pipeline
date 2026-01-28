@@ -1799,6 +1799,18 @@ class CrossTrialTypeSummaryVisualizer:
             'spont_miss_long': 'sm'
         }
 
+        # Determine session data key based on which region we're plotting
+        if which_region == 'row':
+            if region_i == pair_key[0]:
+                session_key = 'u_sessions'
+            else:
+                session_key = 'v_sessions'
+        else:  # 'column'
+            if region_j == pair_key[1]:
+                session_key = 'v_sessions'
+            else:
+                session_key = 'u_sessions'
+
         for trial_type in pair_analyzer.available_trial_types:
             if trial_type not in pair_analyzer.aggregated_projections:
                 continue
@@ -1814,18 +1826,27 @@ class CrossTrialTypeSummaryVisualizer:
             short_label = trial_type_short.get(trial_type, trial_type.replace('_', ' '))
             n_sess = agg['n_sessions']
 
+            # Plot individual session lines (thin, low alpha)
+            if session_key in agg:
+                session_data = agg[session_key]  # Shape: (n_sessions, n_time, n_components)
+                for sess_idx in range(session_data.shape[0]):
+                    sess_proj = session_data[sess_idx, :, component_idx]
+                    ax.plot(self.time_bins, sess_proj, color=color, linewidth=0.5,
+                            alpha=0.2, zorder=1)
+
+            # Plot mean projection on top
             if trial_type == self.reference_type:
                 ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                        linewidth=linewidth,  label=f'{short_label} (n={n_sess})',
-                        alpha=0.8)
+                        linewidth=linewidth, label=f'{short_label} (n={n_sess})',
+                        alpha=0.8, zorder=3)
                 ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
+                                alpha=0.15, color=color, zorder=2)
             else:
                 ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
                         linewidth=linewidth, label=f'{short_label} (n={n_sess})',
-                        alpha=0.4)
+                        alpha=0.4, zorder=3)
                 ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
+                                alpha=0.15, color=color, zorder=2)
 
             # Collect session count for annotation
             session_count_labels.append(f'n_{short_label[:2]}={n_sess}')
