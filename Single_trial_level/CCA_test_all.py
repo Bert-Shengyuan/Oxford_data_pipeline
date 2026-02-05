@@ -729,12 +729,25 @@ class OxfordCCAVisualizer:
         # Adjust time vector
         time_vec = self.time_vec[:min_len] if len(self.time_vec) >= min_len else np.linspace(-1.5, 3.0, min_len)
 
-        # Plot
-        ax.plot(time_vec, mean_i, color='red', linewidth=2, alpha=0.9, label=region_i)
-        ax.fill_between(time_vec, mean_i - std_i, mean_i + std_i, alpha=0.15, color='red')
+        # Plot individual session lines for region i (thin, low alpha)
+        for sess_idx in range(proj_i_arr.shape[0]):
+            sess_proj = proj_i_arr[sess_idx]
+            ax.plot(time_vec, sess_proj, color='red', linewidth=0.5,
+                    alpha=0.2, zorder=1)
 
-        ax.plot(time_vec, mean_j, color='blue', linewidth=2, alpha=0.9, label=region_j)
-        ax.fill_between(time_vec, mean_j - std_j, mean_j + std_j, alpha=0.15, color='blue')
+        # Plot mean for region i (red, on top)
+        ax.plot(time_vec, mean_i, color='red', linewidth=2, alpha=0.9, label=region_i, zorder=3)
+        ax.fill_between(time_vec, mean_i - std_i, mean_i + std_i, alpha=0.15, color='red', zorder=2)
+
+        # Plot individual session lines for region j (thin, low alpha)
+        for sess_idx in range(proj_j_arr.shape[0]):
+            sess_proj = proj_j_arr[sess_idx]
+            ax.plot(time_vec, sess_proj, color='blue', linewidth=0.5,
+                    alpha=0.2, zorder=1)
+
+        # Plot mean for region j (blue, on top)
+        ax.plot(time_vec, mean_j, color='blue', linewidth=2, alpha=0.9, label=region_j, zorder=3)
+        ax.fill_between(time_vec, mean_j - std_j, mean_j + std_j, alpha=0.15, color='blue', zorder=2)
 
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)

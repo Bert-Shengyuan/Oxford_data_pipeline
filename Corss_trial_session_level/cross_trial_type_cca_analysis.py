@@ -985,11 +985,16 @@ class CrossSessionCCAAnalyzer:
         self.available_trial_types = list(all_trial_types)
         print(f"Available trial types (aggregated independently): {', '.join(self.available_trial_types)}")
 
+        # Dictionary to store flip decisions from reference trial
+        # Format: {session_name: {comp_idx: {'u_flip': bool, 'v_flip': bool}}}
+        reference_flip_decisions = {}
+
         # Aggregate for each trial type
         for trial_type in self.available_trial_types:
             # Collect session-level means
             u_means_all = []
             v_means_all = []
+            session_names_ordered = []
 
             for session_name, session_proj in self.session_projections.items():
                 if trial_type not in session_proj:
@@ -998,6 +1003,7 @@ class CrossSessionCCAAnalyzer:
                 proj = session_proj[trial_type]
                 u_means_all.append(proj['u_mean'][:,:])
                 v_means_all.append(proj['v_mean'][:,:])
+                session_names_ordered.append(session_name)
 
             if len(u_means_all) < self.min_sessions:
                 continue
@@ -1012,43 +1018,75 @@ class CrossSessionCCAAnalyzer:
             v_stack_aligned = np.zeros_like(v_stack_raw)
 
             for comp_idx in range(n_comp):
-                # Find baseline session (first with positive peak) for u
-                u_baseline_idx = None
-                for sess_idx in range(n_sess):
-                    u_proj = u_stack_raw[sess_idx, :, comp_idx]
-                    peak_val = u_proj[np.argmax(np.abs(u_proj))]
-                    if peak_val > 0:
-                        u_baseline_idx = sess_idx
-                        break
+                # For reference trial: find baseline and compute flip decisions
+                if trial_type == self.reference_type:
+                    # Find baseline session (first with positive peak) for u
+                    u_baseline_idx = None
+                    for sess_idx in range(n_sess):
+                        u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                        peak_val = u_proj[np.argmax(np.abs(u_proj))]
+                        if peak_val > 0:
+                            u_baseline_idx = sess_idx
+                            break
 
-                if u_baseline_idx is None:
-                    u_baseline_idx = 0
+                    if u_baseline_idx is None:
+                        u_baseline_idx = 0
 
-                u_baseline = u_stack_raw[u_baseline_idx, :, comp_idx]
+                    u_baseline = u_stack_raw[u_baseline_idx, :, comp_idx]
 
-                # Find baseline session for v
-                v_baseline_idx = None
-                for sess_idx in range(n_sess):
-                    v_proj = v_stack_raw[sess_idx, :, comp_idx]
-                    peak_val = v_proj[np.argmax(np.abs(v_proj)[74:150])+ 74]
-                    if peak_val > 0:
-                        v_baseline_idx = sess_idx
-                        break
+                    # Find baseline session for v
+                    v_baseline_idx = None
+                    for sess_idx in range(n_sess):
+                        v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                        peak_val = v_proj[np.argmax(np.abs(v_proj)[74:150])+ 74]
+                        if peak_val > 0:
+                            v_baseline_idx = sess_idx
+                            break
 
-                if v_baseline_idx is None:
-                    v_baseline_idx = 0
+                    if v_baseline_idx is None:
+                        v_baseline_idx = 0
 
-                v_baseline = v_stack_raw[v_baseline_idx, :, comp_idx]
+                    v_baseline = v_stack_raw[v_baseline_idx, :, comp_idx]
 
-                # Align all sessions based on correlation with baseline
-                for sess_idx in range(n_sess):
-                    u_proj = u_stack_raw[sess_idx, :, comp_idx]
-                    u_corr = np.corrcoef(u_baseline, u_proj)[0, 1]
-                    u_stack_aligned[sess_idx, :, comp_idx] = u_proj if u_corr >= 0 else -u_proj
+                    # Align all sessions based on correlation with baseline and store decisions
+                    for sess_idx in range(n_sess):
+                        session_name = session_names_ordered[sess_idx]
 
-                    v_proj = v_stack_raw[sess_idx, :, comp_idx]
-                    v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
-                    v_stack_aligned[sess_idx, :, comp_idx] = v_proj if v_corr >= 0 else -v_proj
+                        u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                        u_corr = np.corrcoef(u_baseline, u_proj)[0, 1]
+                        u_should_flip = u_corr < 0
+                        u_stack_aligned[sess_idx, :, comp_idx] = -u_proj if u_should_flip else u_proj
+
+                        v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                        v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
+                        v_should_flip = v_corr < 0
+                        v_stack_aligned[sess_idx, :, comp_idx] = -v_proj if v_should_flip else v_proj
+
+                        # Store flip decisions for this session and component
+                        if session_name not in reference_flip_decisions:
+                            reference_flip_decisions[session_name] = {}
+                        reference_flip_decisions[session_name][comp_idx] = {
+                            'u_flip': u_should_flip,
+                            'v_flip': v_should_flip
+                        }
+                else:
+                    # For other trials: reuse flip decisions from reference trial
+                    for sess_idx in range(n_sess):
+                        session_name = session_names_ordered[sess_idx]
+
+                        u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                        v_proj = v_stack_raw[sess_idx, :, comp_idx]
+
+                        # Apply flip decisions from reference trial if available
+                        if session_name in reference_flip_decisions and comp_idx in reference_flip_decisions[session_name]:
+                            u_should_flip = reference_flip_decisions[session_name][comp_idx]['u_flip']
+                            v_should_flip = reference_flip_decisions[session_name][comp_idx]['v_flip']
+                            u_stack_aligned[sess_idx, :, comp_idx] = -u_proj if u_should_flip else u_proj
+                            v_stack_aligned[sess_idx, :, comp_idx] = -v_proj if v_should_flip else v_proj
+                        else:
+                            # Fallback: don't flip if no reference decision available
+                            u_stack_aligned[sess_idx, :, comp_idx] = u_proj
+                            v_stack_aligned[sess_idx, :, comp_idx] = v_proj
 
             u_mean_final = np.mean(u_stack_aligned, axis=0)
             v_mean_final = np.mean(v_stack_aligned, axis=0)
@@ -1057,7 +1095,7 @@ class CrossSessionCCAAnalyzer:
             u_mean_final = u_mean_final if u_mean_final[max_idx,0] > 0 else -u_mean_final
 
             max_idx = np.argmax(np.abs(v_mean_final)[74:150,0]) + 74
-            v_mean_final = u_mean_final if v_mean_final[max_idx,0] > 0 else -v_mean_final
+            v_mean_final = v_mean_final if v_mean_final[max_idx,0] > 0 else -v_mean_final
 
             #v_mean_final = v_mean_final if v_mean_final[np.argmax(np.abs(v_mean_final)[74:150,0])+ 74,0] >0 else -v_mean_final
             # Compute cross-session statistics
