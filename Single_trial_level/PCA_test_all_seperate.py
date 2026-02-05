@@ -780,7 +780,8 @@ class OxfordPCAVisualizer:
                 'mean': mean_aligned,
                 'std': np.std(aligned_projections, axis=0),
                 'n_sessions': len(proj_arrays),
-                'length': min_len
+                'length': min_len,
+                'sessions': aligned_projections  # Store individual session data for visualization
             }
 
         return region_projections
@@ -824,17 +825,33 @@ class OxfordPCAVisualizer:
         mean_j = proj_j['mean'][:min_len]
         std_j = proj_j['std'][:min_len]
 
-        # Plot region i (red)
-        ax.plot(t, mean_i, color='red', linewidth=2, alpha=0.9,
-                label=f'{region_i} (n={proj_i["n_sessions"]})')
-        ax.fill_between(t, mean_i - std_i, mean_i + std_i,
-                        alpha=0.15, color='red')
+        # Plot individual session lines for region i (thin, low alpha)
+        if 'sessions' in proj_i:
+            session_data_i = proj_i['sessions']  # Shape: (n_sessions, n_time)
+            for sess_idx in range(session_data_i.shape[0]):
+                sess_proj = session_data_i[sess_idx, :min_len]
+                ax.plot(t, sess_proj, color='red', linewidth=0.5,
+                        alpha=0.2, zorder=1)
 
-        # Plot region j (blue)
+        # Plot mean for region i (red, on top)
+        ax.plot(t, mean_i, color='red', linewidth=2, alpha=0.9,
+                label=f'{region_i} (n={proj_i["n_sessions"]})', zorder=3)
+        ax.fill_between(t, mean_i - std_i, mean_i + std_i,
+                        alpha=0.15, color='red', zorder=2)
+
+        # Plot individual session lines for region j (thin, low alpha)
+        if 'sessions' in proj_j:
+            session_data_j = proj_j['sessions']  # Shape: (n_sessions, n_time)
+            for sess_idx in range(session_data_j.shape[0]):
+                sess_proj = session_data_j[sess_idx, :min_len]
+                ax.plot(t, sess_proj, color='blue', linewidth=0.5,
+                        alpha=0.2, zorder=1)
+
+        # Plot mean for region j (blue, on top)
         ax.plot(t, mean_j, color='blue', linewidth=2, alpha=0.9,
-                label=f'{region_j} (n={proj_j["n_sessions"]})')
+                label=f'{region_j} (n={proj_j["n_sessions"]})', zorder=3)
         ax.fill_between(t, mean_j - std_j, mean_j + std_j,
-                        alpha=0.15, color='blue')
+                        alpha=0.15, color='blue', zorder=2)
 
         # Reference line at stimulus onset
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)

@@ -693,9 +693,9 @@ class CrossSessionPCAAnalyzer:
         Aggregate projections across all sessions for this region.
 
         Sign alignment is performed by:
-        - Identifying baseline latent from first session with positive peak
-        - Computing correlation of each session with baseline
-        - Flipping sessions with negative correlation
+        - For reference trial (cued_hit_long): Identifying baseline latent from first session with positive peak,
+          computing correlation of each session with baseline, and flipping sessions with negative correlation
+        - For other trials: Using the SAME flip decisions as the reference trial
 
         Returns:
             True if aggregation successful
@@ -717,9 +717,14 @@ class CrossSessionPCAAnalyzer:
 
         self.available_trial_types = list(all_trial_types)
 
-        # Aggregate for each trial type
+        # Dictionary to store flip decisions from reference trial
+        # Format: {session_name: {comp_idx: should_flip}}
+        reference_flip_decisions = {}
+
+        # Process reference trial first to determine flip decisions
         for trial_type in self.available_trial_types:
             z_means_all = []
+            session_names_ordered = []
 
             for session_name, session_proj in self.session_projections.items():
                 if trial_type not in session_proj:
@@ -727,6 +732,7 @@ class CrossSessionPCAAnalyzer:
 
                 proj = session_proj[trial_type]
                 z_means_all.append(proj['z_mean'])
+                session_names_ordered.append(session_name)
 
             if len(z_means_all) < self.min_sessions:
                 continue
@@ -739,25 +745,48 @@ class CrossSessionPCAAnalyzer:
             z_stack_aligned = np.zeros_like(z_stack_raw)
 
             for comp_idx in range(n_comp):
-                # Find baseline session (first with positive peak)
-                baseline_idx = None
-                for sess_idx in range(n_sess):
-                    z_proj = z_stack_raw[sess_idx, :, comp_idx]
-                    peak_val = z_proj[np.argmax(np.abs(z_proj)[74:150])+ 74]
-                    if peak_val > 0:
-                        baseline_idx = sess_idx
-                        break
+                # For reference trial: find baseline and compute flip decisions
+                if trial_type == self.reference_type:
+                    # Find baseline session (first with positive peak)
+                    baseline_idx = None
+                    for sess_idx in range(n_sess):
+                        z_proj = z_stack_raw[sess_idx, :, comp_idx]
+                        peak_val = z_proj[np.argmax(np.abs(z_proj)[74:150])+ 74]
+                        if peak_val > 0:
+                            baseline_idx = sess_idx
+                            break
 
-                if baseline_idx is None:
-                    baseline_idx = 0
+                    if baseline_idx is None:
+                        baseline_idx = 0
 
-                baseline = z_stack_raw[baseline_idx, :, comp_idx]
+                    baseline = z_stack_raw[baseline_idx, :, comp_idx]
 
-                # Align all sessions based on correlation with baseline
-                for sess_idx in range(n_sess):
-                    z_proj = z_stack_raw[sess_idx, :, comp_idx]
-                    correlation = np.corrcoef(baseline, z_proj)[0, 1]
-                    z_stack_aligned[sess_idx, :, comp_idx] = z_proj if correlation >= 0 else -z_proj
+                    # Align all sessions based on correlation with baseline and store decisions
+                    for sess_idx in range(n_sess):
+                        session_name = session_names_ordered[sess_idx]
+                        z_proj = z_stack_raw[sess_idx, :, comp_idx]
+                        correlation = np.corrcoef(baseline, z_proj)[0, 1]
+                        should_flip = correlation < 0
+
+                        # Store flip decision for this session and component
+                        if session_name not in reference_flip_decisions:
+                            reference_flip_decisions[session_name] = {}
+                        reference_flip_decisions[session_name][comp_idx] = should_flip
+
+                        z_stack_aligned[sess_idx, :, comp_idx] = -z_proj if should_flip else z_proj
+                else:
+                    # For other trials: reuse flip decisions from reference trial
+                    for sess_idx in range(n_sess):
+                        session_name = session_names_ordered[sess_idx]
+                        z_proj = z_stack_raw[sess_idx, :, comp_idx]
+
+                        # Apply flip decision from reference trial if available
+                        if session_name in reference_flip_decisions and comp_idx in reference_flip_decisions[session_name]:
+                            should_flip = reference_flip_decisions[session_name][comp_idx]
+                            z_stack_aligned[sess_idx, :, comp_idx] = -z_proj if should_flip else z_proj
+                        else:
+                            # Fallback: don't flip if no reference decision available
+                            z_stack_aligned[sess_idx, :, comp_idx] = z_proj
 
             self.aggregated_projections[trial_type] = {
                 'z_mean': np.mean(z_stack_aligned, axis=0),
