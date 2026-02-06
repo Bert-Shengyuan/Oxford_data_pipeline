@@ -93,6 +93,30 @@ ANATOMICAL_ORDER = [
 # Minimum sessions threshold for cross-session analysis
 MIN_SESSIONS_THRESHOLD = 3
 
+# Hierarchical anatomical grouping: maps individual regions to broader categories
+# Regions that map to themselves are kept separate
+HIERARCHICAL_GROUPING = {
+    'mPFC': 'mPFC',
+    'ORB': 'ORB',
+    'ILM': 'ILM',
+    'OLF': 'OLF',
+    'MOp': 'MOp',
+    'MOs': 'MOs',
+    'STR': 'Striatum',
+    'STRv': 'Striatum',
+    'MD': 'Thalamus',
+    'VALVM': 'Thalamus',
+    'LP': 'Thalamus',
+    'VPMPO': 'Thalamus',
+    'HY': 'Hypothalamus',
+}
+
+# Ordering for hierarchical (aggregated) region display
+HIERARCHICAL_ORDER = [
+    'mPFC', 'ORB', 'ILM', 'OLF', 'MOp', 'MOs',
+    'Striatum', 'Thalamus', 'Hypothalamus'
+]
+
 
 # =============================================================================
 # HELPER FUNCTIONS FOR DATA LOADING
@@ -152,6 +176,29 @@ def sort_pair_by_anatomy(region_i: str, region_j: str) -> Tuple[str, str]:
     """Sort region pair by anatomical order."""
     idx_i = get_anatomical_index(region_i)
     idx_j = get_anatomical_index(region_j)
+    if idx_i <= idx_j:
+        return (region_i, region_j)
+    else:
+        return (region_j, region_i)
+
+
+def get_hierarchical_region(region: str) -> str:
+    """Map an individual region to its hierarchical group name."""
+    return HIERARCHICAL_GROUPING.get(region, region)
+
+
+def get_hierarchical_index(region: str) -> int:
+    """Get hierarchical ordering index for a region."""
+    try:
+        return HIERARCHICAL_ORDER.index(region)
+    except ValueError:
+        return len(HIERARCHICAL_ORDER)
+
+
+def sort_pair_by_hierarchy(region_i: str, region_j: str) -> Tuple[str, str]:
+    """Sort region pair by hierarchical order."""
+    idx_i = get_hierarchical_index(region_i)
+    idx_j = get_hierarchical_index(region_j)
     if idx_i <= idx_j:
         return (region_i, region_j)
     else:
@@ -1611,6 +1658,308 @@ class CrossSessionCCAAnalyzer:
 
 
 # =============================================================================
+# HIERARCHICAL AGGREGATION
+# =============================================================================
+
+class HierarchicalPairResult:
+    """
+    Lightweight container for hierarchical pair aggregated data.
+
+    Holds pooled aggregated data from multiple region-level pairs that have
+    been combined according to HIERARCHICAL_GROUPING. Compatible with
+    CrossTrialTypeSummaryVisualizer for visualization.
+
+    Attributes:
+        region_pair: Tuple of (hierarchical_region_i, hierarchical_region_j)
+        time_bins: Time axis array
+        aggregated_projections: Pooled projection data per trial type
+        aggregated_statistics: Pooled statistical results
+        available_trial_types: List of trial types with data
+    """
+
+    def __init__(self, region_pair, time_bins, n_components, reference_type='cued_hit_long'):
+        self.region_pair = region_pair
+        self.time_bins = time_bins
+        self.n_components = n_components
+        self.reference_type = reference_type
+        self.aggregated_projections = {}
+        self.aggregated_statistics = {}
+        self.available_trial_types = []
+        self.session_projections = {}  # For compatibility (session count)
+
+
+def build_hierarchical_pair_analyzers(
+    cross_session_analyzers: Dict[Tuple[str, str], 'CrossSessionCCAAnalyzer'],
+    reference_type: str = 'cued_hit_long',
+    n_components: int = 5,
+    min_sessions: int = MIN_SESSIONS_THRESHOLD
+) -> Dict[Tuple[str, str], HierarchicalPairResult]:
+    """
+    Build hierarchical pair analyzers by aggregating region-level cross-session data.
+
+    Aggregation procedure:
+    1. Map each region-level pair to its hierarchical pair
+    2. Pool session-level data from all contributing region-level pairs
+    3. Compute summary statistics (mean, std, sem) for the pooled data
+
+    Parameters:
+        cross_session_analyzers: Dict of region-level CrossSessionCCAAnalyzer objects
+        reference_type: Trial type for CCA weight training
+        n_components: Number of CCA components
+        min_sessions: Minimum pooled sessions for inclusion
+
+    Returns:
+        Dict mapping hierarchical pair tuples to HierarchicalPairResult objects
+    """
+    print("\n" + "=" * 70)
+    print("BUILDING HIERARCHICAL PAIR ANALYZERS")
+    print("=" * 70)
+
+    # Step 1: Group region-level pairs by hierarchical pair
+    # {(h1, h2): [(pair_key, pair_analyzer, needs_swap), ...]}
+    hierarchical_groups = {}
+
+    for pair_key, pair_analyzer in cross_session_analyzers.items():
+        # Skip pairs that haven't been aggregated yet
+        if not pair_analyzer.aggregated_projections:
+            continue
+
+        r1, r2 = pair_key  # Already in canonical anatomical order
+        h1 = get_hierarchical_region(r1)
+        h2 = get_hierarchical_region(r2)
+
+        if h1 == h2:
+            # Skip within-group pairs (e.g., STR vs STRv both map to Striatum)
+            print(f"  Skipping within-group pair: {r1} vs {r2} (both -> {h1})")
+            continue
+
+        # Determine hierarchical pair order
+        h_pair = sort_pair_by_hierarchy(h1, h2)
+
+        # Check if u/v need swapping to match hierarchical pair ordering:
+        # In the original pair: u -> pair_key[0] (r1), v -> pair_key[1] (r2)
+        # h1 is the hierarchical group of r1 (maps to u in original)
+        # If h1 == h_pair[0]: no swap needed (u stays u)
+        # If h1 == h_pair[1]: swap needed (original u should become v)
+        needs_swap = (h1 != h_pair[0])
+
+        if h_pair not in hierarchical_groups:
+            hierarchical_groups[h_pair] = []
+        hierarchical_groups[h_pair].append((pair_key, pair_analyzer, needs_swap))
+
+        swap_note = " (swapped)" if needs_swap else ""
+        print(f"  {r1} vs {r2} -> {h_pair[0]} vs {h_pair[1]}{swap_note}")
+
+    # Step 2: Build hierarchical pair results
+    hierarchical_analyzers = {}
+
+    for h_pair, contributing_pairs in hierarchical_groups.items():
+        print(f"\n  Building hierarchical pair: {h_pair[0]} vs {h_pair[1]}")
+        print(f"    Contributing region-level pairs: {len(contributing_pairs)}")
+
+        # Get time_bins from first contributing pair
+        time_bins = contributing_pairs[0][1].time_bins
+
+        h_result = HierarchicalPairResult(
+            region_pair=h_pair,
+            time_bins=time_bins,
+            n_components=n_components,
+            reference_type=reference_type
+        )
+
+        # Pool aggregated projections from all contributing pairs
+        # {trial_type: {'u_list': [arrays...], 'v_list': [arrays...]}}
+        pooled_by_trial = {}
+
+        for pair_key, pair_analyzer, needs_swap in contributing_pairs:
+            for trial_type, agg in pair_analyzer.aggregated_projections.items():
+                if trial_type not in pooled_by_trial:
+                    pooled_by_trial[trial_type] = {'u_list': [], 'v_list': []}
+
+                u_sessions = agg.get('u_sessions')
+                v_sessions = agg.get('v_sessions')
+
+                if u_sessions is None or v_sessions is None:
+                    continue
+
+                if needs_swap:
+                    pooled_by_trial[trial_type]['u_list'].append(v_sessions)
+                    pooled_by_trial[trial_type]['v_list'].append(u_sessions)
+                else:
+                    pooled_by_trial[trial_type]['u_list'].append(u_sessions)
+                    pooled_by_trial[trial_type]['v_list'].append(v_sessions)
+
+        # Compute statistics for pooled data
+        for trial_type, pooled in pooled_by_trial.items():
+            if not pooled['u_list'] or not pooled['v_list']:
+                continue
+
+            u_all = np.concatenate(pooled['u_list'], axis=0)  # (N_total, T, C)
+            v_all = np.concatenate(pooled['v_list'], axis=0)
+
+            n_total = u_all.shape[0]
+            if n_total < min_sessions:
+                print(f"    {trial_type}: {n_total} pooled sessions (< {min_sessions}, skipping)")
+                continue
+
+            h_result.aggregated_projections[trial_type] = {
+                'u_mean': np.mean(u_all, axis=0),
+                'v_mean': np.mean(v_all, axis=0),
+                'u_std': np.std(u_all, axis=0),
+                'v_std': np.std(v_all, axis=0),
+                'u_sem': np.std(u_all, axis=0) / np.sqrt(n_total),
+                'v_sem': np.std(v_all, axis=0) / np.sqrt(n_total),
+                'u_sessions': u_all,
+                'v_sessions': v_all,
+                'n_sessions': n_total
+            }
+
+            print(f"    {trial_type}: {n_total} pooled sessions")
+
+        h_result.available_trial_types = list(h_result.aggregated_projections.keys())
+
+        # Pool temporal correlations from contributing pairs
+        pooled_corr = {}
+
+        for pair_key, pair_analyzer, needs_swap in contributing_pairs:
+            if 'temporal_correlations' not in pair_analyzer.aggregated_statistics:
+                continue
+
+            for comp_key, corr_data in pair_analyzer.aggregated_statistics['temporal_correlations'].items():
+                if comp_key not in pooled_corr:
+                    pooled_corr[comp_key] = {
+                        'region_i': {f'comp_{k+1}': [] for k in range(n_components)},
+                        'region_j': {f'comp_{k+1}': [] for k in range(n_components)}
+                    }
+
+                # Determine source keys based on swap
+                if needs_swap:
+                    src_for_u = 'region_j'  # Original v -> hierarchical u
+                    src_for_v = 'region_i'  # Original u -> hierarchical v
+                else:
+                    src_for_u = 'region_i'
+                    src_for_v = 'region_j'
+
+                for comp_idx_key in corr_data.get(src_for_u, {}):
+                    if comp_idx_key in pooled_corr[comp_key]['region_i']:
+                        pooled_corr[comp_key]['region_i'][comp_idx_key].extend(
+                            corr_data[src_for_u].get(comp_idx_key, [])
+                        )
+
+                for comp_idx_key in corr_data.get(src_for_v, {}):
+                    if comp_idx_key in pooled_corr[comp_key]['region_j']:
+                        pooled_corr[comp_key]['region_j'][comp_idx_key].extend(
+                            corr_data[src_for_v].get(comp_idx_key, [])
+                        )
+
+        h_result.aggregated_statistics['temporal_correlations'] = pooled_corr
+
+        # Compute R²-based significance for the hierarchical pair
+        _compute_hierarchical_r2_significance(h_result, n_components)
+
+        # Only add if we have enough trial types
+        if len(h_result.aggregated_projections) >= 2:
+            hierarchical_analyzers[h_pair] = h_result
+            print(f"    -> Valid hierarchical pair: {h_pair[0]} vs {h_pair[1]}")
+        else:
+            print(f"    -> Insufficient data for: {h_pair[0]} vs {h_pair[1]}")
+
+    print(f"\nTotal hierarchical pairs: {len(hierarchical_analyzers)}")
+    return hierarchical_analyzers
+
+
+def _compute_hierarchical_r2_significance(
+    h_result: HierarchicalPairResult,
+    n_components: int
+) -> None:
+    """
+    Compute R²-based significance tests for a hierarchical pair.
+
+    Tests whether R² values are significantly above 0.5 using
+    Wilcoxon signed-rank test on pooled R² distributions.
+
+    Parameters:
+        h_result: HierarchicalPairResult with pooled temporal correlations
+        n_components: Number of CCA components
+    """
+    if 'temporal_correlations' not in h_result.aggregated_statistics:
+        return
+
+    correlations = h_result.aggregated_statistics['temporal_correlations']
+    n_comp_show = min(3, n_components)
+
+    r2_significance = {
+        'pairwise_r2_tests': {},
+        'r2_above_threshold': {}
+    }
+
+    comparison_keys = list(correlations.keys())
+    threshold = 0.5
+
+    # Test: R² significantly above threshold
+    for comparison in comparison_keys:
+        r2_significance['r2_above_threshold'][comparison] = {
+            'region_i': {},
+            'region_j': {}
+        }
+
+        for comp_idx in range(n_comp_show):
+            comp_key = f'comp_{comp_idx + 1}'
+
+            for region_key in ['region_i', 'region_j']:
+                r2_values = np.array(correlations[comparison][region_key].get(comp_key, []))
+
+                p_val = 1.0
+                if len(r2_values) >= 5:
+                    try:
+                        shifted = r2_values - threshold
+                        _, p_val = wilcoxon(shifted, alternative='greater')
+                    except ValueError:
+                        p_val = 1.0
+
+                r2_significance['r2_above_threshold'][comparison][region_key][comp_key] = {
+                    'wilcoxon_p': p_val,
+                    'mean_r2': np.mean(r2_values) if len(r2_values) > 0 else 0,
+                    'n_sessions': len(r2_values)
+                }
+
+    # Pairwise R² comparison tests between different trial type comparisons
+    for i, comp1 in enumerate(comparison_keys):
+        for comp2 in comparison_keys[i + 1:]:
+            test_key = f"{comp1}_VS_{comp2}"
+            r2_significance['pairwise_r2_tests'][test_key] = {
+                'region_i': {},
+                'region_j': {}
+            }
+
+            for comp_idx in range(n_comp_show):
+                comp_key = f'comp_{comp_idx + 1}'
+
+                for region_key in ['region_i', 'region_j']:
+                    r2_1 = np.array(correlations[comp1][region_key].get(comp_key, []))
+                    r2_2 = np.array(correlations[comp2][region_key].get(comp_key, []))
+                    n_min = min(len(r2_1), len(r2_2))
+
+                    p_val, mean_diff = 1.0, 0.0
+                    if n_min >= 5:
+                        try:
+                            _, p_val = wilcoxon(r2_1[:n_min], r2_2[:n_min])
+                            mean_diff = np.mean(r2_1[:n_min] - r2_2[:n_min])
+                        except ValueError:
+                            pass
+
+                    r2_significance['pairwise_r2_tests'][test_key][region_key][comp_key] = {
+                        'wilcoxon_p': p_val,
+                        'mean_diff': mean_diff,
+                        'n_sessions': n_min,
+                        'mean_r2_comp1': np.mean(r2_1) if len(r2_1) > 0 else 0,
+                        'mean_r2_comp2': np.mean(r2_2) if len(r2_2) > 0 else 0
+                    }
+
+    h_result.aggregated_statistics['r2_significance'] = r2_significance
+
+
+# =============================================================================
 # UPPER TRIANGLE SUMMARY FIGURE CLASSES
 # =============================================================================
 
@@ -1631,35 +1980,42 @@ class CrossTrialTypeSummaryVisualizer:
             base_dir: str,
             reference_type: str = 'cued_hit_long',
             n_components: int = 5,
-            min_sessions: int = MIN_SESSIONS_THRESHOLD
+            min_sessions: int = MIN_SESSIONS_THRESHOLD,
+            use_hierarchical: bool = False
     ):
         """
         Initialize the summary visualizer.
-        
+
         Parameters:
             base_dir: Root directory for Oxford dataset
             reference_type: Trial type for CCA weight training
             n_components: Number of CCA components to analyze
             min_sessions: Minimum sessions required for a pair to be included
+            use_hierarchical: If True, use hierarchical region ordering
         """
         self.base_dir = Path(base_dir)
         self.reference_type = reference_type
         self.n_components = n_components
         self.min_sessions = min_sessions
-        
+        self.use_hierarchical = use_hierarchical
+
         # Cross-session analyzers for each region pair
         self.pair_analyzers: Dict[Tuple[str, str], CrossSessionCCAAnalyzer] = {}
-        
+
         # Available regions and time axis
         self.available_regions: List[str] = []
         self.time_bins: Optional[np.ndarray] = None
-        
+
         # Output directory
-        self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures'
+        if use_hierarchical:
+            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures_hierarchical'
+        else:
+            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures'
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        mode_str = " (HIERARCHICAL)" if use_hierarchical else ""
         print("=" * 70)
-        print("Cross-Trial-Type Summary Visualizer")
+        print(f"Cross-Trial-Type Summary Visualizer{mode_str}")
         print("=" * 70)
         print(f"Reference condition: {reference_type}")
         print(f"Minimum sessions: {min_sessions}")
@@ -1689,8 +2045,16 @@ class CrossTrialTypeSummaryVisualizer:
         print(f"  Added pair: {pair_key[0]} vs {pair_key[1]}")
     
     def _get_ordered_regions(self) -> List[str]:
-        """Return available regions in anatomical order."""
+        """Return available regions in the appropriate order."""
+        if self.use_hierarchical:
+            return [r for r in HIERARCHICAL_ORDER if r in self.available_regions]
         return [r for r in ANATOMICAL_ORDER if r in self.available_regions]
+
+    def _sort_pair(self, region_i: str, region_j: str) -> Tuple[str, str]:
+        """Sort a region pair using the appropriate ordering."""
+        if self.use_hierarchical:
+            return sort_pair_by_hierarchy(region_i, region_j)
+        return sort_pair_by_anatomy(region_i, region_j)
     
     def create_projection_matrix_figure(
             self,
@@ -1787,7 +2151,7 @@ class CrossTrialTypeSummaryVisualizer:
             which_region: 'row' for region_i (u data), 'column' for region_j (v data)
         """
         # Find pair analyzer (check both orderings)
-        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_key = self._sort_pair(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
 
         if pair_analyzer is None:
@@ -1808,8 +2172,8 @@ class CrossTrialTypeSummaryVisualizer:
 
         # Determine which data to use based on region position
         # pair_key is in canonical (sorted) order
-        # pair_key[0] = row region in canonical order → u data
-        # pair_key[1] = column region in canonical order → v data
+        # pair_key[0] = row region in canonical order -> u data
+        # pair_key[1] = column region in canonical order -> v data
         if which_region == 'row':
             # We want data for region_i (the row in the matrix)
             # Check if region_i is pair_key[0] (u) or pair_key[1] (v)
@@ -2003,7 +2367,7 @@ class CrossTrialTypeSummaryVisualizer:
             which_region: 'row' for region_i, 'column' for region_j
         """
         # Find pair analyzer
-        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_key = self._sort_pair(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
 
         if pair_analyzer is None:
@@ -2195,7 +2559,7 @@ class CrossTrialTypeSummaryVisualizer:
             which_region: 'row' for region_i, 'column' for region_j
         """
         # Find pair analyzer
-        pair_key = sort_pair_by_anatomy(region_i, region_j)
+        pair_key = self._sort_pair(region_i, region_j)
         pair_analyzer = self.pair_analyzers.get(pair_key)
 
         if pair_analyzer is None:
@@ -2330,6 +2694,10 @@ class CrossTrialTypeCCAPipeline:
         
         # Summary visualizer
         self.summary_visualizer: Optional[CrossTrialTypeSummaryVisualizer] = None
+
+        # Hierarchical aggregation results
+        self.hierarchical_analyzers: Dict = {}
+        self.hierarchical_summary_visualizer: Optional[CrossTrialTypeSummaryVisualizer] = None
 
         # Validate config
         required_keys = ['base_dir', 'sessions']
@@ -2542,6 +2910,75 @@ class CrossTrialTypeCCAPipeline:
             # )
         else:
             print("Not enough valid pairs for summary figures")
+
+        # Run hierarchical aggregation if enabled
+        if self.config.get('use_hierarchical', False):
+            self._run_hierarchical_aggregation()
+
+
+    def _run_hierarchical_aggregation(self) -> None:
+        """
+        Perform hierarchical aggregation of region-level cross-session results.
+
+        After region-level cross-session aggregation is complete, this method:
+        1. Groups region-level pairs by hierarchical categories
+        2. Pools session-level data from contributing region pairs
+        3. Creates a separate summary visualizer with hierarchical ordering
+        4. Generates hierarchical summary figures
+        """
+        print("\n" + "=" * 70)
+        print("HIERARCHICAL AGGREGATION")
+        print("=" * 70)
+
+        min_sessions = self.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
+
+        # Build hierarchical pair analyzers from region-level cross-session data
+        hierarchical_analyzers = build_hierarchical_pair_analyzers(
+            self.cross_session_analyzers,
+            reference_type=self.config['reference_type'],
+            n_components=self.config['n_components'],
+            min_sessions=min_sessions
+        )
+
+        if not hierarchical_analyzers:
+            print("No valid hierarchical pairs found")
+            return
+
+        # Store for external access
+        self.hierarchical_analyzers = hierarchical_analyzers
+
+        # Create hierarchical summary visualizer
+        self.hierarchical_summary_visualizer = CrossTrialTypeSummaryVisualizer(
+            base_dir=self.config['base_dir'],
+            reference_type=self.config['reference_type'],
+            n_components=self.config['n_components'],
+            min_sessions=min_sessions,
+            use_hierarchical=True
+        )
+
+        # Add hierarchical pair analyzers
+        for h_pair, h_result in hierarchical_analyzers.items():
+            self.hierarchical_summary_visualizer.add_pair_analyzer(h_result)
+
+        valid_pairs = len(hierarchical_analyzers)
+        print(f"\nValid hierarchical pairs for summary: {valid_pairs}")
+
+        # Create hierarchical summary figures
+        if valid_pairs >= 1:
+            print("\nCreating hierarchical summary figures...")
+
+            # Figures: First component projections (row and column regions)
+            self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True
+            )
+
+            # Figures: R² boxplots (row and column regions)
+            self.hierarchical_summary_visualizer.create_r2_boxplot_matrix_figure(
+                save_fig=True
+            )
+        else:
+            print("Not enough valid hierarchical pairs for summary figures")
 
 
 # =============================================================================
