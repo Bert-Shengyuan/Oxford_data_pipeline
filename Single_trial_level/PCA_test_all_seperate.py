@@ -64,6 +64,35 @@ ANATOMICAL_ORDER = [
     'HY',  # Hypothalamic
 ]
 
+# Hierarchical anatomical grouping: maps individual regions to broader categories
+HIERARCHICAL_GROUPING = {
+    'mPFC': 'mPFC',
+    'ORB': 'ORB',
+    'ILM': 'ILM',
+    'OLF': 'OLF',
+    'MOp': 'MOp',
+    'MOs': 'MOs',
+    'STR': 'Striatum',
+    'STRv': 'Striatum',
+    'MD': 'Thalamus',
+    'VALVM': 'Thalamus',
+    'LP': 'Thalamus',
+    'VPMPO': 'Thalamus',
+    'HY': 'Hypothalamus',
+}
+
+# Ordering for hierarchical (aggregated) region display
+HIERARCHICAL_ORDER = [
+    'mPFC', 'ORB', 'ILM', 'OLF', 'MOp', 'MOs',
+    'Striatum', 'Thalamus', 'Hypothalamus'
+]
+
+
+def get_hierarchical_region(region: str) -> str:
+    """Map an individual region to its hierarchical group name."""
+    return HIERARCHICAL_GROUPING.get(region, region)
+
+
 class OxfordPCAVisualizer:
     """
     Visualizer for PCA results aggregated independently per region.
@@ -871,6 +900,111 @@ class OxfordPCAVisualizer:
         for spine in ax.spines.values():
             spine.set_linewidth(3)
 
+    # =========================================================================
+    # HIERARCHICAL AGGREGATION
+    # =========================================================================
+
+    def build_hierarchical_region_data(self) -> None:
+        """
+        Pool region-level data into hierarchical region data.
+
+        Aggregation procedure:
+        1. Map each individual region to its hierarchical group
+        2. Pool all session data from regions in the same group
+        3. Store in self.hierarchical_region_data
+
+        For example, sessions from STR and STRv are pooled into 'Striatum',
+        sessions from MD, VALVM, LP, VPMPO are pooled into 'Thalamus'.
+        """
+        print("\n" + "=" * 70)
+        print("BUILDING HIERARCHICAL PCA REGION DATA")
+        print("=" * 70)
+
+        self.hierarchical_region_data = {}
+        self.hierarchical_region_sessions = {}
+
+        for region, sessions in self.region_data.items():
+            h_name = get_hierarchical_region(region)
+
+            if h_name not in self.hierarchical_region_data:
+                self.hierarchical_region_data[h_name] = []
+                self.hierarchical_region_sessions[h_name] = []
+
+            self.hierarchical_region_data[h_name].extend(sessions)
+            self.hierarchical_region_sessions[h_name].extend(
+                self.region_sessions.get(region, [])
+            )
+
+            print(f"  {region} -> {h_name} ({len(sessions)} sessions)")
+
+        print(f"\nHierarchical regions: {len(self.hierarchical_region_data)}")
+        for h_name, sessions in self.hierarchical_region_data.items():
+            print(f"  {h_name}: {len(sessions)} pooled sessions")
+
+    def create_hierarchical_figures(
+            self,
+            save_path: Optional[str] = None,
+            figsize_variance: Tuple[float, float] = (16, 12),
+            figsize_temporal: Tuple[float, float] = (40, 40),
+            min_sessions: int = 3
+    ) -> None:
+        """
+        Create all figures using hierarchical region grouping.
+
+        Temporarily swaps the internal data to hierarchical versions, calls
+        existing figure methods, then restores original data.
+
+        Parameters:
+            save_path: Output path prefix (without extension)
+            figsize_variance: Size for cumulative variance figure
+            figsize_temporal: Size for temporal projection figures
+            min_sessions: Minimum sessions per hierarchical region
+        """
+        if not hasattr(self, 'hierarchical_region_data'):
+            self.build_hierarchical_region_data()
+
+        if not self.hierarchical_region_data:
+            print("No hierarchical region data available")
+            return
+
+        # Save original data
+        orig_region_data = self.region_data
+        orig_region_sessions = self.region_sessions
+        orig_order = self.anatomical_order
+
+        # Swap to hierarchical data
+        self.region_data = self.hierarchical_region_data
+        self.region_sessions = self.hierarchical_region_sessions
+        self.anatomical_order = HIERARCHICAL_ORDER
+
+        try:
+            print("\n" + "=" * 70)
+            print("CREATING HIERARCHICAL PCA FIGURES")
+            print("=" * 70)
+
+            self.create_cumulative_variance_figure(
+                figsize=figsize_variance,
+                save_path=save_path,
+                n_rows=3,
+                n_cols=3
+            )
+
+            self.create_variance_summary_table(
+                save_path=save_path
+            )
+
+            self.create_all_component_figures(
+                n_components_to_plot=3,
+                figsize=figsize_temporal,
+                save_path=save_path,
+                min_sessions=min_sessions
+            )
+        finally:
+            # Restore original data
+            self.region_data = orig_region_data
+            self.region_sessions = orig_region_sessions
+            self.anatomical_order = orig_order
+
     def create_all_component_figures(
             self,
             n_components_to_plot: int = 5,
@@ -945,6 +1079,12 @@ def main():
         min_sessions=3
     )
 
+    # Hierarchical figures for cued state
+    pca_viz_cued.create_hierarchical_figures(
+        save_path=str(output_dir / "cued_long_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
+
     print("\n[2] Processing SPONTANEOUS state sessions...")
     pca_viz_spont_hit = OxfordPCAVisualizer(
         base_results_dir=base_dir,
@@ -973,6 +1113,12 @@ def main():
         figsize=(40, 40),
         save_path=str(output_dir / "spont_hit_long"),
         min_sessions=3
+    )
+
+    # Hierarchical figures for spont_hit_long
+    pca_viz_spont_hit.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_hit_long_hierarchical"),
+        figsize_temporal=(40, 40)
     )
 
     # Option 2: Spontaneous state analysis
@@ -1006,6 +1152,11 @@ def main():
         min_sessions=3
     )
 
+    # Hierarchical figures for spont_long
+    pca_viz_spont.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_long_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
 
     # Option 3: Spontaneous state analysis
     print("\n[2] Processing SPONTANEOUS state sessions...")
@@ -1036,6 +1187,12 @@ def main():
         figsize=(40, 40),
         save_path=str(output_dir / "spont_short"),
         min_sessions=3
+    )
+
+    # Hierarchical figures for spont_short
+    pca_viz_spont_short.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_short_hierarchical"),
+        figsize_temporal=(40, 40)
     )
 
     # Option 4: Spontaneous state analysis

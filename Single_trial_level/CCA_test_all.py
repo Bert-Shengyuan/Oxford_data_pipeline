@@ -66,6 +66,52 @@ ANATOMICAL_ORDER = [
     'HY'
 ]
 
+# Hierarchical anatomical grouping: maps individual regions to broader categories
+HIERARCHICAL_GROUPING = {
+    'mPFC': 'mPFC',
+    'ORB': 'ORB',
+    'ILM': 'ILM',
+    'OLF': 'OLF',
+    'MOp': 'MOp',
+    'MOs': 'MOs',
+    'STR': 'Striatum',
+    'STRv': 'Striatum',
+    'MD': 'Thalamus',
+    'VALVM': 'Thalamus',
+    'LP': 'Thalamus',
+    'VPMPO': 'Thalamus',
+    'HY': 'Hypothalamus',
+}
+
+# Ordering for hierarchical (aggregated) region display
+HIERARCHICAL_ORDER = [
+    'mPFC', 'ORB', 'ILM', 'OLF', 'MOp', 'MOs',
+    'Striatum', 'Thalamus', 'Hypothalamus'
+]
+
+
+def get_hierarchical_region(region: str) -> str:
+    """Map an individual region to its hierarchical group name."""
+    return HIERARCHICAL_GROUPING.get(region, region)
+
+
+def get_hierarchical_index(region: str) -> int:
+    """Get hierarchical ordering index for a region."""
+    try:
+        return HIERARCHICAL_ORDER.index(region)
+    except ValueError:
+        return len(HIERARCHICAL_ORDER)
+
+
+def sort_pair_by_hierarchy(region_i: str, region_j: str) -> Tuple[str, str]:
+    """Sort region pair by hierarchical order."""
+    idx_i = get_hierarchical_index(region_i)
+    idx_j = get_hierarchical_index(region_j)
+    if idx_i <= idx_j:
+        return (region_i, region_j)
+    else:
+        return (region_j, region_i)
+
 
 class OxfordCCAVisualizer:
     """
@@ -923,6 +969,139 @@ class OxfordCCAVisualizer:
         plt.close(fig)
         print("  Population summary complete")
 
+    # =========================================================================
+    # HIERARCHICAL AGGREGATION
+    # =========================================================================
+
+    def build_hierarchical_pair_data(self) -> None:
+        """
+        Pool region-level pair data into hierarchical pair data.
+
+        Aggregation procedure:
+        1. Map each region-level pair to its hierarchical pair
+        2. For within-group pairs (e.g., STR vs STRv), skip
+        3. For cross-group pairs, pool sessions with appropriate projection swapping
+        4. Store in self.hierarchical_pair_data with canonical hierarchical ordering
+
+        After calling this method, self.hierarchical_pair_data and
+        self.hierarchical_regions are available for hierarchical figure creation.
+        """
+        print("\n" + "=" * 70)
+        print("BUILDING HIERARCHICAL CCA PAIR DATA")
+        print("=" * 70)
+
+        self.hierarchical_pair_data = {}
+        self.hierarchical_regions = set()
+
+        for pair_key, sessions in self.pair_data.items():
+            r1, r2 = pair_key
+            h1 = get_hierarchical_region(r1)
+            h2 = get_hierarchical_region(r2)
+
+            if h1 == h2:
+                print(f"  Skipping within-group pair: {r1} vs {r2} (both -> {h1})")
+                continue
+
+            # Determine canonical hierarchical pair order
+            h_pair = sort_pair_by_hierarchy(h1, h2)
+
+            # Check if projections need swapping:
+            # Original: region_i_mean -> r1, region_j_mean -> r2
+            # Hierarchical: region_i_mean -> h_pair[0], region_j_mean -> h_pair[1]
+            # If h1 (group of r1) != h_pair[0], we need to swap
+            needs_swap = (h1 != h_pair[0])
+
+            if h_pair not in self.hierarchical_pair_data:
+                self.hierarchical_pair_data[h_pair] = []
+
+            for session in sessions:
+                h_session = session.copy()
+
+                if needs_swap and session['projections'] is not None:
+                    swapped_proj = {}
+                    for comp_idx, comp_data in session['projections'].items():
+                        swapped_proj[comp_idx] = {
+                            'region_i_mean': comp_data.get('region_j_mean', []),
+                            'region_j_mean': comp_data.get('region_i_mean', [])
+                        }
+                    h_session['projections'] = swapped_proj
+
+                self.hierarchical_pair_data[h_pair].append(h_session)
+
+            self.hierarchical_regions.add(h_pair[0])
+            self.hierarchical_regions.add(h_pair[1])
+
+            swap_note = " (swapped)" if needs_swap else ""
+            print(f"  {r1} vs {r2} -> {h_pair[0]} vs {h_pair[1]}{swap_note}"
+                  f" ({len(sessions)} sessions)")
+
+        print(f"\nTotal hierarchical pairs: {len(self.hierarchical_pair_data)}")
+        for h_pair, sessions in self.hierarchical_pair_data.items():
+            print(f"  {h_pair[0]} vs {h_pair[1]}: {len(sessions)} pooled sessions")
+
+    def create_hierarchical_figures(
+            self,
+            save_path: Optional[str] = None,
+            figsize_connectivity: Tuple[float, float] = (20, 12),
+            figsize_temporal: Tuple[float, float] = (40, 40),
+            figsize_summary: Tuple[float, float] = (18, 10)
+    ) -> None:
+        """
+        Create all figures using hierarchical region grouping.
+
+        Temporarily swaps the internal data to hierarchical versions, calls
+        existing figure methods, then restores original data.
+
+        Parameters:
+            save_path: Output path prefix (without extension)
+            figsize_connectivity: Size for connectivity matrices figure
+            figsize_temporal: Size for temporal projection figures
+            figsize_summary: Size for population summary figure
+        """
+        if not hasattr(self, 'hierarchical_pair_data'):
+            self.build_hierarchical_pair_data()
+
+        if not self.hierarchical_pair_data:
+            print("No hierarchical pair data available")
+            return
+
+        # Save original data
+        orig_pair_data = self.pair_data
+        orig_regions = self.all_regions
+        orig_order = self.anatomical_order
+
+        # Swap to hierarchical data
+        self.pair_data = self.hierarchical_pair_data
+        self.all_regions = self.hierarchical_regions
+        self.anatomical_order = HIERARCHICAL_ORDER
+
+        try:
+            print("\n" + "=" * 70)
+            print("CREATING HIERARCHICAL CCA FIGURES")
+            print("=" * 70)
+
+            self.create_connectivity_matrices_figure(
+                figsize=figsize_connectivity,
+                save_path=save_path
+            )
+
+            self.create_population_summary_figure(
+                figsize=figsize_summary,
+                save_path=save_path
+            )
+
+            for comp_idx in range(min(3, self.n_components)):
+                self.create_temporal_projection_figure(
+                    figsize=figsize_temporal,
+                    component_idx=comp_idx,
+                    save_path=save_path
+                )
+        finally:
+            # Restore original data
+            self.pair_data = orig_pair_data
+            self.all_regions = orig_regions
+            self.anatomical_order = orig_order
+
     def generate_report(self) -> None:
         """Print comprehensive summary of loaded CCA data."""
         print("\n" + "=" * 70)
@@ -987,6 +1166,12 @@ def main():
         )
 
 
+    # Hierarchical figures for cued state
+    cca_viz_cued.create_hierarchical_figures(
+        save_path=str(output_dir / "cued_long_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
+
     # Option 2: Spontaneous state analysis
     print("\n[2] Processing SPONTANEOUS state sessions...")
     cca_viz_spont_long = OxfordCCAVisualizer(
@@ -1013,7 +1198,11 @@ def main():
             save_path=str(output_dir / "spont_long")
         )
 
-
+    # Hierarchical figures for spont_long
+    cca_viz_spont_long.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_long_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
 
     # Option 3: Spontaneous state analysis
     print("\n[2] Processing SPONTANEOUS state sessions...")
@@ -1041,6 +1230,11 @@ def main():
             save_path=str(output_dir / "spont_short")
         )
 
+    # Hierarchical figures for spont_short
+    cca_viz_spont_short.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_short_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
 
     print("\n[2] Processing SPONTANEOUS state sessions...")
     cca_viz_spont = OxfordCCAVisualizer(
@@ -1065,6 +1259,12 @@ def main():
             component_idx=comp_idx,
             save_path=str(output_dir / "spont_long_hit")
         )
+
+    # Hierarchical figures for spont_long_hit
+    cca_viz_spont.create_hierarchical_figures(
+        save_path=str(output_dir / "spont_long_hit_hierarchical"),
+        figsize_temporal=(40, 40)
+    )
 
     print("\n" + "=" * 70)
     print("CCA Visualization Pipeline Complete")
