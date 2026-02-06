@@ -90,6 +90,30 @@ ANATOMICAL_ORDER = [
 # Minimum sessions threshold for cross-session analysis
 MIN_SESSIONS_THRESHOLD = 3
 
+# Hierarchical anatomical grouping: maps individual regions to broader categories
+# Regions that map to themselves are kept separate
+HIERARCHICAL_GROUPING = {
+    'mPFC': 'mPFC',
+    'ORB': 'ORB',
+    'ILM': 'ILM',
+    'OLF': 'OLF',
+    'MOp': 'MOp',
+    'MOs': 'MOs',
+    'STR': 'Striatum',
+    'STRv': 'Striatum',
+    'MD': 'Thalamus',
+    'VALVM': 'Thalamus',
+    'LP': 'Thalamus',
+    'VPMPO': 'Thalamus',
+    'HY': 'Hypothalamus',
+}
+
+# Ordering for hierarchical (aggregated) region display
+HIERARCHICAL_ORDER = [
+    'mPFC', 'ORB', 'ILM', 'OLF', 'MOp', 'MOs',
+    'Striatum', 'Thalamus', 'Hypothalamus'
+]
+
 
 # =============================================================================
 # HELPER FUNCTIONS FOR DATA LOADING
@@ -129,6 +153,19 @@ def sort_pair_by_anatomy(region_i: str, region_j: str) -> Tuple[str, str]:
         return (region_i, region_j)
     else:
         return (region_j, region_i)
+
+
+def get_hierarchical_region(region: str) -> str:
+    """Map an individual region to its hierarchical group name."""
+    return HIERARCHICAL_GROUPING.get(region, region)
+
+
+def get_hierarchical_index(region: str) -> int:
+    """Get hierarchical ordering index for a region."""
+    try:
+        return HIERARCHICAL_ORDER.index(region)
+    except ValueError:
+        return len(HIERARCHICAL_ORDER)
 
 
 # =============================================================================
@@ -827,6 +864,174 @@ class CrossSessionPCAAnalyzer:
 
 
 # =============================================================================
+# HIERARCHICAL AGGREGATION
+# =============================================================================
+
+class HierarchicalRegionResult:
+    """
+    Lightweight container for hierarchical region aggregated data.
+
+    Holds pooled aggregated data from multiple individual regions that have
+    been combined according to HIERARCHICAL_GROUPING. Compatible with
+    CrossTrialTypePCASummaryVisualizer for visualization.
+
+    Attributes:
+        region: Hierarchical region name (e.g., 'Striatum', 'Thalamus')
+        time_bins: Time axis array
+        aggregated_projections: Pooled projection data per trial type
+        aggregated_statistics: Pooled statistical results
+        available_trial_types: List of trial types with data
+        session_projections: Dict for compatibility (session count via len())
+    """
+
+    def __init__(self, region, time_bins, n_components, reference_type='cued_hit_long'):
+        self.region = region
+        self.time_bins = time_bins
+        self.n_components = n_components
+        self.reference_type = reference_type
+        self.aggregated_projections = {}
+        self.aggregated_statistics = {}
+        self.available_trial_types = []
+        self.session_projections = {}  # For compatibility (session count)
+
+
+def build_hierarchical_region_analyzers(
+    cross_session_analyzers: Dict[str, 'CrossSessionPCAAnalyzer'],
+    reference_type: str = 'cued_hit_long',
+    n_components: int = 5,
+    min_sessions: int = MIN_SESSIONS_THRESHOLD
+) -> Dict[str, 'HierarchicalRegionResult']:
+    """
+    Build hierarchical region analyzers by aggregating individual region data.
+
+    Aggregation procedure:
+    1. Map each individual region to its hierarchical group
+    2. For single-region groups (e.g., mPFC -> mPFC): wrap existing data
+    3. For multi-region groups (e.g., STR+STRv -> Striatum): pool session-level
+       data from all contributing regions, then compute summary statistics
+    4. Compute temporal correlation statistics for pooled data
+
+    Parameters:
+        cross_session_analyzers: Dict of region-level CrossSessionPCAAnalyzer objects
+        reference_type: Trial type for PCA weight extraction
+        n_components: Number of PCA components
+        min_sessions: Minimum pooled sessions for inclusion
+
+    Returns:
+        Dict mapping hierarchical region names to HierarchicalRegionResult objects
+    """
+    print("\n" + "=" * 70)
+    print("BUILDING HIERARCHICAL REGION ANALYZERS (PCA)")
+    print("=" * 70)
+
+    # Step 1: Group individual regions by hierarchical category
+    # {hierarchical_name: [region_name, ...]}
+    hierarchical_groups = {}
+
+    for region, analyzer in cross_session_analyzers.items():
+        if not analyzer.aggregated_projections:
+            continue
+
+        h_name = get_hierarchical_region(region)
+
+        if h_name not in hierarchical_groups:
+            hierarchical_groups[h_name] = []
+        hierarchical_groups[h_name].append((region, analyzer))
+        print(f"  {region} -> {h_name}")
+
+    # Step 2: Build hierarchical region results
+    hierarchical_analyzers = {}
+
+    for h_name, contributing_regions in hierarchical_groups.items():
+        print(f"\n  Building hierarchical region: {h_name}")
+        print(f"    Contributing regions: {[r for r, _ in contributing_regions]}")
+
+        # Get time_bins from first contributing region
+        time_bins = contributing_regions[0][1].time_bins
+
+        h_result = HierarchicalRegionResult(
+            region=h_name,
+            time_bins=time_bins,
+            n_components=n_components,
+            reference_type=reference_type
+        )
+
+        # Pool aggregated projections from all contributing regions
+        # {trial_type: {'z_list': [arrays...]}}
+        pooled_by_trial = {}
+
+        for region, analyzer in contributing_regions:
+            for trial_type, agg in analyzer.aggregated_projections.items():
+                if trial_type not in pooled_by_trial:
+                    pooled_by_trial[trial_type] = {'z_list': []}
+
+                z_sessions = agg.get('z_sessions')
+                if z_sessions is None:
+                    continue
+
+                pooled_by_trial[trial_type]['z_list'].append(z_sessions)
+
+        # Compute statistics for pooled data
+        for trial_type, pooled in pooled_by_trial.items():
+            if not pooled['z_list']:
+                continue
+
+            z_all = np.concatenate(pooled['z_list'], axis=0)  # (N_total, T, C)
+            n_total = z_all.shape[0]
+
+            if n_total < min_sessions:
+                print(f"    {trial_type}: {n_total} pooled sessions (< {min_sessions}, skipping)")
+                continue
+
+            h_result.aggregated_projections[trial_type] = {
+                'z_mean': np.mean(z_all, axis=0),
+                'z_std': np.std(z_all, axis=0),
+                'z_sem': np.std(z_all, axis=0) / np.sqrt(n_total),
+                'z_sessions': z_all,
+                'n_sessions': n_total
+            }
+
+            print(f"    {trial_type}: {n_total} pooled sessions")
+
+        h_result.available_trial_types = list(h_result.aggregated_projections.keys())
+
+        # Create a dummy session_projections dict for session count compatibility
+        # Use the total count from the reference type
+        ref_agg = h_result.aggregated_projections.get(reference_type, {})
+        n_total_sessions = ref_agg.get('n_sessions', 0)
+        h_result.session_projections = {f'pooled_{i}': {} for i in range(n_total_sessions)}
+
+        # Pool temporal correlations from contributing regions
+        pooled_corr = {}
+
+        for region, analyzer in contributing_regions:
+            if 'temporal_correlations' not in analyzer.aggregated_statistics:
+                continue
+
+            for comp_key, corr_data in analyzer.aggregated_statistics['temporal_correlations'].items():
+                if comp_key not in pooled_corr:
+                    pooled_corr[comp_key] = {
+                        f'comp_{k+1}': [] for k in range(n_components)
+                    }
+
+                for comp_idx_key, r2_values in corr_data.items():
+                    if comp_idx_key in pooled_corr[comp_key]:
+                        pooled_corr[comp_key][comp_idx_key].extend(r2_values)
+
+        h_result.aggregated_statistics['temporal_correlations'] = pooled_corr
+
+        # Only add if we have enough data
+        if len(h_result.aggregated_projections) >= 2:
+            hierarchical_analyzers[h_name] = h_result
+            print(f"    -> Valid hierarchical region: {h_name}")
+        else:
+            print(f"    -> Insufficient data for: {h_name}")
+
+    print(f"\nTotal hierarchical regions: {len(hierarchical_analyzers)}")
+    return hierarchical_analyzers
+
+
+# =============================================================================
 # UPPER TRIANGLE SUMMARY FIGURE CLASS
 # =============================================================================
 
@@ -848,7 +1053,8 @@ class CrossTrialTypePCASummaryVisualizer:
             base_dir: str,
             reference_type: str = 'cued_hit_long',
             n_components: int = 5,
-            min_sessions: int = MIN_SESSIONS_THRESHOLD
+            min_sessions: int = MIN_SESSIONS_THRESHOLD,
+            use_hierarchical: bool = False
     ):
         """
         Initialize the summary visualizer.
@@ -858,11 +1064,13 @@ class CrossTrialTypePCASummaryVisualizer:
             reference_type: Trial type for PCA weight extraction
             n_components: Number of PCA components to analyze
             min_sessions: Minimum sessions required for a region to be included
+            use_hierarchical: If True, use hierarchical region ordering
         """
         self.base_dir = Path(base_dir)
         self.reference_type = reference_type
         self.n_components = n_components
         self.min_sessions = min_sessions
+        self.use_hierarchical = use_hierarchical
 
         # Cross-session analyzers for each region (independent!)
         self.region_analyzers: Dict[str, CrossSessionPCAAnalyzer] = {}
@@ -872,11 +1080,15 @@ class CrossTrialTypePCASummaryVisualizer:
         self.time_bins: Optional[np.ndarray] = None
 
         # Output directory
-        self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_pca' / 'summary_figures'
+        if use_hierarchical:
+            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_pca' / 'summary_figures_hierarchical'
+        else:
+            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_pca' / 'summary_figures'
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        mode_str = " (HIERARCHICAL)" if use_hierarchical else ""
         print("=" * 70)
-        print("Cross-Trial-Type PCA Summary Visualizer")
+        print(f"Cross-Trial-Type PCA Summary Visualizer{mode_str}")
         print("=" * 70)
         print(f"Reference condition: {reference_type}")
         print(f"Minimum sessions: {min_sessions}")
@@ -902,7 +1114,9 @@ class CrossTrialTypePCASummaryVisualizer:
         print(f"  Added region: {region} ({n_sess} sessions)")
 
     def _get_ordered_regions(self) -> List[str]:
-        """Return available regions in anatomical order."""
+        """Return available regions in the appropriate order."""
+        if self.use_hierarchical:
+            return [r for r in HIERARCHICAL_ORDER if r in self.available_regions]
         return [r for r in ANATOMICAL_ORDER if r in self.available_regions]
 
     def create_projection_matrix_figure(
@@ -1268,6 +1482,10 @@ class CrossTrialTypePCAPipeline:
         # Summary visualizer
         self.summary_visualizer: Optional[CrossTrialTypePCASummaryVisualizer] = None
 
+        # Hierarchical aggregation results
+        self.hierarchical_analyzers: Dict = {}
+        self.hierarchical_summary_visualizer: Optional[CrossTrialTypePCASummaryVisualizer] = None
+
         # Validate config
         required_keys = ['base_dir', 'sessions']
         for key in required_keys:
@@ -1473,6 +1691,75 @@ class CrossTrialTypePCAPipeline:
             )
         else:
             print("Not enough valid regions for summary figures")
+
+        # Run hierarchical aggregation if enabled
+        if self.config.get('use_hierarchical', False):
+            self._run_hierarchical_aggregation()
+
+    def _run_hierarchical_aggregation(self) -> None:
+        """
+        Perform hierarchical aggregation of region-level cross-session results.
+
+        After region-level cross-session aggregation is complete, this method:
+        1. Groups individual regions by hierarchical categories
+        2. Pools session-level data from contributing regions
+        3. Creates a separate summary visualizer with hierarchical ordering
+        4. Generates hierarchical summary figures
+        """
+        print("\n" + "=" * 70)
+        print("HIERARCHICAL PCA AGGREGATION")
+        print("=" * 70)
+
+        min_sessions = self.config.get('min_sessions', MIN_SESSIONS_THRESHOLD)
+
+        # Build hierarchical region analyzers from region-level cross-session data
+        hierarchical_analyzers = build_hierarchical_region_analyzers(
+            self.cross_session_analyzers,
+            reference_type=self.config['reference_type'],
+            n_components=self.config['n_components'],
+            min_sessions=min_sessions
+        )
+
+        if not hierarchical_analyzers:
+            print("No valid hierarchical regions found")
+            return
+
+        # Store for external access
+        self.hierarchical_analyzers = hierarchical_analyzers
+
+        # Create hierarchical summary visualizer
+        self.hierarchical_summary_visualizer = CrossTrialTypePCASummaryVisualizer(
+            base_dir=self.config['base_dir'],
+            reference_type=self.config['reference_type'],
+            n_components=self.config['n_components'],
+            min_sessions=min_sessions,
+            use_hierarchical=True
+        )
+
+        # Add hierarchical region analyzers
+        for h_name, h_result in hierarchical_analyzers.items():
+            self.hierarchical_summary_visualizer.add_region_analyzer(h_result)
+
+        valid_regions = len(hierarchical_analyzers)
+        print(f"\nValid hierarchical regions for summary: {valid_regions}")
+
+        # Create hierarchical summary figures
+        if valid_regions >= 2:
+            print("\nCreating hierarchical summary figures...")
+
+            # Create figures for first 3 components
+            for comp_idx in range(min(3, self.config['n_components'])):
+                self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+                    component_idx=comp_idx,
+                    save_fig=True
+                )
+
+            # R² boxplots
+            self.hierarchical_summary_visualizer.create_r2_boxplot_matrix_figure(
+                save_fig=True
+            )
+        else:
+            print("Not enough valid hierarchical regions for summary figures")
 
 
 # =============================================================================

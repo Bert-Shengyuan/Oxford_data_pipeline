@@ -63,6 +63,8 @@ from cross_trial_type_pca_analysis import (
     TRIAL_TYPES,
     TRIAL_TYPE_COLORS,
     ANATOMICAL_ORDER,
+    HIERARCHICAL_GROUPING,
+    HIERARCHICAL_ORDER,
     MIN_SESSIONS_THRESHOLD
 )
 
@@ -139,7 +141,14 @@ def create_analysis_config() -> dict:
 
         # Minimum number of sessions required for cross-session analysis
         # Applied per-region (not per-pair like CCA)
-        'min_sessions': MIN_SESSIONS_THRESHOLD
+        'min_sessions': MIN_SESSIONS_THRESHOLD,
+
+        # Enable hierarchical aggregation: when True, after region-level analysis,
+        # aggregates regions into broader categories (e.g., STR+STRv -> Striatum,
+        # MD+VALVM+LP+VPMPO -> Thalamus) and produces additional summary figures
+        # with 9 hierarchical regions instead of 13 individual regions.
+        # When False, only the original region-level analysis is performed.
+        'use_hierarchical': True
     }
 
     return config
@@ -159,7 +168,8 @@ def create_single_session_config() -> dict:
         'n_components': 5,
         'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_pca',
         'enable_cross_session': False,
-        'min_sessions': 1
+        'min_sessions': 1,
+        'use_hierarchical': False
     }
 
     return config
