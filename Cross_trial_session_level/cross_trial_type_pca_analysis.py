@@ -1144,7 +1144,7 @@ class CrossTrialTypePCASummaryVisualizer:
             Tuple of (row_figure, column_figure)
         """
         print(f"\nCreating PCA projection matrix figures (Component {component_idx + 1})...")
-        print("  NOTE: Each region aggregated INDEPENDENTLY across all its sessions")
+        #print("  NOTE: Each region aggregated INDEPENDENTLY across all its sessions")
 
         ordered_regions = self._get_ordered_regions()
         n_regions = len(ordered_regions)
@@ -1185,8 +1185,7 @@ class CrossTrialTypePCASummaryVisualizer:
             region_label = "Row Region" if fig_type == 'row' else "Column Region"
             fig.suptitle(
                 f'PCA Component {component_idx + 1} | {region_label} | '
-                f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions\n'
-                f'(Each region aggregated independently across all its sessions)',
+                f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions\n',
                 fontsize=48, fontweight='bold', y=0.995
             )
 

@@ -66,9 +66,9 @@ ANATOMICAL_ORDER = [
 
 # Hierarchical anatomical grouping: maps individual regions to broader categories
 HIERARCHICAL_GROUPING = {
-    'mPFC': 'mPFC',
-    'ORB': 'ORB',
-    'ILM': 'ILM',
+    'mPFC': 'PFC',
+    'ORB': 'PFC',
+    'ILM': 'PFC',
     'OLF': 'OLF',
     'MOp': 'MOp',
     'MOs': 'MOs',
@@ -83,7 +83,7 @@ HIERARCHICAL_GROUPING = {
 
 # Ordering for hierarchical (aggregated) region display
 HIERARCHICAL_ORDER = [
-    'mPFC', 'ORB', 'ILM', 'OLF', 'MOp', 'MOs',
+    'PFC', 'OLF', 'MOp', 'MOs',
     'Striatum', 'Thalamus', 'Hypothalamus'
 ]
 

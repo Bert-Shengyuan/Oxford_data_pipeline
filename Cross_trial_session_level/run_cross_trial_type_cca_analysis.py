@@ -182,7 +182,7 @@ def create_single_session_config() -> dict:
         'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
         'enable_cross_session': False,
         'min_sessions': 1,
-        'use_hierarchical': False
+        'use_hierarchical': True
     }
 
     return config
