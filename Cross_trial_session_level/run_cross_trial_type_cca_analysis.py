@@ -310,14 +310,23 @@ def run_batch_analysis(config: dict) -> CrossTrialTypeCCAPipeline:
     print("=" * 70)
     
     pipeline = CrossTrialTypeCCAPipeline(config)
-    
+
     # Run all session analyses
     results = pipeline.run_all_sessions()
-    
+
+    # Save report of sessions whose spont-long projections are nearly flipped
+    # (Pearson r < -0.5 between cued-hit-long latent and spont-long latent)
+    output_dir = Path(config.get('output_base_dir', '.'))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pipeline.save_flipped_sessions_report(
+        output_dir / 'flipped_sessions_spont_long.txt',
+        flip_threshold=-0.5
+    )
+
     # Run cross-session aggregation if enabled
     if config.get('enable_cross_session', True):
         pipeline.run_cross_session_aggregation()
-    
+
     return pipeline
 
 

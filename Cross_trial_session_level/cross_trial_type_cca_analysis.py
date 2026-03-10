@@ -2699,6 +2699,11 @@ class CrossTrialTypeCCAPipeline:
         self.hierarchical_analyzers: Dict = {}
         self.hierarchical_summary_visualizer: Optional[CrossTrialTypeSummaryVisualizer] = None
 
+        # Records of sessions with nearly flipped spont-long projections
+        # Format: {session_name: [{'pair': (ri, rj), 'component': int, 'region': str,
+        #                           'spont_type': str, 'r': float}, ...]}
+        self.flipped_session_records: Dict[str, List[Dict]] = {}
+
         # Validate config
         required_keys = ['base_dir', 'sessions']
         for key in required_keys:
@@ -2781,6 +2786,10 @@ class CrossTrialTypeCCAPipeline:
 
                 # Compute statistics
                 analyzer.compute_statistics()
+
+                # Detect and record sessions where spont-long projections are
+                # nearly flipped relative to the cued-hit-long CCA latents
+                self._check_and_record_flip(session_name, region_pair, analyzer)
 
                 # Add to cross-session analyzer if enabled
                 if self.config.get('enable_cross_session', True):
@@ -2979,6 +2988,145 @@ class CrossTrialTypeCCAPipeline:
             )
         else:
             print("Not enough valid hierarchical pairs for summary figures")
+
+    # -------------------------------------------------------------------------
+    # FLIP DETECTION METHODS
+    # -------------------------------------------------------------------------
+
+    def _check_and_record_flip(
+            self,
+            session_name: str,
+            region_pair: Tuple[str, str],
+            analyzer: 'CrossTrialTypeCCAAnalyzer',
+            flip_threshold: float = -0.5
+    ) -> None:
+        """
+        Check whether spont-long projections are nearly flipped vs cued-hit-long.
+
+        For each component of each spont trial type, computes the Pearson r
+        between the cued-hit-long and spont projection time courses (already
+        stored in analyzer.statistical_results).  When r < flip_threshold the
+        projection is considered nearly inverted and the event is recorded.
+
+        Parameters:
+            session_name:    Session identifier.
+            region_pair:     (region_i, region_j) pair that was just analysed.
+            analyzer:        Analyzer whose statistical_results are current for
+                             this region pair.
+            flip_threshold:  Pearson r below which a projection is 'flipped'
+                             (default -0.5).
+        """
+        if not analyzer.statistical_results:
+            return
+
+        corrs = analyzer.statistical_results.get('temporal_correlations', {})
+        region_i, region_j = region_pair
+
+        for comp_key, comp_corrs in corrs.items():
+            # Only flag comparisons involving a spont trial type
+            if 'spont' not in comp_key:
+                continue
+
+            spont_type = comp_key.replace(f"{analyzer.reference_type}_vs_", "")
+            r_list_u = comp_corrs.get('region_i', [])
+            r_list_v = comp_corrs.get('region_j', [])
+
+            for comp_idx in range(min(analyzer.n_components, 3)):
+                r_u = r_list_u[comp_idx]['r'] if comp_idx < len(r_list_u) else None
+                r_v = r_list_v[comp_idx]['r'] if comp_idx < len(r_list_v) else None
+
+                if r_u is not None and r_u < flip_threshold:
+                    self.flipped_session_records.setdefault(session_name, []).append({
+                        'pair': (region_i, region_j),
+                        'component': comp_idx + 1,
+                        'region': region_i,
+                        'spont_type': spont_type,
+                        'r': float(r_u)
+                    })
+
+                if r_v is not None and r_v < flip_threshold:
+                    self.flipped_session_records.setdefault(session_name, []).append({
+                        'pair': (region_i, region_j),
+                        'component': comp_idx + 1,
+                        'region': region_j,
+                        'spont_type': spont_type,
+                        'r': float(r_v)
+                    })
+
+    def save_flipped_sessions_report(
+            self,
+            output_path: Path,
+            flip_threshold: float = -0.5
+    ) -> None:
+        """
+        Save a .txt report listing sessions whose spont-long projections are
+        nearly flipped relative to the cued-hit-long CCA latents.
+
+        A session is flagged when at least one (pair, component, region) shows
+        Pearson r < flip_threshold between the cued-hit-long projection and the
+        spont-long projection obtained by applying the cued-hit-long CCA weights.
+
+        Parameters:
+            output_path:    Path for the output .txt file.
+            flip_threshold: r threshold used for detection (for annotation only;
+                            detection was performed using the same value passed
+                            to _check_and_record_flip).
+        """
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        flipped_sessions = sorted(self.flipped_session_records.keys())
+
+        lines = []
+        lines.append("=" * 70)
+        lines.append("SESSIONS WITH NEARLY FLIPPED SPONT-LONG PROJECTIONS")
+        lines.append("=" * 70)
+        lines.append(
+            f"Criterion: Pearson r < {flip_threshold} between the cued-hit-long "
+            f"latent and the spont-long latent projected via the same CCA weights."
+        )
+        lines.append(
+            "(A negative r means the spont trajectory runs roughly opposite to "
+            "the cued-hit-long trajectory in CCA space.)"
+        )
+        lines.append("")
+        lines.append(f"Total sessions analysed : {len(self.config['sessions'])}")
+        lines.append(f"Sessions flagged as flipped: {len(flipped_sessions)}")
+        lines.append("")
+
+        if not flipped_sessions:
+            lines.append("No sessions detected with nearly flipped projections.")
+        else:
+            lines.append("FLIPPED SESSION NAMES:")
+            lines.append("-" * 40)
+            for session in flipped_sessions:
+                lines.append(session)
+            lines.append("")
+            lines.append("DETAILED BREAKDOWN (session | pair | comp | region | spont type | r):")
+            lines.append("-" * 70)
+            for session in flipped_sessions:
+                lines.append(f"\n{session}:")
+                for rec in self.flipped_session_records[session]:
+                    lines.append(
+                        f"  {rec['pair'][0]}-{rec['pair'][1]} | "
+                        f"Comp {rec['component']} | "
+                        f"Region: {rec['region']:6s} | "
+                        f"Spont type: {rec['spont_type']:20s} | "
+                        f"r = {rec['r']:+.3f}"
+                    )
+
+        lines.append("")
+        lines.append("=" * 70)
+
+        content = "\n".join(lines)
+        with open(output_path, 'w') as f:
+            f.write(content)
+
+        print(f"\nFlipped sessions report saved to: {output_path}")
+        if flipped_sessions:
+            print(f"Flipped sessions ({len(flipped_sessions)}): {', '.join(flipped_sessions)}")
+        else:
+            print("No sessions with flipped projections detected.")
 
 
 # =============================================================================
