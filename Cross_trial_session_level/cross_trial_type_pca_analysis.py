@@ -61,16 +61,16 @@ warnings.filterwarnings('ignore')
 # =============================================================================
 
 # Trial type labels and their data directories
-# TRIAL_TYPES = {
-#     'cued_hit_long': 'sessions_cued_hit_long_results',
-#     'spont_hit_long': 'sessions_spont_hit_long_results',
-#     'spont_miss_long': 'sessions_spont_miss_long_results'
-# }
-
 TRIAL_TYPES = {
     'cued_hit_long': 'sessions_cued_hit_long_results',
     'spont_hit_long': 'sessions_spont_hit_long_results',
+    'spont_miss_long': 'sessions_spont_miss_long_results'
 }
+
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     'spont_hit_long': 'sessions_spont_hit_long_results',
+# }
 
 # Colors for visualization (consistent across figures)
 TRIAL_TYPE_COLORS = {
@@ -784,33 +784,34 @@ class CrossSessionPCAAnalyzer:
             for comp_idx in range(n_comp):
                 # For reference trial: find baseline and compute flip decisions
                 if trial_type == self.reference_type:
-                    # Find baseline session (first with positive peak)
-                    baseline_idx = None
-                    for sess_idx in range(n_sess):
-                        z_proj = z_stack_raw[sess_idx, :, comp_idx]
-                        peak_val = z_proj[np.argmax(np.abs(z_proj)[74:150])+ 74]
-                        if peak_val > 0:
-                            baseline_idx = sess_idx
-                            break
 
-                    if baseline_idx is None:
-                        baseline_idx = 0
+                    Z = z_stack_raw[:, :, comp_idx]  # (n_sess, n_time)
+                    C_z = np.corrcoef(Z)  # (n_sess, n_sess)
 
-                    baseline = z_stack_raw[baseline_idx, :, comp_idx]
+                    _, evecs_z = np.linalg.eigh(C_z)
+                    s_z = np.sign(evecs_z[:, -1])  # (n_sess,)
+                    s_z[s_z == 0] = 1  # guard against degenerate zeros
 
-                    # Align all sessions based on correlation with baseline and store decisions
+                    z_stack_aligned[:, :, comp_idx] = s_z[:, np.newaxis] * Z
+
+                    z_epoch_mean = z_stack_aligned[:, :, comp_idx].mean()
+                    if z_epoch_mean < 0:
+                        s_z *= -1
+                        z_stack_aligned[:, :, comp_idx] *= -1
+
+                    z_group_mean = z_stack_aligned[:, :, comp_idx].mean(axis=0)  # (n_time,)
+                    z_epoch_window = z_group_mean[74:124]
+                    z_peak_val = z_epoch_window[np.argmax(np.abs(z_epoch_window))]
+
+                    if z_peak_val < 0:
+                        s_z *= -1
+                        z_stack_aligned[:, :, comp_idx] *= -1
+
                     for sess_idx in range(n_sess):
                         session_name = session_names_ordered[sess_idx]
-                        z_proj = z_stack_raw[sess_idx, :, comp_idx]
-                        correlation = np.corrcoef(baseline, z_proj)[0, 1]
-                        should_flip = correlation < 0
-
-                        # Store flip decision for this session and component
                         if session_name not in reference_flip_decisions:
                             reference_flip_decisions[session_name] = {}
-                        reference_flip_decisions[session_name][comp_idx] = should_flip
-
-                        z_stack_aligned[sess_idx, :, comp_idx] = -z_proj if should_flip else z_proj
+                        reference_flip_decisions[session_name][comp_idx] = bool(s_z[sess_idx] < 0)
                 else:
                     # For other trials: reuse flip decisions from reference trial
                     for sess_idx in range(n_sess):
@@ -1121,9 +1122,12 @@ class CrossTrialTypePCASummaryVisualizer:
 
     def create_projection_matrix_figure(
             self,
-            figsize: Tuple[float, float] = (60, 60),
+            figsize: Tuple[float, float] = (40, 40),
             component_idx: int = 0,
-            save_fig: bool = True
+            save_fig: bool = True,
+            fontsize: int = 20,
+            trial_types: Optional[List[str]] = None,  # <-- NEW
+            fig_label: str = ""  # <-- NEW (used in filename / title)
     ) -> Tuple[plt.Figure, plt.Figure]:
         """
         Create two upper-triangle figures showing PCA projections across trial types.
@@ -1179,12 +1183,15 @@ class CrossTrialTypePCASummaryVisualizer:
                         # Upper triangle: plot cross-trial-type projections
                         display_region = region_i if fig_type == 'row' else region_j
                         self._plot_region_projections(
-                            ax, display_region, component_idx
+                            ax, display_region, component_idx,
+                            fig_type, fontsize,
+                            trial_types=trial_types  # <-- NEW
                         )
 
             region_label = "Row Region" if fig_type == 'row' else "Column Region"
+            label_str = f" | {fig_label}" if fig_label else ""
             fig.suptitle(
-                f'PCA Component {component_idx + 1} | {region_label} | '
+                f'PCA Component  {component_idx + 1} | {region_label}{label_str} | '
                 f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions\n',
                 fontsize=48, fontweight='bold', y=0.995
             )
@@ -1192,7 +1199,12 @@ class CrossTrialTypePCASummaryVisualizer:
             plt.tight_layout(rect=[0, 0.01, 1, 0.99])
 
             if save_fig:
-                save_path = self.output_dir / f"pca_projection_matrix_comp{component_idx + 1}_{fig_type}_region.png"
+                label_suffix = f"_{fig_label.replace(' ', '_')}" if fig_label else ""
+                save_path = (
+                        self.output_dir
+                        / f"PCA_projection_matrix_comp{component_idx + 1}"
+                          f"{label_suffix}_{fig_type}_region.png"
+                )
                 plt.savefig(save_path, dpi=300, bbox_inches='tight')
                 print(f"Saved: {save_path}")
 
@@ -1205,7 +1217,10 @@ class CrossTrialTypePCASummaryVisualizer:
             self,
             ax: plt.Axes,
             region: str,
-            component_idx: int
+            component_idx: int,
+            which_region: str,
+            fontsize: int,
+            trial_types: Optional[List[str]] = None  # <-- NEW
     ) -> None:
         """
         Plot cross-trial-type projections for a single region.
@@ -1236,7 +1251,13 @@ class CrossTrialTypePCASummaryVisualizer:
         time_vec = analyzer.time_bins
         session_count_labels = []
 
-        for trial_type in analyzer.available_trial_types:
+        types_to_plot = (
+            [t for t in trial_types if t in analyzer.available_trial_types]
+            if trial_types is not None
+            else analyzer.available_trial_types
+        )
+
+        for trial_type in types_to_plot:
             if trial_type not in analyzer.aggregated_projections:
                 continue
 
@@ -1278,10 +1299,10 @@ class CrossTrialTypePCASummaryVisualizer:
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
-        ax.set_yticklabels(ax.get_yticks(), fontsize=20)
+        ax.set_yticklabels(ax.get_yticks(), fontsize=fontsize)
         ax.set_ylim([-1.5, 3])
         ax.set_xticks([-1.5, 0, 2, 3])
-        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
+        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=fontsize)
         ax.tick_params(axis='both', which='major', width=2, length=8)
 
         for spine in ax.spines.values():
@@ -1290,7 +1311,7 @@ class CrossTrialTypePCASummaryVisualizer:
         # Add region and session counts annotation
         session_count_text = ', '.join(session_count_labels)
         ax.text(0.02, 0.98, f'{region}\n{session_count_text}', transform=ax.transAxes,
-                fontsize=12, va='top', ha='left')
+                fontsize=14, va='top', ha='left')
 
     def create_r2_boxplot_matrix_figure(
             self,
@@ -1681,7 +1702,17 @@ class CrossTrialTypePCAPipeline:
             for comp_idx in range(min(3, self.config['n_components'])):
                 self.summary_visualizer.create_projection_matrix_figure(
                     component_idx=comp_idx,
-                    save_fig=True
+                    save_fig=True,
+                    fontsize = 20,
+                    trial_types=['cued_hit_long', 'spont_miss_long'],
+                    fig_label='cued_hit_vs_spont_miss'
+                )
+                self.summary_visualizer.create_projection_matrix_figure(
+                    component_idx=comp_idx,
+                    save_fig=True,
+                    fontsize = 20,
+                    trial_types=['cued_hit_long', 'spont_hit_long'],
+                    fig_label='cued_vs_spont_hit'
                 )
 
             # R² boxplots
@@ -1750,9 +1781,18 @@ class CrossTrialTypePCAPipeline:
             for comp_idx in range(min(3, self.config['n_components'])):
                 self.hierarchical_summary_visualizer.create_projection_matrix_figure(
                     component_idx=comp_idx,
-                    save_fig=True
+                    save_fig=True,
+                    fontsize=25,
+                    trial_types=['cued_hit_long', 'spont_hit_long'],
+                    fig_label='cued_vs_spont_hit'
                 )
-
+                self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+                    component_idx=comp_idx,
+                    save_fig=True,
+                    fontsize=25,
+                    trial_types=['cued_hit_long', 'spont_miss_long'],
+                    fig_label='cued_hit_vs_spont_miss'
+                )
             # R² boxplots
             self.hierarchical_summary_visualizer.create_r2_boxplot_matrix_figure(
                 save_fig=True

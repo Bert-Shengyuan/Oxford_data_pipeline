@@ -1068,14 +1068,16 @@ def create_oxford_configuration():
     """Create configuration for Oxford analysis pipeline."""
     config = {
         'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_cued_hit_long_results",
+        #'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_spont_hit_long_results",
         #'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_spont_miss_long_results",
         #'base_results_dir': "/Users/shengyuancai/Downloads/Oxford_dataset/sessions_spont_short_results",
 
 
         'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_cued_long',
-        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_spont_long',
+        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_spont_hit_long',
+        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_spont_miss_long',
         #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/oxford_integrated_analysis_spont_short',
-        'session_name': "yp013_220211",  # yp013_220211  yp014_220212 yp021_220405 yp021_220331
+        'session_name': "yp014_220210",  # yp013_220211  yp014_220212 yp021_220405 yp021_220331
 
         'region_pairs': [
             ('ORB', 'STR'),

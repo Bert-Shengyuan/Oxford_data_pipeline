@@ -1,0 +1,3483 @@
+========================================================================
+PAIRWISE REGION CO-RECORDING RANKING (r = 2)
+========================================================================
+
+1. OLF ∩ ORB   n = 28
+    [cued_hit_long]  28 session(s)
+      yp010_220209
+      yp010_220210
+      yp010_220211
+      yp010_220212
+      yp012_220208
+      yp012_220209
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+2. OLF ∩ STR   n = 28
+    [cued_hit_long]  28 session(s)
+      yp010_220209
+      yp010_220210
+      yp010_220211
+      yp010_220212
+      yp012_220208
+      yp012_220209
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+3. ORB ∩ STR   n = 28
+    [cued_hit_long]  28 session(s)
+      yp010_220209
+      yp010_220210
+      yp010_220211
+      yp010_220212
+      yp012_220208
+      yp012_220209
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp014_220208
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+4. MOp ∩ STR   n = 19
+    [cued_hit_long]  19 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220209
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+5. MOs ∩ STR   n = 18
+    [cued_hit_long]  18 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+6. MOp ∩ OLF   n = 17
+    [cued_hit_long]  17 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+7. MOs ∩ OLF   n = 17
+    [cued_hit_long]  17 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+8. MOp ∩ ORB   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+9. MOs ∩ ORB   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+10. MOp ∩ MOs   n = 12
+    [cued_hit_long]  12 session(s)
+      yp012_220208
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp020_220401
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+11. ORB ∩ mPFC   n = 12
+    [cued_hit_long]  12 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220208
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+12. STR ∩ mPFC   n = 12
+    [cued_hit_long]  12 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220208
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+13. OLF ∩ mPFC   n = 11
+    [cued_hit_long]  11 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+14. LP ∩ STR   n = 10
+    [cued_hit_long]  10 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+15. HY ∩ OLF   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+16. HY ∩ ORB   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+17. HY ∩ STR   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+18. LP ∩ MOs   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+19. LP ∩ OLF   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+20. OLF ∩ VPMPO   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+21. OLF ∩ fiber   n = 9
+    [cued_hit_long]  9 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220402
+      yp021_220331
+      yp021_220403
+
+22. LP ∩ ORB   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+23. LP ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+24. MOs ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+25. ORB ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+26. ORB ∩ fiber   n = 8
+    [cued_hit_long]  8 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+27. STR ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+28. STR ∩ fiber   n = 8
+    [cued_hit_long]  8 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+29. HY ∩ MOs   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+30. LP ∩ MOp   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+31. MOs ∩ fiber   n = 7
+    [cued_hit_long]  7 session(s)
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+32. OLF ∩ VALVM   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+33. STR ∩ VALVM   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+34. HY ∩ LP   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+35. HY ∩ MOp   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+36. HY ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220404
+
+37. MOp ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+38. MOp ∩ VPMPO   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+39. MOp ∩ fiber   n = 6
+    [cued_hit_long]  6 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp021_220331
+      yp021_220403
+
+40. MOs ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+41. MOs ∩ mPFC   n = 6
+    [cued_hit_long]  6 session(s)
+      yp010_220210
+      yp012_220209
+      yp013_220209
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+42. ORB ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220404
+      yp021_220407
+
+43. HY ∩ ILM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220401
+
+44. HY ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220404
+
+45. ILM ∩ STR   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220401
+
+46. LP ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+47. LP ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+48. MOp ∩ mPFC   n = 5
+    [cued_hit_long]  5 session(s)
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp020_220401
+      yp020_220403
+
+49. OLF ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+50. ORB ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+51. STR ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+52. VALVM ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+53. HY ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+54. ILM ∩ OLF   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+55. ILM ∩ ORB   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+56. MOs ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+57. STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+58. VPMPO ∩ fiber   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+      yp021_220403
+
+59. HY ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+60. HY ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+
+61. ILM ∩ MOp   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+62. ILM ∩ MOs   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220404
+      yp020_220407
+      yp021_220401
+
+63. ILM ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+64. LP ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+65. LP ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+66. VALVM ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220403
+
+67. VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+68. HIPP ∩ HY   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+69. HIPP ∩ OLF   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+70. HIPP ∩ ORB   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+71. HIPP ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+72. HIPP ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+73. HY ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+74. ILM ∩ LP   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220405
+      yp021_220401
+
+75. MOp ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+76. OLF ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+77. ORB ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+78. STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+79. STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+80. STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+81. VALVM ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220403
+
+82. VPMPO ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+83. fiber ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220331
+
+84. HIPP ∩ LP   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+85. HIPP ∩ MOp   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+86. HIPP ∩ MOs   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+87. HIPP ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+88. HIPP ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+89. HIPP ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+90. HIPP ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+91. ILM ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+92. ILM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+93. LP ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+94. MOp ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+95. MOs ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+96. STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+97. VALVM ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+98. fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+99. mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+100. HIPP ∩ ILM   n = 0
+    [cued_hit_long]  0 session(s)
+
+101. HIPP ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+102. ILM ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+103. ILM ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+104. ILM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+105. STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+========================================================================
+TRIPLET REGION CO-RECORDING RANKING (r = 3)
+========================================================================
+
+1. OLF ∩ ORB ∩ STR   n = 27
+    [cued_hit_long]  27 session(s)
+      yp010_220209
+      yp010_220210
+      yp010_220211
+      yp010_220212
+      yp012_220208
+      yp012_220209
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+2. MOp ∩ OLF ∩ STR   n = 17
+    [cued_hit_long]  17 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+3. MOs ∩ OLF ∩ STR   n = 17
+    [cued_hit_long]  17 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+4. MOp ∩ OLF ∩ ORB   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+5. MOp ∩ ORB ∩ STR   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220209
+      yp012_220208
+      yp012_220210
+      yp012_220211
+      yp012_220212
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp014_220210
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+6. MOs ∩ OLF ∩ ORB   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+7. MOs ∩ ORB ∩ STR   n = 16
+    [cued_hit_long]  16 session(s)
+      yp010_220210
+      yp012_220208
+      yp012_220209
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+8. MOp ∩ MOs ∩ STR   n = 12
+    [cued_hit_long]  12 session(s)
+      yp012_220208
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp020_220401
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+9. ORB ∩ STR ∩ mPFC   n = 12
+    [cued_hit_long]  12 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220208
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+10. MOp ∩ MOs ∩ OLF   n = 11
+    [cued_hit_long]  11 session(s)
+      yp012_220208
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp020_220401
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+11. OLF ∩ ORB ∩ mPFC   n = 11
+    [cued_hit_long]  11 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+12. OLF ∩ STR ∩ mPFC   n = 11
+    [cued_hit_long]  11 session(s)
+      yp010_220210
+      yp012_220209
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp014_220211
+      yp014_220212
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp021_220405
+
+13. MOp ∩ MOs ∩ ORB   n = 10
+    [cued_hit_long]  10 session(s)
+      yp012_220208
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp020_220401
+      yp020_220407
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+14. HY ∩ OLF ∩ ORB   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+15. LP ∩ MOs ∩ STR   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+16. LP ∩ OLF ∩ STR   n = 9
+    [cued_hit_long]  9 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+17. HY ∩ OLF ∩ STR   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+18. HY ∩ ORB ∩ STR   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+19. LP ∩ MOs ∩ OLF   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+20. LP ∩ MOs ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+21. LP ∩ OLF ∩ ORB   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+22. LP ∩ OLF ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+23. LP ∩ ORB ∩ STR   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+24. LP ∩ STR ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+25. MOs ∩ OLF ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+26. MOs ∩ STR ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+27. OLF ∩ ORB ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+28. OLF ∩ ORB ∩ fiber   n = 8
+    [cued_hit_long]  8 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+29. OLF ∩ STR ∩ VPMPO   n = 8
+    [cued_hit_long]  8 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+30. OLF ∩ STR ∩ fiber   n = 8
+    [cued_hit_long]  8 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+31. HY ∩ MOs ∩ STR   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+32. LP ∩ MOp ∩ MOs   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+33. LP ∩ MOp ∩ STR   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+34. LP ∩ MOs ∩ ORB   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+35. LP ∩ ORB ∩ VPMPO   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+36. MOs ∩ OLF ∩ fiber   n = 7
+    [cued_hit_long]  7 session(s)
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+37. MOs ∩ ORB ∩ VPMPO   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+38. MOs ∩ STR ∩ fiber   n = 7
+    [cued_hit_long]  7 session(s)
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+39. ORB ∩ STR ∩ VPMPO   n = 7
+    [cued_hit_long]  7 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220405
+      yp021_220407
+
+40. ORB ∩ STR ∩ fiber   n = 7
+    [cued_hit_long]  7 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+
+41. HY ∩ LP ∩ STR   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+42. HY ∩ MOp ∩ STR   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+43. HY ∩ MOs ∩ OLF   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+44. HY ∩ MOs ∩ ORB   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220404
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+45. LP ∩ MOp ∩ OLF   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+46. LP ∩ MOp ∩ VPMPO   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+47. MOp ∩ MOs ∩ VPMPO   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+48. MOp ∩ OLF ∩ VPMPO   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+49. MOp ∩ OLF ∩ fiber   n = 6
+    [cued_hit_long]  6 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp021_220331
+      yp021_220403
+
+50. MOp ∩ STR ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+51. MOp ∩ STR ∩ VPMPO   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+52. MOp ∩ STR ∩ fiber   n = 6
+    [cued_hit_long]  6 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp021_220331
+      yp021_220403
+
+53. MOs ∩ OLF ∩ mPFC   n = 6
+    [cued_hit_long]  6 session(s)
+      yp010_220210
+      yp012_220209
+      yp013_220209
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+54. MOs ∩ ORB ∩ fiber   n = 6
+    [cued_hit_long]  6 session(s)
+      yp013_220209
+      yp013_220210
+      yp013_220211
+      yp013_220212
+      yp020_220331
+      yp021_220331
+
+55. MOs ∩ ORB ∩ mPFC   n = 6
+    [cued_hit_long]  6 session(s)
+      yp010_220210
+      yp012_220209
+      yp013_220209
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+56. MOs ∩ STR ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+57. MOs ∩ STR ∩ mPFC   n = 6
+    [cued_hit_long]  6 session(s)
+      yp010_220210
+      yp012_220209
+      yp013_220209
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+58. OLF ∩ ORB ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220404
+      yp021_220407
+
+59. OLF ∩ STR ∩ VALVM   n = 6
+    [cued_hit_long]  6 session(s)
+      yp020_220331
+      yp020_220403
+      yp020_220407
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+60. HY ∩ ILM ∩ STR   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+      yp021_220401
+
+61. HY ∩ LP ∩ MOs   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+62. HY ∩ LP ∩ OLF   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+63. HY ∩ LP ∩ ORB   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+64. HY ∩ MOp ∩ MOs   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220401
+      yp020_220407
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+65. HY ∩ MOp ∩ OLF   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+66. HY ∩ MOp ∩ ORB   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220401
+      yp020_220403
+      yp020_220407
+      yp021_220331
+      yp021_220404
+
+67. HY ∩ OLF ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220404
+
+68. HY ∩ OLF ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220404
+
+69. HY ∩ ORB ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220402
+      yp020_220403
+      yp020_220407
+      yp021_220404
+
+70. HY ∩ ORB ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220402
+      yp021_220331
+      yp021_220404
+
+71. HY ∩ STR ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220404
+
+72. LP ∩ MOp ∩ ORB   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+73. LP ∩ MOs ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+74. LP ∩ OLF ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+75. LP ∩ ORB ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+76. LP ∩ STR ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+77. LP ∩ STR ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+78. MOp ∩ MOs ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220407
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+79. MOp ∩ MOs ∩ fiber   n = 5
+    [cued_hit_long]  5 session(s)
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp021_220331
+      yp021_220403
+
+80. MOp ∩ OLF ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+81. MOp ∩ OLF ∩ mPFC   n = 5
+    [cued_hit_long]  5 session(s)
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp020_220401
+      yp020_220403
+
+82. MOp ∩ ORB ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220402
+      yp021_220404
+      yp021_220407
+
+83. MOp ∩ ORB ∩ fiber   n = 5
+    [cued_hit_long]  5 session(s)
+      yp012_220211
+      yp013_220209
+      yp013_220211
+      yp013_220212
+      yp021_220331
+
+84. MOp ∩ ORB ∩ mPFC   n = 5
+    [cued_hit_long]  5 session(s)
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp020_220401
+      yp020_220403
+
+85. MOp ∩ STR ∩ mPFC   n = 5
+    [cued_hit_long]  5 session(s)
+      yp012_220210
+      yp013_220209
+      yp014_220210
+      yp020_220401
+      yp020_220403
+
+86. MOs ∩ OLF ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220407
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+87. OLF ∩ ORB ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+88. OLF ∩ STR ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+89. OLF ∩ VALVM ∩ VPMPO   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+90. ORB ∩ STR ∩ STRv   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+91. ORB ∩ STR ∩ VALVM   n = 5
+    [cued_hit_long]  5 session(s)
+      yp020_220331
+      yp020_220403
+      yp020_220407
+      yp021_220404
+      yp021_220407
+
+92. HY ∩ ILM ∩ OLF   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+93. HY ∩ ILM ∩ ORB   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+94. HY ∩ LP ∩ MOp   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220401
+      yp021_220404
+
+95. HY ∩ LP ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+96. HY ∩ LP ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220404
+
+97. HY ∩ MOp ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+      yp021_220404
+
+98. HY ∩ MOs ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220407
+      yp021_220401
+      yp021_220404
+
+99. HY ∩ MOs ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220404
+
+100. HY ∩ OLF ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+101. HY ∩ ORB ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+102. HY ∩ STR ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220405
+      yp021_220331
+      yp021_220404
+
+103. HY ∩ STR ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220331
+      yp021_220404
+
+104. ILM ∩ OLF ∩ ORB   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+105. ILM ∩ OLF ∩ STR   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+106. ILM ∩ ORB ∩ STR   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220404
+      yp020_220405
+      yp020_220407
+
+107. LP ∩ MOp ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp021_220401
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+108. LP ∩ MOs ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+109. LP ∩ OLF ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+110. LP ∩ STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+111. LP ∩ VALVM ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+112. MOp ∩ ORB ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220404
+      yp021_220407
+
+113. MOs ∩ OLF ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+114. MOs ∩ ORB ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+115. MOs ∩ ORB ∩ VALVM   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220407
+      yp021_220404
+      yp021_220407
+
+116. MOs ∩ STR ∩ STRv   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+117. MOs ∩ STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+118. MOs ∩ VALVM ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+119. OLF ∩ STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+120. OLF ∩ VPMPO ∩ fiber   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+      yp021_220403
+
+121. ORB ∩ STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+122. ORB ∩ VALVM ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220404
+      yp021_220407
+
+123. STR ∩ STRv ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+      yp021_220405
+
+124. STR ∩ VALVM ∩ VPMPO   n = 4
+    [cued_hit_long]  4 session(s)
+      yp020_220331
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+125. HY ∩ ILM ∩ MOp   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+126. HY ∩ ILM ∩ MOs   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220404
+      yp020_220407
+      yp021_220401
+
+127. HY ∩ ILM ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+128. HY ∩ LP ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220401
+      yp021_220404
+
+129. HY ∩ MOp ∩ VPMPO   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220401
+      yp021_220331
+      yp021_220404
+
+130. HY ∩ MOs ∩ STRv   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+
+131. HY ∩ OLF ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+132. HY ∩ OLF ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+
+133. HY ∩ ORB ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+134. HY ∩ ORB ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+
+135. HY ∩ STR ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp020_220403
+
+136. HY ∩ STRv ∩ VPMPO   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220404
+
+137. HY ∩ VALVM ∩ VPMPO   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220404
+
+138. HY ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+139. ILM ∩ MOp ∩ STR   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+140. ILM ∩ MOp ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+141. ILM ∩ MOs ∩ STR   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220404
+      yp020_220407
+      yp021_220401
+
+142. ILM ∩ STR ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220403
+      yp020_220407
+      yp021_220401
+
+143. LP ∩ MOs ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+144. LP ∩ MOs ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+145. LP ∩ OLF ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+146. LP ∩ OLF ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+147. LP ∩ ORB ∩ VALVM   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220404
+      yp021_220407
+
+148. LP ∩ ORB ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+149. LP ∩ STR ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+150. LP ∩ STR ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+151. LP ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+152. LP ∩ VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+153. MOp ∩ VALVM ∩ VPMPO   n = 3
+    [cued_hit_long]  3 session(s)
+      yp021_220403
+      yp021_220404
+      yp021_220407
+
+154. MOs ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+155. MOs ∩ VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+156. OLF ∩ VALVM ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220403
+
+157. OLF ∩ VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+158. ORB ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220331
+
+159. ORB ∩ VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+160. STR ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp021_220331
+      yp021_220403
+
+161. STR ∩ VPMPO ∩ mPFC   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220401
+      yp021_220405
+
+162. VALVM ∩ VPMPO ∩ fiber   n = 3
+    [cued_hit_long]  3 session(s)
+      yp020_220331
+      yp020_220402
+      yp021_220403
+
+163. HIPP ∩ HY ∩ OLF   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+164. HIPP ∩ HY ∩ ORB   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+165. HIPP ∩ HY ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+166. HIPP ∩ HY ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+167. HIPP ∩ OLF ∩ ORB   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+168. HIPP ∩ OLF ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+169. HIPP ∩ OLF ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+170. HIPP ∩ ORB ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+171. HIPP ∩ ORB ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+172. HIPP ∩ VPMPO ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+173. HY ∩ ILM ∩ LP   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220405
+      yp021_220401
+
+174. HY ∩ LP ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+175. HY ∩ LP ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220401
+
+176. HY ∩ MOp ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+177. HY ∩ MOp ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220403
+
+178. HY ∩ MOs ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+179. HY ∩ MOs ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220401
+
+180. HY ∩ OLF ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+181. HY ∩ ORB ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+182. HY ∩ STR ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+183. HY ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+184. HY ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+185. HY ∩ VALVM ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220402
+
+186. HY ∩ VALVM ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220403
+
+187. HY ∩ VPMPO ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220401
+
+188. HY ∩ VPMPO ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+189. ILM ∩ LP ∩ STR   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220405
+      yp021_220401
+
+190. ILM ∩ MOp ∩ MOs   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220407
+      yp021_220401
+
+191. ILM ∩ MOp ∩ OLF   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220403
+      yp020_220407
+
+192. ILM ∩ MOp ∩ ORB   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220403
+      yp020_220407
+
+193. ILM ∩ MOs ∩ OLF   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220404
+      yp020_220407
+
+194. ILM ∩ MOs ∩ ORB   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220404
+      yp020_220407
+
+195. ILM ∩ MOs ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220407
+      yp021_220401
+
+196. ILM ∩ OLF ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220403
+      yp020_220407
+
+197. ILM ∩ ORB ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220403
+      yp020_220407
+
+198. LP ∩ MOp ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+199. LP ∩ MOp ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220403
+
+200. LP ∩ ORB ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+201. LP ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+202. LP ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+203. LP ∩ STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+204. LP ∩ VALVM ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220403
+
+205. MOp ∩ MOs ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+206. MOp ∩ MOs ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220401
+
+207. MOp ∩ OLF ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+208. MOp ∩ ORB ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+209. MOp ∩ STR ∩ STRv   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+210. MOp ∩ STRv ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220404
+
+211. MOp ∩ VPMPO ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp021_220331
+      yp021_220403
+
+212. MOs ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+213. MOs ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+214. MOs ∩ STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+215. MOs ∩ VALVM ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220403
+
+216. MOs ∩ fiber ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220331
+
+217. OLF ∩ ORB ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+218. OLF ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+219. OLF ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+220. OLF ∩ STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+221. OLF ∩ VALVM ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220403
+
+222. OLF ∩ VPMPO ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+223. OLF ∩ fiber ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220331
+
+224. ORB ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+225. ORB ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+226. ORB ∩ STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+227. ORB ∩ VALVM ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220402
+
+228. ORB ∩ VALVM ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220403
+
+229. ORB ∩ VPMPO ∩ other   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220401
+      yp020_220402
+
+230. ORB ∩ fiber ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220331
+
+231. STR ∩ STRv ∩ VALVM   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+232. STR ∩ STRv ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+233. STR ∩ STRv ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+234. STR ∩ VALVM ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220403
+
+235. STR ∩ VALVM ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp020_220403
+
+236. STR ∩ fiber ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp013_220209
+      yp020_220331
+
+237. STRv ∩ VALVM ∩ VPMPO   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220404
+
+238. STRv ∩ VPMPO ∩ fiber   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220331
+
+239. STRv ∩ VPMPO ∩ mPFC   n = 2
+    [cued_hit_long]  2 session(s)
+      yp020_220331
+      yp021_220405
+
+240. HIPP ∩ HY ∩ LP   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+241. HIPP ∩ HY ∩ MOp   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+242. HIPP ∩ HY ∩ MOs   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+243. HIPP ∩ HY ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+244. HIPP ∩ HY ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+245. HIPP ∩ HY ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+246. HIPP ∩ HY ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+247. HIPP ∩ LP ∩ MOp   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+248. HIPP ∩ LP ∩ MOs   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+249. HIPP ∩ LP ∩ OLF   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+250. HIPP ∩ LP ∩ ORB   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+251. HIPP ∩ LP ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+252. HIPP ∩ LP ∩ VPMPO   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+253. HIPP ∩ LP ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+254. HIPP ∩ LP ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+255. HIPP ∩ MOp ∩ MOs   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+256. HIPP ∩ MOp ∩ OLF   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+257. HIPP ∩ MOp ∩ ORB   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+258. HIPP ∩ MOp ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+259. HIPP ∩ MOp ∩ VPMPO   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+260. HIPP ∩ MOp ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+261. HIPP ∩ MOp ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+262. HIPP ∩ MOs ∩ OLF   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+263. HIPP ∩ MOs ∩ ORB   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+264. HIPP ∩ MOs ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+265. HIPP ∩ MOs ∩ VPMPO   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+266. HIPP ∩ MOs ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+267. HIPP ∩ MOs ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+268. HIPP ∩ OLF ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+269. HIPP ∩ OLF ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+270. HIPP ∩ OLF ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+271. HIPP ∩ OLF ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+272. HIPP ∩ ORB ∩ STR   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+273. HIPP ∩ ORB ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+274. HIPP ∩ ORB ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+275. HIPP ∩ ORB ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+276. HIPP ∩ STR ∩ VPMPO   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+277. HIPP ∩ STR ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+278. HIPP ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+279. HIPP ∩ VALVM ∩ VPMPO   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+280. HIPP ∩ VALVM ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+281. HIPP ∩ VALVM ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+282. HIPP ∩ VPMPO ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+283. HIPP ∩ VPMPO ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+284. HIPP ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+285. HIPP ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+286. HY ∩ ILM ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+287. HY ∩ ILM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+288. HY ∩ LP ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+289. HY ∩ MOp ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220331
+
+290. HY ∩ MOp ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+291. HY ∩ MOs ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+292. HY ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+293. HY ∩ STRv ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+294. HY ∩ VALVM ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+295. HY ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+296. HY ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+297. HY ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+298. ILM ∩ LP ∩ MOp   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220401
+
+299. ILM ∩ LP ∩ MOs   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220401
+
+300. ILM ∩ LP ∩ OLF   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+301. ILM ∩ LP ∩ ORB   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+302. ILM ∩ LP ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+303. ILM ∩ LP ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220401
+
+304. ILM ∩ MOp ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+305. ILM ∩ OLF ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+306. ILM ∩ OLF ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+307. ILM ∩ ORB ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+308. ILM ∩ ORB ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+309. ILM ∩ STR ∩ STRv   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220405
+
+310. ILM ∩ STR ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+311. ILM ∩ VALVM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+312. LP ∩ MOp ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+313. LP ∩ MOp ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+314. LP ∩ MOs ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+315. LP ∩ OLF ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+316. LP ∩ ORB ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+317. LP ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+318. LP ∩ VALVM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+319. LP ∩ VPMPO ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+320. LP ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+321. LP ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+322. MOp ∩ MOs ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+323. MOp ∩ OLF ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+324. MOp ∩ ORB ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+325. MOp ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+326. MOp ∩ STRv ∩ VALVM   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220404
+
+327. MOp ∩ STRv ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220331
+
+328. MOp ∩ VALVM ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp021_220403
+
+329. MOp ∩ VALVM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220403
+
+330. MOp ∩ VPMPO ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+331. MOp ∩ VPMPO ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+332. MOp ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp013_220209
+
+333. MOp ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+334. MOs ∩ OLF ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+335. MOs ∩ ORB ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+336. MOs ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+337. MOs ∩ VALVM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+338. MOs ∩ VPMPO ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+339. MOs ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+340. OLF ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+341. OLF ∩ VALVM ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+342. OLF ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+343. OLF ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+344. ORB ∩ STR ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+345. ORB ∩ VALVM ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+346. ORB ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+347. ORB ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+348. STR ∩ VPMPO ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+349. STR ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+350. STRv ∩ VALVM ∩ fiber   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+351. STRv ∩ VALVM ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+352. STRv ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+353. VALVM ∩ VPMPO ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+354. VALVM ∩ VPMPO ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+355. VALVM ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+356. VALVM ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+357. VPMPO ∩ fiber ∩ mPFC   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220331
+
+358. VPMPO ∩ fiber ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220402
+
+359. VPMPO ∩ mPFC ∩ other   n = 1
+    [cued_hit_long]  1 session(s)
+      yp020_220401
+
+360. HIPP ∩ HY ∩ ILM   n = 0
+    [cued_hit_long]  0 session(s)
+
+361. HIPP ∩ HY ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+362. HIPP ∩ ILM ∩ LP   n = 0
+    [cued_hit_long]  0 session(s)
+
+363. HIPP ∩ ILM ∩ MOp   n = 0
+    [cued_hit_long]  0 session(s)
+
+364. HIPP ∩ ILM ∩ MOs   n = 0
+    [cued_hit_long]  0 session(s)
+
+365. HIPP ∩ ILM ∩ OLF   n = 0
+    [cued_hit_long]  0 session(s)
+
+366. HIPP ∩ ILM ∩ ORB   n = 0
+    [cued_hit_long]  0 session(s)
+
+367. HIPP ∩ ILM ∩ STR   n = 0
+    [cued_hit_long]  0 session(s)
+
+368. HIPP ∩ ILM ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+369. HIPP ∩ ILM ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+370. HIPP ∩ ILM ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+371. HIPP ∩ ILM ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+372. HIPP ∩ ILM ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+373. HIPP ∩ ILM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+374. HIPP ∩ LP ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+375. HIPP ∩ LP ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+376. HIPP ∩ LP ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+377. HIPP ∩ MOp ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+378. HIPP ∩ MOp ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+379. HIPP ∩ MOp ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+380. HIPP ∩ MOs ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+381. HIPP ∩ MOs ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+382. HIPP ∩ MOs ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+383. HIPP ∩ OLF ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+384. HIPP ∩ ORB ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+385. HIPP ∩ STR ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+386. HIPP ∩ STR ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+387. HIPP ∩ STR ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+388. HIPP ∩ STRv ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+389. HIPP ∩ STRv ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+390. HIPP ∩ STRv ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+391. HIPP ∩ STRv ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+392. HIPP ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+393. HIPP ∩ VALVM ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+394. HIPP ∩ fiber ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+395. HY ∩ ILM ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+396. HY ∩ ILM ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+397. HY ∩ ILM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+398. HY ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+399. ILM ∩ LP ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+400. ILM ∩ LP ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+401. ILM ∩ LP ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+402. ILM ∩ LP ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+403. ILM ∩ MOp ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+404. ILM ∩ MOp ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+405. ILM ∩ MOp ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+406. ILM ∩ MOp ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+407. ILM ∩ MOs ∩ STRv   n = 0
+    [cued_hit_long]  0 session(s)
+
+408. ILM ∩ MOs ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+409. ILM ∩ MOs ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+410. ILM ∩ MOs ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+411. ILM ∩ MOs ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+412. ILM ∩ OLF ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+413. ILM ∩ OLF ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+414. ILM ∩ OLF ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+415. ILM ∩ ORB ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+416. ILM ∩ ORB ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+417. ILM ∩ ORB ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+418. ILM ∩ STR ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+419. ILM ∩ STR ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+420. ILM ∩ STR ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+421. ILM ∩ STRv ∩ VALVM   n = 0
+    [cued_hit_long]  0 session(s)
+
+422. ILM ∩ STRv ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+423. ILM ∩ STRv ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+424. ILM ∩ STRv ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+425. ILM ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+426. ILM ∩ VALVM ∩ VPMPO   n = 0
+    [cued_hit_long]  0 session(s)
+
+427. ILM ∩ VALVM ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+428. ILM ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+429. ILM ∩ VPMPO ∩ fiber   n = 0
+    [cued_hit_long]  0 session(s)
+
+430. ILM ∩ VPMPO ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+431. ILM ∩ VPMPO ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+432. ILM ∩ fiber ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+433. ILM ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+434. ILM ∩ mPFC ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+435. LP ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+436. LP ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+437. LP ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+438. MOp ∩ STRv ∩ mPFC   n = 0
+    [cued_hit_long]  0 session(s)
+
+439. MOp ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+440. MOp ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+441. MOp ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+442. MOs ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+443. MOs ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+444. MOs ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+445. OLF ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+446. ORB ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+447. STR ∩ STRv ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+448. STR ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+449. STR ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+450. STRv ∩ VALVM ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+451. STRv ∩ VPMPO ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+452. STRv ∩ fiber ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+453. STRv ∩ mPFC ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+454. VALVM ∩ mPFC ∩ other   n = 0
+    [cued_hit_long]  0 session(s)
+
+455. fiber ∩ mPFC ∩ other   n = 0
+    [cued_hit_long]  0 session(s)

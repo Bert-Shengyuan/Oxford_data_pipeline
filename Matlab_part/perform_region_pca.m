@@ -60,8 +60,10 @@ function region_pca = perform_region_pca(spike_data, config)
         spike_data_permuted = permute(spike_data, [2, 3, 1]);
         
         % Apply trial shuffling - CCA line 131
-        spike_data_shuffled = spike_data_permuted(:, :, shuffled_trials);
-        
+        % spike_data_shuffled = spike_data_permuted(:, :, shuffled_trials);
+        spike_data_shuffled = spike_data_permuted;
+
+
         % Reshape to (neurons × trial*timepoints) - CCA line 133
         X = reshape(spike_data_shuffled, n_neurons, n_trials * n_timepoints);
         

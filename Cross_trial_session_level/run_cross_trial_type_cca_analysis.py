@@ -64,6 +64,9 @@ from cross_trial_type_cca_analysis import (
 )
 
 
+KERNEL = 'pcca'
+Reference = 'cued_hit_long' #cued_hit_long spont_miss_long
+
 def create_analysis_config() -> dict:
     """
     Create configuration for cross-trial-type CCA analysis.
@@ -131,7 +134,7 @@ def create_analysis_config() -> dict:
         #     'yp012_220210',
         # ],
         # Reference trial type - CCA weights are extracted from this condition
-        'reference_type': 'cued_hit_long',
+        'reference_type': Reference,
         
         # Number of CCA components to analyze
         'n_components': 3,
@@ -141,8 +144,9 @@ def create_analysis_config() -> dict:
         'region_pairs': None,  # Auto-detect all available pairs
         
         # Output directory (will be created if doesn't exist)
-        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
-        
+        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
+        'output_base_dir': f'/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_{KERNEL}_{Reference}',
+        #'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_tkcca',
         # Enable cross-session aggregation for pairs with sufficient sessions
         'enable_cross_session': True,
 
@@ -179,7 +183,7 @@ def create_single_session_config() -> dict:
             ('ORB', 'STR'),
             ('MOp', 'MOs'),
         ],
-        'output_base_dir': '/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_cca',
+        'output_base_dir': f'/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/cross_trial_type_{KERNEL}',
         'enable_cross_session': False,
         'min_sessions': 1,
         'use_hierarchical': True
@@ -329,7 +333,7 @@ def run_batch_analysis(config: dict) -> CrossTrialTypeCCAPipeline:
 
     return pipeline
 
-
+5
 def create_aggregate_summary_figure(
     pipeline: CrossTrialTypeCCAPipeline,
     output_dir: Path

@@ -62,10 +62,14 @@ analysis_config.n_components = 10;               % Maximum canonical components
 analysis_config.cv_folds = 10;                  % Cross-validation folds
 analysis_config.significance_threshold = 90;   % Percentile threshold
 
-analysis_config.trial_type = 'spont hit long'; %spont short
+analysis_config.trial_type = 'spont miss long'; % cued hit long  spont short spont miss long
 trial_type_folder = strrep(analysis_config.trial_type, ' ', '_');
-analysis_config.data_folder = sprintf('sessions_%s_results', trial_type_folder);
 
+
+%pcca
+analysis_config.data_folder = sprintf('pcca_sessions_%s_results', trial_type_folder);
+% %tkcca
+% analysais_config.data_folder = sprintf('tkcca_sessions_%s_results', trial_type_folder);
 
 
 fprintf('Configuration:\n');
@@ -193,6 +197,10 @@ session_list = {
 %     {'yp022', '220405'}, 
 %     {'yp022', '220407'}
 % };
+
+% session_list = { 
+%     {'yp021', '220331'}
+% }
 
 fprintf('\nSession queue:\n');
 for i = 1:length(session_list)

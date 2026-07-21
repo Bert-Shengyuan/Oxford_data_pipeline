@@ -61,12 +61,17 @@ except ImportError:
 # CONFIGURATION CONSTANTS
 # =============================================================================
 
-# Trial type labels and their data directories
+#Trial type labels and their data directories
 TRIAL_TYPES = {
     'cued_hit_long': 'sessions_cued_hit_long_results',
     'spont_hit_long': 'sessions_spont_hit_long_results',
     'spont_miss_long': 'sessions_spont_miss_long_results'
 }
+
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     'spont_hit_long': 'sessions_spont_hit_long_results',
+# }
 
 # Colors for visualization (consistent across figures)
 TRIAL_TYPE_COLORS = {
@@ -197,6 +202,9 @@ class CrossTrialTypeCCAAnalyzer:
 
         # Time axis
         self.time_bins: Optional[np.ndarray] = None
+
+        # Sign flip decisions recorded by _align_projection_signs
+        self.sign_flip_decisions: Dict = {}
 
         # Output directory
         self.output_dir = Path(base_dir) / 'Paper_output' / 'cross_trial_type_cca' / session_name
@@ -359,7 +367,7 @@ class CrossTrialTypeCCAAnalyzer:
 
                 trial_neural_data[region_name] = spike_data
                 n_trials, n_neurons, n_time = spike_data.shape
-                print(f"  {trial_type} - {region_name}: {n_trials} trials × {n_neurons} neurons × {n_time} time")
+                print(f"  {trial_type} - {region_name}: {n_trials} trials x {n_neurons} neurons x {n_time} time")
 
             if len(trial_neural_data) == 2:
                 self.neural_data[trial_type] = trial_neural_data
@@ -443,12 +451,12 @@ class CrossTrialTypeCCAAnalyzer:
         print(f"  Region {region_i}: A matrix shape {A_matrix.shape}")
         print(f"  Region {region_j}: B matrix shape {B_matrix.shape}")
 
-        # Extract cross-validated R² values for reference
+        # Extract cross-validated R2 values for reference
         if 'cv_results' in pair_result:
             cv_results = pair_result['cv_results']
             mean_cv_R2 = cv_results.get('mean_cv_R2', [])
             if len(mean_cv_R2) > 0:
-                print(f"  Reference CV-R²: {mean_cv_R2[:self.n_components]}")
+                print(f"  Reference CV-R2: {mean_cv_R2[:self.n_components]}")
 
         return True
 
@@ -494,17 +502,15 @@ class CrossTrialTypeCCAAnalyzer:
             X_i = neural[region_i]  # shape: (n_trials, n_neurons, n_time)
             X_j = neural[region_j]
 
-
-            X_i_mean_test = np.mean(X_i, axis=0).T # (n_time, n_neurons)
+            X_i_mean_test = np.mean(X_i, axis=0).T  # (n_time, n_neurons)
             X_j_mean_test = np.mean(X_j, axis=0).T
-
 
             n_trials, n_neurons, n_timepoints = X_i.shape
 
             region_i_sampled_p = np.transpose(X_i, (1, 2, 0))
             region_j_sampled_p = np.transpose(X_j, (1, 2, 0))
 
-            # Reshape and transpose: (neurons, timepoints, trials) → (trials×timepoints, neurons)
+            # Reshape and transpose: (neurons, timepoints, trials) -> (trials x timepoints, neurons)
             X = region_i_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
             Y = region_j_sampled_p.reshape(n_neurons, n_trials * n_timepoints).T
 
@@ -513,43 +519,17 @@ class CrossTrialTypeCCAAnalyzer:
             X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
             X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
 
-
-
-            # Z-score normalize across time
-            # X_i_norm = zscore(X_i_mean, axis=0, nan_policy='omit')
-            # X_j_norm = zscore(X_j_mean, axis=0, nan_policy='omit')
-            # X_i_norm = np.nan_to_num(X_i_norm, nan=0.0)
-            # X_j_norm = np.nan_to_num(X_j_norm, nan=0.0)
-
-
             # Project onto CCA subspace: (n_time, n_components)
             u = (X_i_norm @ A[:, :self.n_components]).T
             v = (X_j_norm @ B[:, :self.n_components]).T
             u_trials_p = u.reshape(self.n_components, n_timepoints, n_trials)
             v_trials_p = v.reshape(self.n_components, n_timepoints, n_trials)
 
-            # # Compute trial-averaged activity: (n_time, n_neurons)
-            u_final = np.mean(u_trials_p,axis=2).T
-            v_final = np.mean(v_trials_p,axis=2).T
+            u_final = np.mean(u_trials_p, axis=2).T
+            v_final = np.mean(v_trials_p, axis=2).T
 
             u_trials = np.transpose(u_trials_p, (2, 1, 0))
             v_trials = np.transpose(v_trials_p, (2, 1, 0))
-
-            # Also compute trial-level projections for statistics
-            # n_trials = X_i.shape[0]
-            # u_trials = np.zeros((n_trials, X_i.shape[2], self.n_components))
-            # v_trials = np.zeros((n_trials, X_j.shape[2], self.n_components))
-            # for trial_idx in range(n_trials):
-            #     X_i_trial = X_i[trial_idx, :, :].T  # (n_time, n_neurons)
-            #     X_j_trial = X_j[trial_idx, :, :].T
-            #
-            #     X_i_trial_norm = zscore(X_i_trial, axis=0, nan_policy='omit')
-            #     X_j_trial_norm = zscore(X_j_trial, axis=0, nan_policy='omit')
-            #     X_i_trial_norm = np.nan_to_num(X_i_trial_norm, nan=0.0)
-            #     X_j_trial_norm = np.nan_to_num(X_j_trial_norm, nan=0.0)
-            #
-            #     u_trials[trial_idx] = X_i_trial_norm @ A[:, :self.n_components]
-            #     v_trials[trial_idx] = X_j_trial_norm @ B[:, :self.n_components]
 
             # Store projections
             self.projections[trial_type] = {
@@ -566,7 +546,168 @@ class CrossTrialTypeCCAAnalyzer:
 
             print(f"  {trial_type}: {n_trials} trials projected")
 
+        # Align canonical variate signs across trial types before returning
+        print("\n  Aligning canonical variate signs across trial types...")
+        self._align_projection_signs()
+
         return len(self.projections) >= 2
+
+    # =========================================================================
+    # SIGN ALIGNMENT ACROSS TRIAL TYPES
+    # =========================================================================
+
+    def _align_projection_signs(self) -> Dict:
+        """
+        Align canonical variate signs across trial types via Z2 spectral
+        synchronisation — the direct analogue of _align_signs_spectral used
+        in the cross-session pipeline, adapted to operate over trial-type
+        indices rather than session indices.
+
+        Algorithm
+        ---------
+        For each CCA component k:
+
+        1. Build pairwise Pearson-correlation matrices.
+           Stack the mean time-courses into U of shape (C, T) and compute
+           C_u = corrcoef(U) in R^{C x C}. Same for V.
+
+        2. Z2 synchronisation via leading eigenvector.
+           s = sign(q_max), where q_max is the leading eigenvector of C
+           (last column returned by np.linalg.eigh).
+
+        3. Apply per-trial-type signs.
+
+        4. Anchor global orientation to the reference condition.
+           The epoch-mean of the reference trial type in [0, 1.5s] must be
+           positive.
+
+        5. Fine correction via signed peak.
+           The value at the time of maximum absolute deviation of the
+           reference epoch must be positive.
+
+        6. Write back aligned means and propagate flips to per-trial data.
+           STD and SEM are sign-invariant and are left unchanged.
+
+        Returns
+        -------
+        flip_decisions : dict
+            {trial_type -> {comp_idx -> {'u_flip': bool, 'v_flip': bool}}}
+        """
+        trial_types = [tt for tt in self.available_trial_types
+                       if tt in self.projections]
+        n_comp = self.n_components
+
+        # Resolve task-epoch bin indices from the continuous time axis
+        if self.time_bins is not None:
+            t_start = int(np.searchsorted(self.time_bins, 0.0))
+            t_end   = int(np.searchsorted(self.time_bins, 1.5))
+        else:
+            t_start, t_end = 75, 151  # fallback for 226-bin default axis
+
+        flip_decisions: Dict[str, Dict] = {
+            tt: {k: {'u_flip': False, 'v_flip': False} for k in range(n_comp)}
+            for tt in trial_types
+        }
+
+        # Stack mean time-courses: (n_types, n_time, n_components)
+        u_stack = np.stack(
+            [self.projections[tt]['u_mean'] for tt in trial_types], axis=0
+        )
+        v_stack = np.stack(
+            [self.projections[tt]['v_mean'] for tt in trial_types], axis=0
+        )
+
+        ref_idx = trial_types.index(self.reference_type)
+
+        for comp_idx in range(n_comp):
+
+            # ---------------------------------------------------------------- #
+            # Step 1  Build pairwise Pearson-correlation matrices               #
+            # ---------------------------------------------------------------- #
+            U = u_stack[:, :, comp_idx]   # (n_types, n_time)
+            V = v_stack[:, :, comp_idx]
+
+            C_u = np.corrcoef(U)
+            C_v = np.corrcoef(V)
+
+            # ---------------------------------------------------------------- #
+            # Step 2  Z2 synchronisation — leading eigenvector                  #
+            #         np.linalg.eigh returns eigenvalues in ascending order;    #
+            #         the last column is therefore the leading eigenvector.     #
+            # ---------------------------------------------------------------- #
+            _, evecs_u = np.linalg.eigh(C_u)
+            s_u = np.sign(evecs_u[:, -1])
+
+            _, evecs_v = np.linalg.eigh(C_v)
+            s_v = np.sign(evecs_v[:, -1])
+
+            # Guard: eigh can return 0.0 for degenerate entries (very rare)
+            s_u[s_u == 0] = 1
+            s_v[s_v == 0] = 1
+
+            # ---------------------------------------------------------------- #
+            # Step 3  Apply per-trial-type signs                                #
+            # ---------------------------------------------------------------- #
+            u_stack[:, :, comp_idx] = s_u[:, np.newaxis] * U
+            v_stack[:, :, comp_idx] = s_v[:, np.newaxis] * V
+
+            # ---------------------------------------------------------------- #
+            # Step 4  Global orientation — epoch mean of reference must be +   #
+            # ---------------------------------------------------------------- #
+            u_ref_mean = u_stack[ref_idx, t_start:t_end, comp_idx].mean()
+            v_ref_mean = v_stack[ref_idx, t_start:t_end, comp_idx].mean()
+
+            if u_ref_mean < 0:
+                s_u *= -1
+                u_stack[:, :, comp_idx] *= -1
+
+            if v_ref_mean < 0:
+                s_v *= -1
+                v_stack[:, :, comp_idx] *= -1
+
+            # ---------------------------------------------------------------- #
+            # Step 5  Fine correction — signed peak of reference epoch must +  #
+            # ---------------------------------------------------------------- #
+            u_ref_epoch = u_stack[ref_idx, t_start:t_end, comp_idx]
+            v_ref_epoch = v_stack[ref_idx, t_start:t_end, comp_idx]
+
+            u_peak_val = u_ref_epoch[np.argmax(np.abs(u_ref_epoch))]
+            v_peak_val = v_ref_epoch[np.argmax(np.abs(v_ref_epoch))]
+
+            if u_peak_val < 0:
+                s_u *= -1
+                u_stack[:, :, comp_idx] *= -1
+
+            if v_peak_val < 0:
+                s_v *= -1
+                v_stack[:, :, comp_idx] *= -1
+
+            # ---------------------------------------------------------------- #
+            # Step 6  Record net flip decisions                                 #
+            # ---------------------------------------------------------------- #
+            for tt_idx, tt in enumerate(trial_types):
+                flip_decisions[tt][comp_idx] = {
+                    'u_flip': bool(s_u[tt_idx] < 0),
+                    'v_flip': bool(s_v[tt_idx] < 0),
+                }
+
+        # Write aligned means back; propagate flips to per-trial data
+        # (STD/SEM are sign-invariant and are left unchanged)
+        for tt_idx, tt in enumerate(trial_types):
+            proj = self.projections[tt]
+            for comp_idx in range(n_comp):
+                fd = flip_decisions[tt][comp_idx]
+                if fd['u_flip']:
+                    proj['u_trials'][:, :, comp_idx] *= -1
+                if fd['v_flip']:
+                    proj['v_trials'][:, :, comp_idx] *= -1
+            proj['u_mean'] = u_stack[tt_idx]
+            proj['v_mean'] = v_stack[tt_idx]
+
+        self.sign_flip_decisions = flip_decisions
+        print(f"    Sign alignment complete ({n_comp} components, "
+              f"{len(trial_types)} trial types).")
+        return flip_decisions
 
     # =========================================================================
     # STATISTICAL ANALYSIS
@@ -578,7 +719,7 @@ class CrossTrialTypeCCAAnalyzer:
 
         Metrics computed:
         1. Peak amplitude: max(|projection|) in post-stimulus window
-        2. Temporal correlation: R² between projection time courses
+        2. Temporal correlation: R2 between projection time courses
         3. Wilcoxon signed-rank test: paired comparison of peak values
         4. Bootstrap confidence intervals: uncertainty on means
 
@@ -646,8 +787,6 @@ class CrossTrialTypeCCAAnalyzer:
             }
 
             print(f"\n  Temporal correlation ({self.reference_type} vs {trial_type}):")
-            # print(f"    Region i R²: {[f'{c['r2']:.3f}' for c in corr_u[:3]]}")
-            # print(f"    Region j R²: {[f'{c['r2']:.3f}' for c in corr_v[:3]]}")
 
         # Pairwise statistical tests on peak values
         trial_types = list(self.projections.keys())
@@ -802,74 +941,211 @@ class CrossTrialTypeCCAAnalyzer:
     def create_projection_comparison_figure(
             self,
             region_pair: Tuple[str, str],
-            figsize: Tuple[float, float] = (16, 12),
+            figsize: Tuple[float, float] = (16, 8),
             save_fig: bool = True
-    ) -> plt.Figure:
+    ) -> List[plt.Figure]:
         """
-        Create comprehensive figure comparing CCA projections across trial types.
+        Convenience wrapper: generate all three sign-aligned projection
+        figures for the given region pair.
 
-        Layout:
-        - Row 1: Region i projections (all components, all trial types)
-        - Row 2: Region j projections (all components, all trial types)
-        - Row 3: Peak amplitude comparison bar plots
+        The three figures correspond to:
+        1. Reference condition in isolation (cued_hit_long only).
+        2. Reference overlaid with the spontaneous-hit condition.
+        3. Reference overlaid with the spontaneous-miss condition.
 
         Parameters:
             region_pair: Tuple of (region_i, region_j)
-            figsize: Figure dimensions
-            save_fig: Whether to save the figure
+            figsize: Figure dimensions shared by all three figures
+            save_fig: Whether to save each figure as a separate PNG
 
         Returns:
-            Matplotlib figure object
+            List of three plt.Figure objects
+        """
+        return [
+            self.create_figure_cued_only(
+                region_pair, figsize=figsize, save_fig=save_fig),
+            self.create_figure_cued_vs_spont_hit(
+                region_pair, figsize=figsize, save_fig=save_fig),
+            self.create_figure_cued_vs_spont_miss(
+                region_pair, figsize=figsize, save_fig=save_fig),
+        ]
+
+    def _create_projection_figure_for_types(
+            self,
+            region_pair: Tuple[str, str],
+            trial_types_to_show: List[str],
+            fig_tag: str,
+            figsize: Tuple[float, float] = (16, 8),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Core figure factory: CCA projection time courses for a specified
+        subset of trial types.
+
+        Layout: 2 rows x min(3, n_components) columns.
+        Row 1 — region i canonical variate u_c^(k).
+        Row 2 — region j canonical variate v_c^(k).
+
+        Signs are resolved by _align_projection_signs; no np.abs() applied.
+
+        Parameters:
+            region_pair: Tuple of (region_i, region_j)
+            trial_types_to_show: Ordered list of trial types to overlay
+            fig_tag: Short identifier appended to the save-file name
+            figsize: Figure dimensions in inches
+            save_fig: If True, save as 300 dpi PNG
+
+        Returns:
+            plt.Figure
         """
         region_i, region_j = region_pair
         n_comp_show = min(3, self.n_components)
-
-        fig = plt.figure(figsize=figsize)
         fontsize = 12
 
-        # Create grid: 3 rows × n_comp_show columns
-        gs = fig.add_gridspec(2, n_comp_show, height_ratios=[1, 1],
-                              hspace=0.35, wspace=0.3)
+        fig, axes = plt.subplots(
+            2, n_comp_show, figsize=figsize,
+            gridspec_kw={'hspace': 0.40, 'wspace': 0.30}
+        )
+        if n_comp_show == 1:
+            axes = axes[:, np.newaxis]
 
-        # Row 1: Region i projections
+        # Row 1 — region i
         for comp_idx in range(n_comp_show):
-            ax = fig.add_subplot(gs[0, comp_idx])
+            ax = axes[0, comp_idx]
             self._plot_projections_single_component(
-                ax, 'u_mean', 'u_sem', comp_idx, region_i, fontsize
+                ax, 'u_mean', 'u_std', comp_idx, region_i, fontsize,
+                trial_types_to_show=trial_types_to_show
             )
             if comp_idx == 0:
-                ax.set_ylabel(f'{region_i}\nProjection', fontsize=fontsize)
+                ax.set_ylabel(f'{region_i}\nProjection (a.u.)', fontsize=fontsize)
             ax.set_title(f'CCA Component {comp_idx + 1}', fontsize=fontsize + 1)
 
-        # Row 2: Region j projections
+        # Row 2 — region j
         for comp_idx in range(n_comp_show):
-            ax = fig.add_subplot(gs[1, comp_idx])
+            ax = axes[1, comp_idx]
             self._plot_projections_single_component(
-                ax, 'v_mean', 'v_sem', comp_idx, region_j, fontsize
+                ax, 'v_mean', 'v_std', comp_idx, region_j, fontsize,
+                trial_types_to_show=trial_types_to_show
             )
             if comp_idx == 0:
-                ax.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
-            ax.set_xlabel('Time (s)', fontsize=fontsize)
+                ax.set_ylabel(f'{region_j}\nProjection (a.u.)', fontsize=fontsize)
+            ax.set_xlabel('Time from stimulus onset (s)', fontsize=fontsize)
 
-        # # Row 3: Peak amplitude comparison
-        # ax_peak = fig.add_subplot(gs[2, :])
-        # self._plot_peak_amplitude_comparison(ax_peak, fontsize)
-
-        # Add overall title
-        plt.suptitle(
-            f'Cross-Trial-Type CCA Projections\n'
-            f'{region_i} vs {region_j} | CCA trained on {self.reference_type}',
-            fontsize=fontsize + 2, fontweight='bold', y=0.98
+        # Identify the featured condition and its trial count
+        featured_type = next(
+            (tt for tt in reversed(trial_types_to_show) if tt in self.projections),
+            None
+        )
+        n_trials_str = (
+            f"  |  n = {self.projections[featured_type]['n_trials']} trials "
+            f"({featured_type.replace('_', ' ')})"
+            if featured_type else ""
         )
 
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        shown_labels = ' + '.join(
+            tt.replace('_', ' ') for tt in trial_types_to_show
+            if tt in self.projections
+        )
+        fig.suptitle(
+            f'Cross-Condition CCA Projections — {shown_labels}{n_trials_str}\n'
+            f'{region_i} – {region_j}  |  '
+            f'CCA weights trained on {self.reference_type.replace("_", " ")}',
+            fontsize=fontsize + 2, fontweight='normal', y=1.03
+        )
+        plt.tight_layout()
 
         if save_fig:
-            save_path = self.output_dir / f"projection_comparison_{region_i}_{region_j}.png"
+            save_path = (self.output_dir
+                         / f"projection_{fig_tag}_{region_i}_{region_j}.png")
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Saved: {save_path}")
 
         return fig
+
+    def create_figure_cued_only(
+            self,
+            region_pair: Tuple[str, str],
+            figsize: Tuple[float, float] = (16, 8),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Figure 1 — Reference condition (cued_hit_long) in isolation.
+
+        Parameters:
+            region_pair: Tuple of (region_i, region_j)
+            figsize: Figure dimensions in inches
+            save_fig: If True, save as PNG
+
+        Returns:
+            plt.Figure
+        """
+        return self._create_projection_figure_for_types(
+            region_pair,
+            trial_types_to_show=[self.reference_type],
+            fig_tag='fig1_cued_only',
+            figsize=figsize,
+            save_fig=save_fig
+        )
+
+    def create_figure_cued_vs_spont_hit(
+            self,
+            region_pair: Tuple[str, str],
+            figsize: Tuple[float, float] = (16, 8),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Figure 2 — Reference overlaid with spontaneous-hit.
+
+        Overlays cued_hit_long and spont_hit_long in the same CCA subspace.
+        Falls back gracefully to reference alone if spont_hit_long is absent.
+
+        Parameters:
+            region_pair: Tuple of (region_i, region_j)
+            figsize: Figure dimensions in inches
+            save_fig: If True, save as PNG
+
+        Returns:
+            plt.Figure
+        """
+        types = [tt for tt in [self.reference_type, 'spont_hit_long']
+                 if tt in self.projections]
+        return self._create_projection_figure_for_types(
+            region_pair,
+            trial_types_to_show=types,
+            fig_tag='fig2_cued_vs_spont_hit',
+            figsize=figsize,
+            save_fig=save_fig
+        )
+
+    def create_figure_cued_vs_spont_miss(
+            self,
+            region_pair: Tuple[str, str],
+            figsize: Tuple[float, float] = (16, 8),
+            save_fig: bool = True
+    ) -> plt.Figure:
+        """
+        Figure 3 — Reference overlaid with spontaneous-miss.
+
+        Overlays cued_hit_long and spont_miss_long in the same CCA subspace.
+        Falls back gracefully to reference alone if spont_miss_long is absent.
+
+        Parameters:
+            region_pair: Tuple of (region_i, region_j)
+            figsize: Figure dimensions in inches
+            save_fig: If True, save as PNG
+
+        Returns:
+            plt.Figure
+        """
+        types = [tt for tt in [self.reference_type, 'spont_miss_long']
+                 if tt in self.projections]
+        return self._create_projection_figure_for_types(
+            region_pair,
+            trial_types_to_show=types,
+            fig_tag='fig3_cued_vs_spont_miss',
+            figsize=figsize,
+            save_fig=save_fig
+        )
 
     def _plot_projections_single_component(
             self,
@@ -878,36 +1154,75 @@ class CrossTrialTypeCCAAnalyzer:
             sem_key: str,
             comp_idx: int,
             region_name: str,
-            fontsize: int
+            fontsize: int,
+            trial_types_to_show: Optional[List[str]] = None
     ) -> None:
-        """Plot projections for a single component across all trial types."""
-        for trial_type in self.available_trial_types:
+        """
+        Plot sign-aligned projections for a single CCA component.
+
+        Signs are determined upstream by _align_projection_signs; no
+        np.abs() is applied. The reference trial type is drawn with a
+        thicker line; all other types are rendered at reduced opacity.
+
+        Parameters:
+            ax: Target Axes object
+            mean_key: Key into self.projections[tt] for the mean
+            sem_key: Corresponding SEM key
+            comp_idx: Zero-indexed CCA component
+            region_name: Region label (used for y-axis)
+            fontsize: Base font size
+            trial_types_to_show: Subset of trial types to overlay;
+                                  defaults to all available types
+        """
+        if trial_types_to_show is None:
+            trial_types_to_show = self.available_trial_types
+
+        for trial_type in trial_types_to_show:
             if trial_type not in self.projections:
                 continue
 
             proj = self.projections[trial_type]
-            mean_proj = np.abs(proj[mean_key][:, comp_idx])
-            sem_proj = proj[sem_key][:, comp_idx]
 
-            color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
-            linestyle = '-' if trial_type == self.reference_type else '-'
-            linewidth = 2.5 if trial_type == self.reference_type else 1.0
-            if trial_type == self.reference_type:
-                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                        linewidth=linewidth, label=trial_type.replace('_', ' '),
-                        alpha=0.8)
-                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
-            else:
-                ax.plot(self.time_bins, mean_proj, color=color, linestyle=linestyle,
-                        linewidth=linewidth, label=trial_type.replace('_', ' '),
-                        alpha=0.4)
-                ax.fill_between(self.time_bins, mean_proj - sem_proj, mean_proj + sem_proj,
-                                alpha=0.15, color=color)
-        # Add stimulus onset marker
+            # Signed projection — no absolute value applied
+            mean_proj  = proj[mean_key][:, comp_idx]
+            sem_proj   = proj[sem_key][:, comp_idx]
+            trials_key = mean_key.replace('mean', 'trials')  # 'u_mean' -> 'u_trials'
+            trial_proj = proj[trials_key][:, :, comp_idx]    # (n_trials, n_time)
+
+            color    = TRIAL_TYPE_COLORS .get(trial_type, 'gray')
+            is_ref   = (trial_type == self.reference_type)
+            lw       = 2.5 if is_ref else 1.0
+            alpha    = 0.8 if is_ref else 0.4
+
+            # Individual trial traces — reference condition shows mean only;
+            # spontaneous conditions show all trials for direct comparison
+            show_individual_trials = (is_ref and len(trial_types_to_show) == 1) or (not is_ref)
+            if show_individual_trials:
+                for trial_idx in range(trial_proj.shape[0]):
+                    ax.plot(self.time_bins, trial_proj[trial_idx], color=color,
+                            linewidth=0.4, alpha=0.2, zorder=1)
+
+            # Trial-mean with SEM shading
+            ax.plot(self.time_bins, mean_proj, color=color, linestyle='-',
+                    linewidth=lw, label=trial_type.replace('_', ' '), alpha=alpha,
+                    zorder=3)
+            if not (is_ref and len(trial_types_to_show) > 1):
+                ax.fill_between(self.time_bins,
+                                mean_proj - sem_proj, mean_proj + sem_proj,
+                                alpha=0.2, color=color, zorder=2)
+
+        # Stimulus-onset marker and shaded stimulus period
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
-        ax.axvspan(0, 1.5, alpha=0.05, color='gray')
-        ax.set_ylim([0, 6])
+        ax.axhline(y=0, color='black', linestyle='-', alpha=0.2, linewidth=0.8)
+
+        # Symmetric y-limits inferred from plotted data
+        #ax.autoscale(axis='y')
+        ylim  = ax.get_ylim()
+        bound = max(abs(ylim[0]), abs(ylim[1]))
+        ax.set_yticks(np.arange(-2, 10, 2))
+        ax.set_yticklabels(ax.get_yticks(), fontsize=fontsize)
+        ax.set_ylim([-2.5, 5])
+
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.3)
@@ -973,7 +1288,7 @@ class CrossTrialTypeCCAAnalyzer:
 
         gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.3)
 
-        # Plot 1: Temporal correlation R² values
+        # Plot 1: Temporal correlation R2 values
         ax1 = fig.add_subplot(gs[0, 0])
         self._plot_temporal_correlation_bars(ax1, 'region_i', region_i, fontsize)
 
@@ -1010,7 +1325,7 @@ class CrossTrialTypeCCAAnalyzer:
             region_name: str,
             fontsize: int
     ) -> None:
-        """Plot temporal correlation R² as bar chart."""
+        """Plot temporal correlation R2 as bar chart."""
         correlations = self.statistical_results['temporal_correlations']
         n_comp_show = min(3, self.n_components)
 
@@ -1030,7 +1345,7 @@ class CrossTrialTypeCCAAnalyzer:
 
         ax.set_xticks(x_base)
         ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize - 2)
-        ax.set_ylabel('Temporal R²', fontsize=fontsize)
+        ax.set_ylabel('Temporal R2', fontsize=fontsize)
         ax.set_xlabel('CCA Component', fontsize=fontsize)
         ax.set_title(f'{region_name}', fontsize=fontsize + 1)
         ax.legend(fontsize=fontsize - 3)
@@ -1064,14 +1379,14 @@ class CrossTrialTypeCCAAnalyzer:
 
         # Plot heatmap
         p_matrix = -np.log10(p_matrix + 1e-10)
-        im = ax.imshow(p_matrix, cmap='Reds', aspect='auto',vmax=2.5,vmin=0)
+        im = ax.imshow(p_matrix, cmap='Reds', aspect='auto', vmax=2.5, vmin=0)
 
         ax.set_xticks(np.arange(n_comp_show))
         ax.set_yticks(np.arange(len(comparisons)))
         ax.set_xticklabels([f'Comp {i + 1}' for i in range(n_comp_show)], fontsize=fontsize - 2)
         ax.set_yticklabels([c.replace('_', '\n') for c in comparisons], fontsize=fontsize - 3)
         ax.set_xlabel('CCA Component', fontsize=fontsize)
-        ax.set_title('Significance (-log₁₀ p)', fontsize=fontsize + 1)
+        ax.set_title('Significance (-log10 p)', fontsize=fontsize + 1)
 
         # Add text annotations
         for i in range(len(comparisons)):
@@ -1179,7 +1494,6 @@ class CrossTrialTypeCCAAnalyzer:
                 proj['u_trials'][:, :, component_idx],
                 color, trial_type, fontsize
             )
-            ax1.set_ylim([0, 5])
             ax1.set_title(f'{trial_type.replace("_", " ")}\n(n={proj["n_trials"]} trials)',
                           fontsize=fontsize)
             if col_idx == 0:
@@ -1195,7 +1509,6 @@ class CrossTrialTypeCCAAnalyzer:
             if col_idx == 0:
                 ax2.set_ylabel(f'{region_j}\nProjection', fontsize=fontsize)
             ax2.set_xlabel('Time (s)', fontsize=fontsize)
-            ax2.set_ylim([0, 5])
 
         plt.suptitle(
             f'CCA Component {component_idx + 1} Projections\n'
@@ -1221,26 +1534,25 @@ class CrossTrialTypeCCAAnalyzer:
             trial_type: str,
             fontsize: int
     ) -> None:
-        """Plot detailed projection with individual trial traces."""
-        # Take absolute value
-        mean_proj = np.abs(mean_proj)
-        trial_projs = np.abs(trial_projs)
+        """
+        Plot sign-aligned projection with individual trial traces.
 
-        # Plot individual trials (light)
+        No np.abs() is applied; signs are resolved globally by
+        _align_projection_signs prior to calling this method.
+        """
+        # Plot individual trials (light traces — up to 20 for legibility)
         for trial_idx in range(min(20, trial_projs.shape[0])):
             ax.plot(self.time_bins, trial_projs[trial_idx], color=color,
                     alpha=0.1, linewidth=0.5)
 
-        # Plot mean with Std
-        sem = np.std(trial_projs, axis=0) / np.sqrt(trial_projs.shape[0])
+        # Mean +/- 1 SD shading
         std = np.std(trial_projs, axis=0)
         ax.plot(self.time_bins, mean_proj, color=color, linewidth=2.5, alpha=0.9)
-        # ax.fill_between(self.time_bins, mean_proj - sem, mean_proj + sem,
-        #                 alpha=0.2, color=color)
         ax.fill_between(self.time_bins, mean_proj - std, mean_proj + std,
                         alpha=0.2, color=color)
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
         ax.axvspan(0, 1.5, alpha=0.05, color='gray')
+        ax.axhline(y=0, color='black', linestyle='-', alpha=0.2, linewidth=0.8)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.3)
@@ -1444,7 +1756,7 @@ class CrossTrialTypeCCAPipeline:
                     print(f"  Skipping - CCA weights not available")
                     continue
 
-                # Compute projections
+                # Compute projections (includes sign alignment)
                 if not analyzer.compute_projections():
                     print(f"  Skipping - projection failed")
                     continue
@@ -1452,7 +1764,7 @@ class CrossTrialTypeCCAPipeline:
                 # Compute statistics
                 analyzer.compute_statistics()
 
-                # Create visualizations
+                # Create visualizations — three separate figures
                 analyzer.create_projection_comparison_figure(region_pair)
                 analyzer.create_statistical_summary_figure(region_pair)
 
@@ -1466,7 +1778,7 @@ class CrossTrialTypeCCAPipeline:
             # Store analyzer
             self.analyzers[session_name] = analyzer
 
-            print(f"\n✓ Session {session_name} analysis complete")
+            print(f"\n  Session {session_name} analysis complete")
             return True
 
         except Exception as e:
@@ -1498,8 +1810,8 @@ class CrossTrialTypeCCAPipeline:
         print(f"Sessions analyzed: {successful}/{total}")
 
         for session, success in results.items():
-            status = "✓" if success else "✗"
-            print(f"  {status} {session}")
+            status = "OK" if success else "FAILED"
+            print(f"  {status}: {session}")
 
         self.results = results
         return results

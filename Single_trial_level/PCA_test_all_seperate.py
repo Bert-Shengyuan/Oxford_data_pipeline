@@ -884,7 +884,7 @@ class OxfordPCAVisualizer:
 
         # Reference line at stimulus onset
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
-
+        ax.axvline(x=1, color='black', linestyle='--', alpha=0.3, linewidth=3)
         # Formatting
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -893,8 +893,8 @@ class OxfordPCAVisualizer:
         ax.set_yticks(np.arange(0, 10, 2))
         ax.set_yticklabels(ax.get_yticks(), fontsize=20)
         ax.set_ylim([-1.5, 3])
-        ax.set_xticks([-1.5, 0, 2, 3])
-        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
+        ax.set_xticks([-1.5, 0, 1, 2, 3])
+        ax.set_xticklabels(['-1.5', '0', '1','2', '3'], fontsize=20)
         ax.tick_params(axis='both', which='major', width=2, length=8)
 
         for spine in ax.spines.values():

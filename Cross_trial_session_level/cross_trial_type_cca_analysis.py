@@ -64,15 +64,41 @@ except ImportError:
 # =============================================================================
 
 # Trial type labels and their data directories
-TRIAL_TYPES = {
-    'cued_hit_long': 'sessions_cued_hit_long_results',
-    'spont_hit_long': 'sessions_spont_hit_long_results',
-}
+#
+KERNEL = 'pcca'
 
 # TRIAL_TYPES = {
 #     'cued_hit_long': 'sessions_cued_hit_long_results',
-#     # 'spont_hit_long': 'sessions_spont_hit_long_results',
-#     # 'spont_miss_long': 'sessions_spont_miss_long_results'
+#     'spont_hit_long': 'sessions_spont_miss_long_results',
+# }
+#
+#
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     'spont_miss_long': 'sessions_spont_miss_long_results',
+# }
+
+
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
+#     'spont_hit_long': 'sessions_spont_hit_long_results',
+#     'spont_miss_long': 'sessions_spont_miss_long_results'
+# }
+
+if KERNEL == 'pcca':
+
+    TRIAL_TYPES = {
+        'cued_hit_long': 'pcca_sessions_cued_hit_long_results',
+        'spont_miss_long': 'pcca_sessions_spont_miss_long_results'
+    }
+elif KERNEL == 'cca':
+    TRIAL_TYPES = {
+        'cued_hit_long': 'sessions_cued_hit_long_results',
+        'spont_hit_long': 'sessions_spont_hit_long_results',
+        'spont_miss_long': 'sessions_spont_miss_long_results'
+    }
+# TRIAL_TYPES = {
+#     'cued_hit_long': 'sessions_cued_hit_long_results',
 # }
 
 # Colors for visualization (consistent across figures)
@@ -597,7 +623,7 @@ class CrossTrialTypeCCAAnalyzer:
 
         for trial_type in self.available_trial_types:
             # For cued_hit_long, use pre-computed projections if available
-            if trial_type == 'cued_hit_long':
+            if trial_type == self.reference_type:#'cued_hit_long':
                 trial_data = self.trial_type_data[trial_type]
                 if 'cca_results' in trial_data and 'pair_results' in trial_data['cca_results']:
                     # Find the correct pair index
@@ -615,8 +641,12 @@ class CrossTrialTypeCCAAnalyzer:
                             if extracted_proj is not None:
                                 # Reshape extracted projections to match expected format
                                 # extracted_proj[comp_idx] = {'region_i_mean': array, 'region_j_mean': array}
-                                n_components = len(extracted_proj)
-                                n_timepoints = len(extracted_proj[0]['region_i_mean']) if 0 in extracted_proj else len(self.time_bins)
+                                # Anchor to the analyzer's canonical dimensions rather than
+                                # whatever shape happens to be stored in the .mat file —
+                                # this guarantees u_mean/v_mean are shape-consistent with
+                                # every other trial type and every other session.
+                                n_components = self.n_components
+                                n_timepoints = len(self.time_bins)
 
                                 # Initialize arrays
                                 u_mean = np.zeros((n_timepoints, n_components))
@@ -626,17 +656,42 @@ class CrossTrialTypeCCAAnalyzer:
                                 # to maintain correct mapping: u→region_i, v→region_j
                                 pair_is_reversed = self.cca_weights.get('pair_is_reversed', False)
 
-                                # Fill in projection data
+                                # Fill in projection data, truncating to whichever is shorter
+                                # (canonical time axis vs. what was actually stored)
                                 for comp_idx in range(n_components):
                                     if comp_idx in extracted_proj:
+                                        region_i_vals = extracted_proj[comp_idx]['region_i_mean']
+                                        region_j_vals = extracted_proj[comp_idx]['region_j_mean']
+                                        n_fill = min(n_timepoints, len(region_i_vals), len(region_j_vals))
                                         if pair_is_reversed:
-                                            # Swap: stored region_i = input region_j, so assign region_j_mean to u
-                                            u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
-                                            v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                            u_mean[:n_fill, comp_idx] = region_j_vals[:n_fill]
+                                            v_mean[:n_fill, comp_idx] = region_i_vals[:n_fill]
                                         else:
-                                            u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
-                                            v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
-
+                                            u_mean[:n_fill, comp_idx] = region_i_vals[:n_fill]
+                                            v_mean[:n_fill, comp_idx] = region_j_vals[:n_fill]
+                                ## Reshape extracted projections to match expected format
+                                # extracted_proj[comp_idx] = {'region_i_mean': array, 'region_j_mean': array}
+                                # n_components = len(extracted_proj)
+                                # n_timepoints = len(extracted_proj[0]['region_i_mean']) if 0 in extracted_proj else len(self.time_bins)
+                                #
+                                # # Initialize arrays
+                                # u_mean = np.zeros((n_timepoints, n_components))
+                                # v_mean = np.zeros((n_timepoints, n_components))
+                                #
+                                # # Check if pair was reversed - if so, swap region_i_mean ↔ region_j_mean
+                                # # to maintain correct mapping: u→region_i, v→region_j
+                                # pair_is_reversed = self.cca_weights.get('pair_is_reversed', False)
+                                #
+                                # # Fill in projection data
+                                # for comp_idx in range(n_components):
+                                #     if comp_idx in extracted_proj:
+                                #         if pair_is_reversed:
+                                #             # Swap: stored region_i = input region_j, so assign region_j_mean to u
+                                #             u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
+                                #             v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                #         else:
+                                #             u_mean[:, comp_idx] = extracted_proj[comp_idx]['region_i_mean'][:n_timepoints]
+                                #             v_mean[:, comp_idx] = extracted_proj[comp_idx]['region_j_mean'][:n_timepoints]
                                 # Store projections (without trial-level data since we only have averages)
                                 self.projections[trial_type] = {
                                     'u_mean': u_mean,
@@ -783,8 +838,8 @@ class CrossTrialTypeCCAAnalyzer:
                 r_v, p_v = pearsonr(ref_proj['v_mean'][:, comp_idx],
                                     proj['v_mean'][:, comp_idx])
 
-                corr_u.append({'r': r_u, 'r2': r_u ** 2, 'p': p_u})
-                corr_v.append({'r': r_v, 'r2': r_v ** 2, 'p': p_v})
+                corr_u.append({'r': r_u, 'r2': r_u, 'p': p_u})
+                corr_v.append({'r': r_v, 'r2': r_v, 'p': p_v})
 
             results['temporal_correlations'][f"{self.reference_type}_vs_{trial_type}"] = {
                 'region_i': corr_u,
@@ -985,7 +1040,118 @@ class CrossSessionCCAAnalyzer:
                 }
 
         return swapped
-    
+
+
+    def _align_signs_spectral(self,u_stack_raw, v_stack_raw, epoch=(0,150)):
+        """
+        Align latent trajectory signs across sessions via Z2 spectral synchronisation.
+
+        Parameters
+        ----------
+        u_stack_raw : ndarray, shape (n_sessions, n_time, n_components)
+        v_stack_raw : ndarray, shape (n_sessions, n_time, n_components)
+        epoch       : tuple (t_start, t_end) defining the task epoch for
+                      global orientation convention.
+
+        Returns
+        -------
+        u_aligned   : ndarray, same shape as u_stack_raw
+        v_aligned   : ndarray, same shape as v_stack_raw
+        flip_decisions : dict  {sess_idx -> {comp_idx -> {'u_flip': bool, 'v_flip': bool}}}
+        """
+        t_start, t_end = epoch
+        n_sess, n_time, n_comp = u_stack_raw.shape
+
+        u_aligned = np.zeros_like(u_stack_raw)
+        v_aligned = np.zeros_like(v_stack_raw)
+        flip_decisions = {}
+
+        for comp_idx in range(n_comp):
+
+            # ------------------------------------------------------------------ #
+            # Step 1: Build pairwise correlation matrices  C ∈ R^{N x N}         #
+            # ------------------------------------------------------------------ #
+            U = u_stack_raw[:, :, comp_idx]  # (n_sess, n_time)
+            V = v_stack_raw[:, :, comp_idx]
+
+            C_u = np.corrcoef(U)  # (n_sess, n_sess)
+            C_v = np.corrcoef(V)
+
+            C_u = np.nan_to_num(C_u, nan=0.0, posinf=0.0, neginf=0.0)
+            C_v = np.nan_to_num(C_v, nan=0.0, posinf=0.0, neginf=0.0)
+            C_u = (C_u + C_u.T) / 2.0
+            C_v = (C_v + C_v.T) / 2.0
+            np.fill_diagonal(C_u, 1.0)
+            np.fill_diagonal(C_v, 1.0)
+            # ------------------------------------------------------------------ #
+            # Step 2: Z2 synchronisation — signs from leading eigenvector         #
+            #         np.linalg.eigh returns eigenvalues in ascending order;      #
+            #         the last column is therefore the leading eigenvector.       #
+            # ------------------------------------------------------------------ #
+            _, evecs_u = np.linalg.eigh(C_u)
+            s_u = np.sign(evecs_u[:, -1])  # shape (n_sess,)
+
+            _, evecs_v = np.linalg.eigh(C_v)
+            s_v = np.sign(evecs_v[:, -1])
+
+            # Guard: eigh can return 0.0 for degenerate entries (extremely rare).
+            # Fall back to +1 in those cases.
+            s_u[s_u == 0] = 1
+            s_v[s_v == 0] = 1
+
+            # ------------------------------------------------------------------ #
+            # Step 3: Apply session-level signs                                   #
+            # ------------------------------------------------------------------ #
+            u_aligned[:, :, comp_idx] = s_u[:, np.newaxis] * U
+            v_aligned[:, :, comp_idx] = s_v[:, np.newaxis] * V
+
+            # ------------------------------------------------------------------ #
+            # Step 4: Resolve global orientation via group-mean sign convention   #
+            # ------------------------------------------------------------------ #
+            u_epoch_mean = u_aligned[:, t_start:t_end, comp_idx].mean()
+            v_epoch_mean = v_aligned[:, t_start:t_end, comp_idx].mean()
+
+            if u_epoch_mean < 0:
+                s_u *= -1
+                u_aligned[:, :, comp_idx] *= -1
+
+            if v_epoch_mean < 0:
+                s_v *= -1
+                v_aligned[:, :, comp_idx] *= -1
+
+            # ------------------------------------------------------------------ #
+            # Step 5: Fine orientation — peak polarity of the group mean          #
+            u_group_mean = u_aligned[:, :, comp_idx].mean(axis=0)  # (n_time,)
+            v_group_mean = v_aligned[:, :, comp_idx].mean(axis=0)
+
+            u_epoch_window = u_group_mean[t_start:t_end]
+            v_epoch_window = v_group_mean[t_start:t_end]
+
+            # Signed peak: value at the time point of maximum absolute deviation
+            u_peak_val = u_epoch_window[np.argmax(np.abs(u_epoch_window))]
+            v_peak_val = v_epoch_window[np.argmax(np.abs(v_epoch_window))]
+
+            if u_peak_val < 0:
+                s_u *= -1
+                u_aligned[:, :, comp_idx] *= -1
+
+            if v_peak_val < 0:
+                s_v *= -1
+                v_aligned[:, :, comp_idx] *= -1
+
+            # ------------------------------------------------------------------ #
+            # Step 6: Record final flip decisions for cross-trial-type reuse      #
+            # ------------------------------------------------------------------ #
+            for sess_idx in range(n_sess):
+                if sess_idx not in flip_decisions:
+                    flip_decisions[sess_idx] = {}
+                flip_decisions[sess_idx][comp_idx] = {
+                    'u_flip': bool(s_u[sess_idx] < 0),
+                    'v_flip': bool(s_v[sess_idx] < 0),
+                }
+
+        return u_aligned, v_aligned, flip_decisions
+
     def aggregate_projections(self) -> bool:
         """
         Aggregate projections across all sessions.
@@ -1029,7 +1195,12 @@ class CrossSessionCCAAnalyzer:
             print("No trial types found across sessions")
             return False
 
-        self.available_trial_types = list(all_trial_types)
+        # Enforce canonical ordering: cued_hit_long is always T_0
+        reference = self.reference_type
+        remaining = sorted([t for t in all_trial_types if t != reference])
+        self.available_trial_types = (
+            [reference] + remaining if reference in all_trial_types else sorted(all_trial_types)
+        )
         print(f"Available trial types (aggregated independently): {', '.join(self.available_trial_types)}")
 
         # Dictionary to store flip decisions from reference trial
@@ -1067,55 +1238,101 @@ class CrossSessionCCAAnalyzer:
             for comp_idx in range(n_comp):
                 # For reference trial: find baseline and compute flip decisions
                 if trial_type == self.reference_type:
-                    # Find baseline session (first with positive peak) for u
-                    u_baseline_idx = None
-                    for sess_idx in range(n_sess):
-                        u_proj = u_stack_raw[sess_idx, :, comp_idx]
-                        peak_val = u_proj[np.argmax(np.abs(u_proj))]
-                        if peak_val > 0:
-                            u_baseline_idx = sess_idx
-                            break
 
-                    if u_baseline_idx is None:
-                        u_baseline_idx = 0
+                    u_stack_aligned, v_stack_aligned, sess_flip_decisions = self._align_signs_spectral(u_stack_raw, v_stack_raw, epoch=(0, n_time))
 
-                    u_baseline = u_stack_raw[u_baseline_idx, :, comp_idx]
-
-                    # Find baseline session for v
-                    v_baseline_idx = None
-                    for sess_idx in range(n_sess):
-                        v_proj = v_stack_raw[sess_idx, :, comp_idx]
-                        peak_val = v_proj[np.argmax(np.abs(v_proj)[74:150])+ 74]
-                        if peak_val > 0:
-                            v_baseline_idx = sess_idx
-                            break
-
-                    if v_baseline_idx is None:
-                        v_baseline_idx = 0
-
-                    v_baseline = v_stack_raw[v_baseline_idx, :, comp_idx]
-
-                    # Align all sessions based on correlation with baseline and store decisions
-                    for sess_idx in range(n_sess):
-                        session_name = session_names_ordered[sess_idx]
-
-                        u_proj = u_stack_raw[sess_idx, :, comp_idx]
-                        u_corr = np.corrcoef(u_baseline, u_proj)[0, 1]
-                        u_should_flip = u_corr < 0
-                        u_stack_aligned[sess_idx, :, comp_idx] = -u_proj if u_should_flip else u_proj
-
-                        v_proj = v_stack_raw[sess_idx, :, comp_idx]
-                        v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
-                        v_should_flip = v_corr < 0
-                        v_stack_aligned[sess_idx, :, comp_idx] = -v_proj if v_should_flip else v_proj
-
-                        # Store flip decisions for this session and component
+                    # Translate session-index-keyed decisions to session-name-keyed ones
+                    for sess_idx, session_name in enumerate(session_names_ordered):
                         if session_name not in reference_flip_decisions:
                             reference_flip_decisions[session_name] = {}
-                        reference_flip_decisions[session_name][comp_idx] = {
-                            'u_flip': u_should_flip,
-                            'v_flip': v_should_flip
-                        }
+                        for comp_idx, decisions in sess_flip_decisions[sess_idx].items():
+                            reference_flip_decisions[session_name][comp_idx] = decisions
+                #if trial_type == self.reference_type:
+                    # # --- Baseline session for u ---
+                    # u_baseline_idx = None
+                    # for sess_idx in range(n_sess):
+                    #     u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                    #     window = u_proj[74:124]
+                    #     peak_idx = np.argmax(np.abs(window)) + 74
+                    #     peak_val = u_proj[peak_idx]
+                    #     mean_val = window.mean()
+                    #     # Conjunctive criterion: peak > 0 AND epoch mean > 0
+                    #     if peak_val > 0 and mean_val > 0:
+                    #         u_baseline_idx = sess_idx
+                    #         u_baseline = u_stack_raw[u_baseline_idx, :, comp_idx]
+                    #         break
+                    #
+                    # if u_baseline_idx is None:
+                    #     for sess_idx in range(n_sess):
+                    #         u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                    #         window = u_proj[74:124]
+                    #         peak_idx = np.argmax(np.abs(window)) + 74
+                    #         peak_val = u_proj[peak_idx]
+                    #         mean_val = window.mean()
+                    #         # Conjunctive criterion: peak > 0 AND epoch mean > 0
+                    #         if peak_val < 0 and mean_val < 0:
+                    #             u_baseline_idx = sess_idx
+                    #             u_baseline = -u_stack_raw[u_baseline_idx, :, comp_idx]
+                    #             break
+                    #     if u_baseline_idx is None:
+                    #         u_baseline_idx = 0  # fallback: no session satisfies both criteria
+                    #         u_baseline = -u_stack_raw[u_baseline_idx, :, comp_idx]
+                    #
+                    #
+                    #
+                    # # --- Baseline session for v ---
+                    # v_baseline_idx = None
+                    # for sess_idx in range(n_sess):
+                    #     v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                    #     window = v_proj[74:124]
+                    #     peak_idx = np.argmax(np.abs(window)) + 74
+                    #     peak_val = v_proj[peak_idx]
+                    #     mean_val = window.mean()
+                    #     # Conjunctive criterion: peak > 0 AND epoch mean > 0
+                    #     if peak_val > 0 and mean_val > 0:
+                    #         v_baseline_idx = sess_idx
+                    #         v_baseline = v_stack_raw[v_baseline_idx, :, comp_idx]
+                    #         break
+                    #
+                    # if v_baseline_idx is None:
+                    #     for sess_idx in range(n_sess):
+                    #         v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                    #         window = v_proj[74:124]
+                    #         peak_idx = np.argmax(np.abs(window)) + 74
+                    #         peak_val = v_proj[peak_idx]
+                    #         mean_val = window.mean()
+                    #         # Conjunctive criterion: peak > 0 AND epoch mean > 0
+                    #         if peak_val < 0 and mean_val < 0:
+                    #             v_baseline_idx = sess_idx
+                    #             v_baseline = -v_stack_raw[v_baseline_idx, :, comp_idx]
+                    #             break
+                    #     if v_baseline_idx is None:
+                    #         v_baseline_idx = 0
+                    #         v_baseline = -v_stack_raw[v_baseline_idx, :, comp_idx]
+                    #
+                    #
+                    # # Align all sessions based on correlation with baseline and store decisions
+                    # for sess_idx in range(n_sess):
+                    #     session_name = session_names_ordered[sess_idx]
+                    #
+                    #     u_proj = u_stack_raw[sess_idx, :, comp_idx]
+                    #     u_corr = np.corrcoef(u_baseline, u_proj)[0, 1]
+                    #     u_should_flip = u_corr < 0
+                    #     u_stack_aligned[sess_idx, :, comp_idx] = -u_proj if u_should_flip else u_proj
+                    #
+                    #     v_proj = v_stack_raw[sess_idx, :, comp_idx]
+                    #     v_corr = np.corrcoef(v_baseline, v_proj)[0, 1]
+                    #     v_should_flip = v_corr < 0
+                    #     v_stack_aligned[sess_idx, :, comp_idx] = -v_proj if v_should_flip else v_proj
+                    #
+                    #     # Store flip decisions for this session and component
+                    #     if session_name not in reference_flip_decisions:
+                    #         reference_flip_decisions[session_name] = {}
+                    #     reference_flip_decisions[session_name][comp_idx] = {
+                    #         'u_flip': u_should_flip,
+                    #         'v_flip': v_should_flip
+                    #     }
+
                 else:
                     # For other trials: reuse flip decisions from reference trial
                     for sess_idx in range(n_sess):
@@ -1132,17 +1349,18 @@ class CrossSessionCCAAnalyzer:
                             v_stack_aligned[sess_idx, :, comp_idx] = -v_proj if v_should_flip else v_proj
                         else:
                             # Fallback: don't flip if no reference decision available
-                            u_stack_aligned[sess_idx, :, comp_idx] = u_proj
-                            v_stack_aligned[sess_idx, :, comp_idx] = v_proj
+                            print('worning')
+                            # u_stack_aligned[sess_idx, :, comp_idx] = u_proj
+                            # v_stack_aligned[sess_idx, :, comp_idx] = v_proj
 
             u_mean_final = np.mean(u_stack_aligned, axis=0)
             v_mean_final = np.mean(v_stack_aligned, axis=0)
 
-            max_idx = np.argmax(np.abs(u_mean_final)[74:150,0]) + 74
-            u_mean_final = u_mean_final if u_mean_final[max_idx,0] > 0 else -u_mean_final
-
-            max_idx = np.argmax(np.abs(v_mean_final)[74:150,0]) + 74
-            v_mean_final = v_mean_final if v_mean_final[max_idx,0] > 0 else -v_mean_final
+            # max_idx = np.argmax(np.abs(u_mean_final)[74:150,0]) + 74
+            # u_mean_final = u_mean_final if u_mean_final[max_idx,0] > 0 else -u_mean_final
+            #
+            # max_idx = np.argmax(np.abs(v_mean_final)[74:150,0]) + 74
+            # v_mean_final = v_mean_final if v_mean_final[max_idx,0] > 0 else -v_mean_final
 
             #v_mean_final = v_mean_final if v_mean_final[np.argmax(np.abs(v_mean_final)[74:150,0])+ 74,0] >0 else -v_mean_final
             # Compute cross-session statistics
@@ -1323,8 +1541,10 @@ class CrossSessionCCAAnalyzer:
                             stat_i, p_i = wilcoxon(r2_comp1_i[:n_min_i], r2_comp2_i[:n_min_i])
                             mean_diff_i = np.mean(r2_comp1_i[:n_min_i] - r2_comp2_i[:n_min_i])
                         except ValueError:
+                            print('error of p test')
                             p_i, mean_diff_i = 1.0, 0.0
                     else:
+                        print('error of p test')
                         p_i, mean_diff_i = 1.0, 0.0
 
                     # Wilcoxon signed-rank test for region_j
@@ -1333,8 +1553,10 @@ class CrossSessionCCAAnalyzer:
                             stat_j, p_j = wilcoxon(r2_comp1_j[:n_min_j], r2_comp2_j[:n_min_j])
                             mean_diff_j = np.mean(r2_comp1_j[:n_min_j] - r2_comp2_j[:n_min_j])
                         except ValueError:
+                            print('error of p test')
                             p_j, mean_diff_j = 1.0, 0.0
                     else:
+                        print('error of p test')
                         p_j, mean_diff_j = 1.0, 0.0
 
                     r2_significance['pairwise_r2_tests'][test_key]['region_i'][comp_key] = {
@@ -1368,23 +1590,27 @@ class CrossSessionCCAAnalyzer:
                 r2_values_j = np.array(correlations[comparison]['region_j'].get(comp_key, []))
 
                 # One-sample Wilcoxon test against threshold
-                if len(r2_values_i) >= 5:
+                if len(r2_values_i) >= MIN_SESSIONS_THRESHOLD:
                     try:
                         # Test if values are significantly > threshold
                         shifted_i = r2_values_i - threshold
                         stat_i, p_i = wilcoxon(shifted_i, alternative='greater')
-                    except ValueError:
+                    except ValueError as e:
+                        print(f"Error: {e}")
                         p_i = 1.0
                 else:
+                    print('error of p test')
                     p_i = 1.0
 
-                if len(r2_values_j) >= 5:
+                if len(r2_values_j) >= MIN_SESSIONS_THRESHOLD:
                     try:
                         shifted_j = r2_values_j - threshold
                         stat_j, p_j = wilcoxon(shifted_j, alternative='greater')
-                    except ValueError:
+                    except ValueError as e:
+                        print(f"Error: {e}")
                         p_j = 1.0
                 else:
+                    print('error of p test')
                     p_j = 1.0
 
                 r2_significance['r2_above_threshold'][comparison]['region_i'][comp_key] = {
@@ -1910,7 +2136,7 @@ def _compute_hierarchical_r2_significance(
                 r2_values = np.array(correlations[comparison][region_key].get(comp_key, []))
 
                 p_val = 1.0
-                if len(r2_values) >= 5:
+                if len(r2_values) >= MIN_SESSIONS_THRESHOLD:
                     try:
                         shifted = r2_values - threshold
                         _, p_val = wilcoxon(shifted, alternative='greater')
@@ -1941,7 +2167,7 @@ def _compute_hierarchical_r2_significance(
                     n_min = min(len(r2_1), len(r2_2))
 
                     p_val, mean_diff = 1.0, 0.0
-                    if n_min >= 5:
+                    if n_min >= MIN_SESSIONS_THRESHOLD:
                         try:
                             _, p_val = wilcoxon(r2_1[:n_min], r2_2[:n_min])
                             mean_diff = np.mean(r2_1[:n_min] - r2_2[:n_min])
@@ -1978,6 +2204,7 @@ class CrossTrialTypeSummaryVisualizer:
     def __init__(
             self,
             base_dir: str,
+            output_base_dir: str,
             reference_type: str = 'cued_hit_long',
             n_components: int = 5,
             min_sessions: int = MIN_SESSIONS_THRESHOLD,
@@ -1994,6 +2221,7 @@ class CrossTrialTypeSummaryVisualizer:
             use_hierarchical: If True, use hierarchical region ordering
         """
         self.base_dir = Path(base_dir)
+        self.output_base_dir = Path(output_base_dir)
         self.reference_type = reference_type
         self.n_components = n_components
         self.min_sessions = min_sessions
@@ -2007,10 +2235,14 @@ class CrossTrialTypeSummaryVisualizer:
         self.time_bins: Optional[np.ndarray] = None
 
         # Output directory
+        # if use_hierarchical:
+        #     self.output_dir = self.base_dir / 'Paper_output' / f'cross_trial_type_{KERNEL}_{Reference_type}' / 'summary_figures_hierarchical'
+        # else:
+        #     self.output_dir = self.base_dir / 'Paper_output' / f'cross_trial_type_{KERNEL}_{Reference_type}' / 'summary_figures'
         if use_hierarchical:
-            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures_hierarchical'
+            self.output_dir = self.output_base_dir / 'summary_figures_hierarchical'
         else:
-            self.output_dir = self.base_dir / 'Paper_output' / 'cross_trial_type_cca' / 'summary_figures'
+            self.output_dir = self.output_base_dir / 'summary_figures'
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         mode_str = " (HIERARCHICAL)" if use_hierarchical else ""
@@ -2055,12 +2287,15 @@ class CrossTrialTypeSummaryVisualizer:
         if self.use_hierarchical:
             return sort_pair_by_hierarchy(region_i, region_j)
         return sort_pair_by_anatomy(region_i, region_j)
-    
+
     def create_projection_matrix_figure(
             self,
             figsize: Tuple[float, float] = (40, 40),
             component_idx: int = 0,
-            save_fig: bool = True
+            save_fig: bool = True,
+            fontsize: int = 20,
+            trial_types: Optional[List[str]] = None,  # <-- NEW
+            fig_label: str = ""  # <-- NEW (used in filename / title)
     ) -> Tuple[plt.Figure, plt.Figure]:
         """
         Create two upper-triangle figures showing component projections.
@@ -2096,34 +2331,39 @@ class CrossTrialTypeSummaryVisualizer:
                     ax = axes[i, j] if n_regions > 1 else axes
 
                     if i == j:
-                        # Diagonal: region name
                         ax.text(0.5, 0.5, region_i, ha='center', va='center',
-                                fontsize=32, fontweight='bold')
+                                fontsize=fontsize+2, fontweight='bold')
                         ax.set_xlim([0, 1])
                         ax.set_ylim([0, 1])
                         ax.axis('off')
                     elif i > j:
-                        # Lower triangle: hide
                         ax.axis('off')
                     else:
-                        # Upper triangle: plot cross-trial-type projections
-                        # For row figure: plot data from row region (region_i → u)
-                        # For column figure: plot data from column region (region_j → v)
+
                         self._plot_pair_projections_single_region(
-                            ax, region_i, region_j, component_idx, fig_type
+                            ax, region_i, region_j, component_idx,
+                            fig_type, fontsize,
+                            trial_types=trial_types  # <-- NEW
                         )
 
+
             region_label = "Row Region" if fig_type == 'row' else "Column Region"
-            fig.suptitle(
-                # f'Cross-Trial-Type CCA Projections - Component {component_idx + 1}\n'
-                f'Component {component_idx + 1}| {region_label} | Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
-                fontsize=48, fontweight='bold', y=0.995
-            )
+            label_str = f" | {fig_label}" if fig_label else ""
+            # fig.suptitle(
+            #     f'Component {component_idx + 1} | {region_label}{label_str} | '
+            #     f'Reference: {self.reference_type} | n ≥ {self.min_sessions} sessions',
+            #     fontsize=48, fontweight='bold', y=0.995
+            # )
 
             plt.tight_layout(rect=[0, 0.01, 1, 0.99])
 
             if save_fig:
-                save_path = self.output_dir / f"projection_matrix_comp{component_idx + 1}_{fig_type}_region.png"
+                label_suffix = f"_{fig_label.replace(' ', '_')}" if fig_label else ""
+                save_path = (
+                        self.output_dir
+                        / f"projection_matrix_comp{component_idx + 1}"
+                          f"{label_suffix}_{fig_type}_region.png"
+                )
                 plt.savefig(save_path, dpi=300, bbox_inches='tight')
                 print(f"Saved: {save_path}")
 
@@ -2138,7 +2378,9 @@ class CrossTrialTypeSummaryVisualizer:
             region_i: str,
             region_j: str,
             component_idx: int,
-            which_region: str
+            which_region: str,
+            fontsize: int,
+            trial_types: Optional[List[str]] = None  # <-- NEW
     ) -> None:
         """
         Plot cross-trial-type projections for a single region from a pair.
@@ -2213,9 +2455,18 @@ class CrossTrialTypeSummaryVisualizer:
             else:
                 session_key = 'u_sessions'
 
-        for trial_type in pair_analyzer.available_trial_types:
+        # Restrict to the requested trial types; fall back to all available ones
+        types_to_plot = (
+            [t for t in trial_types if t in pair_analyzer.available_trial_types]
+            if trial_types is not None
+            else pair_analyzer.available_trial_types
+        )
+
+
+        for trial_type in types_to_plot:  # <-- was available_trial_types
             if trial_type not in pair_analyzer.aggregated_projections:
                 continue
+            # ... rest of the loop body unchanged ...
 
             agg = pair_analyzer.aggregated_projections[trial_type]
 
@@ -2251,7 +2502,8 @@ class CrossTrialTypeSummaryVisualizer:
                                 alpha=0.15, color=color, zorder=2)
 
             # Collect session count for annotation
-            session_count_labels.append(f'n_{short_label[:2]}={n_sess}')
+            # session_count_labels.append(f'n_{short_label[:2]}={n_sess}')
+            session_count_labels.append(f'n={n_sess}')
 
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
@@ -2260,11 +2512,14 @@ class CrossTrialTypeSummaryVisualizer:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
-        ax.set_yticks(np.arange(0, 10, 2))
-        ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([-1.5, 5])
+        ax.set_yticks(np.arange(-2, 10, 2))
+        ax.set_yticklabels(ax.get_yticks(), fontsize=fontsize)
+        if KERNEL=='pcca':
+            ax.set_ylim([-0.5, 0.5])
+        else:
+            ax.set_ylim([-2.5, 5])
         ax.set_xticks([-1.5, 0, 2, 3])
-        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
+        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=fontsize)
         ax.tick_params(axis='both', which='major', width=2, length=8)
 
         for spine in ax.spines.values():
@@ -2272,8 +2527,8 @@ class CrossTrialTypeSummaryVisualizer:
 
         # Add session counts annotation for each trial type (n_a, n_b, n_c format)
         session_count_text = ', '.join(session_count_labels)
-        ax.text(0.02, 0.98, f'{display_region}\n{session_count_text}', transform=ax.transAxes,
-                fontsize=12, va='top', ha='left')
+        ax.text(0.02, 0.98, f'{session_count_text}', transform=ax.transAxes,
+                fontsize=fontsize , va='top', ha='left')
     
     def create_r2_boxplot_matrix_figure(
             self,
@@ -2621,7 +2876,7 @@ class CrossTrialTypeSummaryVisualizer:
                 p_val = log_p_matrix[i, j]
                 # Show significance markers
                 text = f'{p_val:.2f}'
-                if p_val > 1.3:  # p < 0.05
+                if p_val > 0.3:  # p < 0.05
                     text += '*'
                 if p_val > 2.0:  # p < 0.01
                     text += '*'
@@ -2870,6 +3125,7 @@ class CrossTrialTypeCCAPipeline:
         self.summary_visualizer = CrossTrialTypeSummaryVisualizer(
             base_dir=self.config['base_dir'],
             reference_type=self.config['reference_type'],
+            output_base_dir = self.config['output_base_dir'],
             n_components=self.config['n_components'],
             min_sessions=min_sessions
         )
@@ -2903,9 +3159,37 @@ class CrossTrialTypeCCAPipeline:
             print("\nCreating summary figures...")
 
             # Figures 1a & 1b: First component projections (row and column regions)
+
             self.summary_visualizer.create_projection_matrix_figure(
                 component_idx=0,
-                save_fig=True
+                save_fig=True,
+                fontsize = 30,
+                trial_types=['cued_hit_long'],
+                fig_label='cued_hit'
+            )
+
+            self.summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True,
+                fontsize = 30,
+                trial_types=['spont_miss_long'],
+                fig_label='spont_miss'
+            )
+
+            # self.summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=0,
+            #     save_fig=True,
+            #     fontsize = 20,
+            #     trial_types=['cued_hit_long', 'spont_hit_long'],
+            #     fig_label='cued_vs_spont_hit'
+            # )
+            #
+            self.summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True,
+                fontsize = 30,
+                trial_types=['cued_hit_long', 'spont_miss_long'],
+                fig_label='cued_hit_vs_spont_miss'
             )
 
             # Figures 2a & 2b: R² boxplots (row and column regions)
@@ -2913,10 +3197,10 @@ class CrossTrialTypeCCAPipeline:
                 save_fig=True
             )
 
-            # # Figures 3a & 3b: P-value heatmaps (row and column regions)
-            # self.summary_visualizer.create_pvalue_heatmap_matrix_figure(
-            #     save_fig=True
-            # )
+            # Figures 3a & 3b: P-value heatmaps (row and column regions)
+            self.summary_visualizer.create_pvalue_heatmap_matrix_figure(
+                save_fig=True
+            )
         else:
             print("Not enough valid pairs for summary figures")
 
@@ -2959,6 +3243,7 @@ class CrossTrialTypeCCAPipeline:
         # Create hierarchical summary visualizer
         self.hierarchical_summary_visualizer = CrossTrialTypeSummaryVisualizer(
             base_dir=self.config['base_dir'],
+            output_base_dir=self.config['output_base_dir'],
             reference_type=self.config['reference_type'],
             n_components=self.config['n_components'],
             min_sessions=min_sessions,
@@ -2975,15 +3260,95 @@ class CrossTrialTypeCCAPipeline:
         # Create hierarchical summary figures
         if valid_pairs >= 1:
             print("\nCreating hierarchical summary figures...")
-
-            # Figures: First component projections (row and column regions)
             self.hierarchical_summary_visualizer.create_projection_matrix_figure(
                 component_idx=0,
-                save_fig=True
+                save_fig=True,
+                fontsize=50,
+                trial_types=['cued_hit_long'],
+                fig_label='cued_hit'
             )
+
+            self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True,
+                fontsize=50,
+                trial_types=['spont_miss_long'],
+                fig_label='spont_miss'
+            )
+
+            # # --- Figure set A: cued_hit_long vs spont_hit_long ---
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=0,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long', 'spont_hit_long'],
+            #     fig_label='cued_vs_spont_hit'
+            # )
+            #
+            # --- Figure set B: cued_hit_long vs spont_miss_long ---
+            self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+                component_idx=0,
+                save_fig=True,
+                fontsize=50,
+                trial_types=['cued_hit_long', 'spont_miss_long'],
+                fig_label='cued_hit_vs_spont_miss'
+            )
+            #
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=1,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long'],
+            #     fig_label='cued_hit'
+            # )
+            #
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=1,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long', 'spont_hit_long'],
+            #     fig_label='cued_vs_spont_hit'
+            # )
+            #
+            # # --- Figure set B: cued_hit_long vs spont_miss_long ---
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=1,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long', 'spont_miss_long'],
+            #     fig_label='cued_hit_vs_spont_miss'
+            # )
+            #
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=2,
+            #     save_fig=True,
+            #     fontsize=30,
+            #     trial_types=['cued_hit_long'],
+            #     fig_label='cued_hit'
+            # )
+            #
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=2,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long', 'spont_hit_long'],
+            #     fig_label='cued_vs_spont_hit'
+            # )
+            #
+            # # --- Figure set B: cued_hit_long vs spont_miss_long ---
+            # self.hierarchical_summary_visualizer.create_projection_matrix_figure(
+            #     component_idx=2,
+            #     save_fig=True,
+            #     fontsize=25,
+            #     trial_types=['cued_hit_long', 'spont_miss_long'],
+            #     fig_label='cued_hit_vs_spont_miss'
+            # )
 
             # Figures: R² boxplots (row and column regions)
             self.hierarchical_summary_visualizer.create_r2_boxplot_matrix_figure(
+                save_fig=True
+            )
+            self.hierarchical_summary_visualizer.create_pvalue_heatmap_matrix_figure(
                 save_fig=True
             )
         else:
@@ -2998,7 +3363,7 @@ class CrossTrialTypeCCAPipeline:
             session_name: str,
             region_pair: Tuple[str, str],
             analyzer: 'CrossTrialTypeCCAAnalyzer',
-            flip_threshold: float = -0.5
+            flip_threshold: float = -0.2
     ) -> None:
         """
         Check whether spont-long projections are nearly flipped vs cued-hit-long.

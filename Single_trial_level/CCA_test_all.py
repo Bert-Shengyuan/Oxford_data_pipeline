@@ -597,7 +597,8 @@ class OxfordCCAVisualizer:
             self,
             figsize: Tuple[float, float] = (60, 60),
             component_idx: int = 0,
-            save_path: Optional[str] = None
+            save_path: Optional[str] = None,
+            fontsize: int = 20
     ) -> None:
         """
         Create cross-region temporal projection matrix figure.
@@ -634,7 +635,7 @@ class OxfordCCAVisualizer:
                 else:
                     # Upper triangle: plot projection
                     self._plot_temporal_projection(
-                        ax, region_i, region_j, component_idx
+                        ax, region_i, region_j, component_idx,fontsize
                     )
 
         # fig.suptitle(
@@ -651,12 +652,89 @@ class OxfordCCAVisualizer:
 
         plt.close(fig)
 
+    def _align_signs_spectral_cca(self,proj_i_raw, proj_j_raw, epoch=(74, 124)):
+        """
+        Align CCA projection signs across sessions via Z_2 spectral synchronisation,
+        with two-pass orientation correction (epoch mean, then peak polarity).
+
+        Parameters
+        ----------
+        proj_i_raw : ndarray, shape (n_sessions, n_time)
+            Raw (unaligned) canonical projections for region i.
+        proj_j_raw : ndarray, shape (n_sessions, n_time)
+            Raw (unaligned) canonical projections for region j.
+        epoch      : tuple (t_start, t_end)
+            Task epoch used for orientation convention.
+
+        Returns
+        -------
+        proj_i_aligned : ndarray, shape (n_sessions, n_time)
+        proj_j_aligned : ndarray, shape (n_sessions, n_time)
+        """
+        t_start, t_end = epoch
+
+        # ---------------------------------------------------------------------- #
+        # Step 1: Pairwise correlation matrices  C ∈ R^{N×N}                     #
+        # ---------------------------------------------------------------------- #
+        C_i = np.corrcoef(proj_i_raw)  # (n_sessions, n_sessions)
+        C_j = np.corrcoef(proj_j_raw)
+
+        # ---------------------------------------------------------------------- #
+        # Step 2: Z_2 synchronisation via leading eigenvector                     #
+        #         np.linalg.eigh returns eigenvalues in ascending order;          #
+        #         the last column is therefore v_1, the leading eigenvector.      #
+        # ---------------------------------------------------------------------- #
+        _, evecs_i = np.linalg.eigh(C_i)
+        s_i = np.sign(evecs_i[:, -1])  # (n_sessions,)
+        s_i[s_i == 0] = 1  # guard against degenerate zeros
+
+        _, evecs_j = np.linalg.eigh(C_j)
+        s_j = np.sign(evecs_j[:, -1])
+        s_j[s_j == 0] = 1
+
+        # ---------------------------------------------------------------------- #
+        # Step 3: Apply session-level signs                                       #
+        # ---------------------------------------------------------------------- #
+        proj_i_aligned = s_i[:, np.newaxis] * proj_i_raw
+        proj_j_aligned = s_j[:, np.newaxis] * proj_j_raw
+
+        # ---------------------------------------------------------------------- #
+        # Step 4: Coarse orientation — group epoch mean                           #
+        # ---------------------------------------------------------------------- #
+        if proj_i_aligned[:, t_start:t_end].mean() < 0:
+            s_i *= -1
+            proj_i_aligned *= -1
+
+        if proj_j_aligned[:, t_start:t_end].mean() < 0:
+            s_j *= -1
+            proj_j_aligned *= -1
+
+        # ---------------------------------------------------------------------- #
+        # Step 5: Fine orientation — signed peak of the group mean                #
+        #                                                                         #
+        # Corrects residual polarity error when a sustained offset of opposite    #
+        # sign dominates the epoch integral in Step 4 yet the task-evoked        #
+        # transient peak carries the true orientation signal.                     #
+        # ---------------------------------------------------------------------- #
+        i_epoch_window = proj_i_aligned.mean(axis=0)[t_start:t_end]
+        j_epoch_window = proj_j_aligned.mean(axis=0)[t_start:t_end]
+
+        if i_epoch_window[np.argmax(np.abs(i_epoch_window))] < 0:
+            proj_i_aligned *= -1
+
+        if j_epoch_window[np.argmax(np.abs(j_epoch_window))] < 0:
+            proj_j_aligned *= -1
+
+        return proj_i_aligned, proj_j_aligned
+
+
     def _plot_temporal_projection(
             self,
             ax: plt.Axes,
             region_i: str,
             region_j: str,
-            component_idx: int
+            component_idx: int,
+            fontsize:int
     ) -> None:
         """
         Plot temporal projections for a single region pair.
@@ -722,55 +800,64 @@ class OxfordCCAVisualizer:
         proj_i_arr_raw = np.array([p[:min_len] for p in proj_i_all])
         proj_j_arr_raw = np.array([p[:min_len] for p in proj_j_all])
 
-        # Align signs based on correlation with baseline
-        # Find baseline for region_i (first session with positive peak)
-        baseline_i_idx = None
-        for idx, proj in enumerate(proj_i_arr_raw):
-            peak_val = proj[np.argmax(np.abs(proj))]
-            if peak_val > 0:
-                baseline_i_idx = idx
-                break
+        # # Align signs based on correlation with baseline
+        # # Find baseline for region_i (first session with positive peak)
+        # baseline_i_idx = None
+        # for idx, proj in enumerate(proj_i_arr_raw):
+        #     peak_val = proj[np.argmax(np.abs(proj))]
+        #     if peak_val > 0:
+        #         baseline_i_idx = idx
+        #         break
+        #
+        # if baseline_i_idx is None:
+        #     baseline_i_idx = 0
+        #
+        # baseline_i = proj_i_arr_raw[baseline_i_idx]
+        #
+        # # Find baseline for region_j
+        # baseline_j_idx = None
+        # for idx, proj in enumerate(proj_j_arr_raw):
+        #     peak_val = proj[np.argmax(np.abs(proj)[74:125])+ 74]
+        #     if peak_val > 0:
+        #         baseline_j_idx = idx
+        #         break
+        #
+        # if baseline_j_idx is None:
+        #     baseline_j_idx = 0
+        #
+        # baseline_j = proj_j_arr_raw[baseline_j_idx]
+        #
+        # # Align all sessions based on correlation with baseline
+        # proj_i_arr = np.zeros_like(proj_i_arr_raw)
+        # proj_j_arr = np.zeros_like(proj_j_arr_raw)
+        #
+        # for idx in range(len(proj_i_arr_raw)):
+        #     # Align region_i
+        #     corr_i = np.corrcoef(baseline_i, proj_i_arr_raw[idx])[0, 1]
+        #     proj_i_arr[idx] = proj_i_arr_raw[idx] if corr_i >= 0 else -proj_i_arr_raw[idx]
+        #
+        #     # Align region_j
+        #     corr_j = np.corrcoef(baseline_j, proj_j_arr_raw[idx])[0, 1]
+        #     proj_j_arr[idx] = proj_j_arr_raw[idx] if corr_j >= 0 else -proj_j_arr_raw[idx]
+        #
+        # # Compute statistics
+        # mean_i = np.mean(proj_i_arr, axis=0)
+        # mean_j = np.mean(proj_j_arr, axis=0)
+        # std_i = np.std(proj_i_arr, axis=0)
+        # std_j = np.std(proj_j_arr, axis=0)
 
-        if baseline_i_idx is None:
-            baseline_i_idx = 0
+        # mean_i = mean_i if mean_i[np.argmax(np.abs(mean_i)[74:150])+ 74] >0 else -mean_i
+        # mean_j = mean_j if mean_j[np.argmax(np.abs(mean_j)[74:150])+ 74] >0 else -mean_j
 
-        baseline_i = proj_i_arr_raw[baseline_i_idx]
-
-        # Find baseline for region_j
-        baseline_j_idx = None
-        for idx, proj in enumerate(proj_j_arr_raw):
-            peak_val = proj[np.argmax(np.abs(proj)[74:125])+ 74]
-            if peak_val > 0:
-                baseline_j_idx = idx
-                break
-
-        if baseline_j_idx is None:
-            baseline_j_idx = 0
-
-        baseline_j = proj_j_arr_raw[baseline_j_idx]
-
-        # Align all sessions based on correlation with baseline
-        proj_i_arr = np.zeros_like(proj_i_arr_raw)
-        proj_j_arr = np.zeros_like(proj_j_arr_raw)
-
-        for idx in range(len(proj_i_arr_raw)):
-            # Align region_i
-            corr_i = np.corrcoef(baseline_i, proj_i_arr_raw[idx])[0, 1]
-            proj_i_arr[idx] = proj_i_arr_raw[idx] if corr_i >= 0 else -proj_i_arr_raw[idx]
-
-            # Align region_j
-            corr_j = np.corrcoef(baseline_j, proj_j_arr_raw[idx])[0, 1]
-            proj_j_arr[idx] = proj_j_arr_raw[idx] if corr_j >= 0 else -proj_j_arr_raw[idx]
+        # Align signs across sessions via Z_2 spectral synchronisation
+        proj_i_arr, proj_j_arr = self._align_signs_spectral_cca(
+            proj_i_arr_raw, proj_j_arr_raw)
 
         # Compute statistics
         mean_i = np.mean(proj_i_arr, axis=0)
         mean_j = np.mean(proj_j_arr, axis=0)
         std_i = np.std(proj_i_arr, axis=0)
         std_j = np.std(proj_j_arr, axis=0)
-
-        mean_i = mean_i if mean_i[np.argmax(np.abs(mean_i)[74:150])+ 74] >0 else -mean_i
-        mean_j = mean_j if mean_j[np.argmax(np.abs(mean_j)[74:150])+ 74] >0 else -mean_j
-
 
         # Adjust time vector
         time_vec = self.time_vec[:min_len] if len(self.time_vec) >= min_len else np.linspace(-1.5, 3.0, min_len)
@@ -797,16 +884,16 @@ class OxfordCCAVisualizer:
 
         # Reference line at t=0
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=3)
-
+        ax.axvline(x=1, color='black', linestyle='--', alpha=0.3, linewidth=3)
         # Formatting
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.grid(True, alpha=0.8, linestyle=':', linewidth=2)
         ax.set_yticks(np.arange(0, 10, 2))
-        ax.set_yticklabels(ax.get_yticks(), fontsize=20)
-        ax.set_ylim([-2, 5])
-        ax.set_xticks([-1.5, 0, 2, 3])
-        ax.set_xticklabels(['-1.5', '0', '2', '3'], fontsize=20)
+        ax.set_yticklabels(ax.get_yticks(), fontsize=fontsize)
+        ax.set_ylim([-2.5, 5])
+        ax.set_xticks([-1.5, 0, 1, 2, 3])
+        ax.set_xticklabels(['-1.5', '0', '1','2', '3'], fontsize=fontsize)
         ax.tick_params(axis='both', which='major', width=2, length=8)
 
         for spine in ax.spines.values():
@@ -1082,7 +1169,7 @@ class OxfordCCAVisualizer:
 
             self.create_connectivity_matrices_figure(
                 figsize=figsize_connectivity,
-                save_path=save_path
+                save_path=save_path,
             )
 
             self.create_population_summary_figure(
@@ -1094,7 +1181,8 @@ class OxfordCCAVisualizer:
                 self.create_temporal_projection_figure(
                     figsize=figsize_temporal,
                     component_idx=comp_idx,
-                    save_path=save_path
+                    save_path=save_path,
+                    fontsize = 25
                 )
         finally:
             # Restore original data
@@ -1184,18 +1272,18 @@ def main():
     cca_viz_spont_long.generate_report()
     cca_viz_spont_long.create_connectivity_matrices_figure(
         figsize=(20, 12),
-        save_path=str(output_dir / "spont_long")
+        save_path=str(output_dir / "spont_long_miss")
     )
     cca_viz_spont_long.create_population_summary_figure(
         figsize=(18, 10),
-        save_path=str(output_dir / "spont_long")
+        save_path=str(output_dir / "spont_long_miss")
     )
 
     for comp_idx in range(min(3, cca_viz_spont_long.n_components)):
         cca_viz_spont_long.create_temporal_projection_figure(
             figsize=(40, 40),
             component_idx=comp_idx,
-            save_path=str(output_dir / "spont_long")
+            save_path=str(output_dir / "spont_long_miss")
         )
 
     # Hierarchical figures for spont_long

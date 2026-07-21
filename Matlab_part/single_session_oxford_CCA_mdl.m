@@ -266,7 +266,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             fprintf('\n[Phase 5] Performing cross-regional CCA analysis...\n');
             
             try
-                cca_results = perform_session_cca(region_data, session_name, analysis_config);
+                cca_results = perform_session_pcca(region_data, session_name, analysis_config);
                 
                 if isempty(cca_results.pair_results)
                     fprintf('  Warning: No valid region pairs for CCA\n');
@@ -321,13 +321,13 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             end
             
             %% Phase 7: Cleanup Raw Data
-            fprintf('\n[Phase 7] Cleaning up raw data files...\n');
-            
-            if strcmp(data_source, 'mdl_download')
-                cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, true);
-            else
-                fprintf('  Skipping cleanup (data loaded from cache)\n');
-            end
+            % fprintf('\n[Phase 7] Cleaning up raw data files...\n');
+            % 
+            % if strcmp(data_source, 'mdl_download')
+            %     cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, true);
+            % else
+            %     fprintf('  Skipping cleanup (data loaded from cache)\n');
+            % end
             
             %% Session Complete
             session_time = toc(session_start_time);

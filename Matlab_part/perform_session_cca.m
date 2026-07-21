@@ -126,11 +126,11 @@ function pair_result = analyze_region_pair_cca(region_data, region_i_name, regio
         n_timepoints = size(region_i_data, 3);
 
         rng(12345, 'twister');
-        shuffled_trials = randperm(n_trials, n_trials);
+        %shuffled_trials = randperm(n_trials, n_trials);
 
         region_i_sampled_p = permute(region_i_data,[2,3,1]);
         region_j_sampled_p = permute(region_j_data,[2,3,1]);
-        region_j_sampled_p = region_j_sampled_p(:,:,shuffled_trials);
+        %region_j_sampled_p = region_j_sampled_p(:,:,shuffled_trials);
 
         X = reshape(region_i_sampled_p, target_neurons,n_trials * n_timepoints);
         Y = reshape(region_j_sampled_p, target_neurons,n_trials * n_timepoints);
