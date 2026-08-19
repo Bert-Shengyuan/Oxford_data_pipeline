@@ -86,7 +86,7 @@ from Useful_definition import ANATOMICAL_ORDER, safe_array
 # =============================================================================
 
 TARGET_I = "MOp"
-TARGET_J = ("VALVM")
+TARGET_J = ("VPMPO")
 
 
 SESSIONS_TO_RUN = [
@@ -149,7 +149,7 @@ BEHAVIOR_T_OFFSET: float = -1.0
 # Must match the condition folder used to build SESSION_FILE below
 # ("pcca_sessions_cued_hit_long_results" ↔ "cued hit long"); update both
 # together if a different trial-type folder is analysed.
-BEHAVIOR_TRIAL_LABEL: str = "spont miss long" #cued hit long spont miss long
+BEHAVIOR_TRIAL_LABEL: str = "cued hit long" #cued hit long spont miss long
 Trial_type_value = BEHAVIOR_TRIAL_LABEL.replace(" ", "_")
 
 

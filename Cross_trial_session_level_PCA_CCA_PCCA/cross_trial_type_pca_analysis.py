@@ -725,7 +725,7 @@ class CrossSessionPCAAnalyzer:
 
         return True
 
-    def aggregate_projections(self) -> bool:
+    def aggregate_projections(self,epoch= (0,150)) -> bool:
         """
         Aggregate projections across all sessions for this region.
 
@@ -799,8 +799,12 @@ class CrossSessionPCAAnalyzer:
                         s_z *= -1
                         z_stack_aligned[:, :, comp_idx] *= -1
 
-                    z_group_mean = z_stack_aligned[:, :, comp_idx].mean(axis=0)  # (n_time,)
-                    z_epoch_window = z_group_mean[74:124]
+                    test = z_stack_aligned[:, :, comp_idx].mean()
+                    z_group_mean = z_stack_aligned[:, :, comp_idx].mean(axis=0)
+
+                    # (n_time,)
+                    t_start, t_end = epoch
+                    z_epoch_window = z_group_mean[t_start:t_end]
                     z_peak_val = z_epoch_window[np.argmax(np.abs(z_epoch_window))]
 
                     if z_peak_val < 0:

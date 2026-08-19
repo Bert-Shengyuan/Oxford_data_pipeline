@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-Cross-Session Behavioural Variance of CCA Communication Latents  (four-column bar figure)
+Cross-Session Behavioural Variance of CCA.py
 =========================================================================================
 
 Quantifies, across all sessions and region pairs, *how much of a CCA
@@ -698,7 +698,7 @@ def _bar_figure(
                    for lab, v, u in zip(labels, point_clouds, units)]
     ax.set_xticks(x)
     ax.set_ylabel(ylabel, fontsize=_fs(18))
-    ax.set_ylim(0.0, 1.0)
+    ax.set_ylim(0.0, 1)
     ax.set_xlim(x[0] - slot * 0.75, x[-1] + slot * 0.75)
     ax.set_xticklabels(tick_labels, fontsize=_fs(18))
     ax.set_title(title, fontsize=_fs(18), y=1.03)
