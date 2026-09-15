@@ -18,6 +18,13 @@ function region_data = perform_region_analysis(session_data, config)
     % Extract brain region labels for all stable neurons
     brain_regions = session_data.brain_regions;
     unique_regions = unique(brain_regions);
+
+    % Subregion labels (finer-grained than brain_regions), if available
+    if isfield(session_data, 'subregions')
+        subregions = session_data.subregions;
+    else
+        subregions = [];
+    end
     
     fprintf('  Discovered %d unique brain regions in this session\n', length(unique_regions));
     
@@ -59,6 +66,9 @@ function region_data = perform_region_analysis(session_data, config)
             region_data.regions.(region_name).neuron_indices = find(region_neurons);
             region_data.regions.(region_name).n_neurons = n_neurons;
             region_data.regions.(region_name).spike_data = region_spike_data;
+            if ~isempty(subregions)
+                region_data.regions.(region_name).subregion_labels = subregions(region_neurons);
+            end
 
             %region_data.regions.(region_name).data_quality = data_quality;
             

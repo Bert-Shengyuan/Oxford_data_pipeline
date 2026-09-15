@@ -40,8 +40,10 @@ is regressed out of both target regions' activity via a joint ridge hat
 matrix (`residualize`), and ridge CCA (`ridge_cca`) is then fit on the two
 residuals (`pcca`). Part 2c performs *exactly* that computation -- same
 Z construction, same residualize/ridge_cca/pcca primitives, same crop to the
-behavioural-tracking window `BEHAVIOR_TIME_RANGE_S = (-1.0, 2.0)` s -- but
-loops it over every pair in `REGION_PAIRS` (the same 21-pair / 7-category
+behavioural-tracking window `BEHAVIOR_TIME_RANGE_S` (now `ALIGNMENT_WINDOWS_S
+[ALIGN]`, e.g. `(-1.2, 1.8)` s for `ALIGN="reward_onset"`, rather than a
+fixed `(-1.0, 2.0)`) -- but loops it over every pair in `REGION_PAIRS` (the
+same 21-pair / 7-category
 set used throughout this project's cross-session figures, e.g.
 `pcca_cross_session_mi_bar.py` and `pCCA_latent_extrenal_variable_bar.py`,
 copied verbatim from the latter) and over every session auto-discovered
@@ -183,8 +185,9 @@ Python.
 
 Switching `TRIAL_TYPE` below from "cued_hit_long" to "spont_hit_long" (or
 "spont_miss_long") re-targets the whole pipeline -- input folder, output
-folder, and the *_task_label.npy filter string -- at that condition;
-nothing else has to change.
+folder, and the "task_label" filter string read from each session's
+consolidated {session}.pkl -- at that condition; nothing else has to
+change.
 
 Note on scope: the plotting/diagnostic machinery of the source ablation
 script (StepResult, SupplementaryMetrics, Rastermap neuron ordering, the
@@ -236,8 +239,43 @@ from Useful_definition import ANATOMICAL_ORDER, safe_array
 #      is no second dict to keep in sync by hand. ---------------------------
 TRIAL_TYPE: str = "cued_hit_long"          # "cued_hit_long" | "spont_hit_long" | "spont_miss_long"
 
+# ---- Alignment hyperparameter -- selects which behavioural event trials
+#      are aligned to. Mirrors ALIGN / ALIGN_MODES in
+#      pCCA_sensitive_realsingle_Session_11panel.py: this one switch picks
+#      BOTH the neural session-region-data source folder (`mat_subdir_name`,
+#      e.g. "cued_hit_long_cue_onset_results") AND the behavioural
+#      regressor folder (`BEHAVIOR_DIR`, e.g. "tapproach_sessions_cue_onset"),
+#      so the two can never drift out of sync with each other.
+ALIGN_MODES: Dict[str, str] = {
+    "default_move_onset": "align to movement onset using t_approach.start_time directly",
+    "cue_onset":           "align to cue onset: start_time - t_approach.cue",
+    "bar_off_onset":       "align to bar-off onset: start_time + t_approach.bar_off",
+    "reward_onset":        "align to reward onset: start_time + t_approach.drop_time",
+}
+
+# Per-alignment-mode trial window (seconds, relative to the aligned event) --
+# must match segment_mdl_to_trials.m (neural) and t_approach_python.py's own
+# ALIGNMENT_WINDOWS_S (behavioural) EXACTLY, so the two data sources line up
+# sample-for-sample once both are loaded below. All four windows span 3.0s
+# total at 50Hz (151 samples) -- matching the native recorded span of the
+# behavioural position-tracking input, so no part of any window relies on
+# extrapolated (edge-held) position data.
+ALIGNMENT_WINDOWS_S: Dict[str, Tuple[float, float]] = {
+    "default_move_onset": (-1.0, 2.0),
+    "cue_onset":           (-0.8, 2.2),
+    "bar_off_onset":       (-2.0, 1.0),
+    "reward_onset":        (-1.2, 1.8),
+}
+
+ALIGN: str = "reward_onset"
+if ALIGN not in ALIGN_MODES:
+    raise ValueError(
+        f"ALIGN={ALIGN!r} is not a supported alignment mode; "
+        f"choose one of {sorted(ALIGN_MODES)}."
+    )
+
 BASE_DIR: Path = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
-BEHAVIOR_DIR: Path = BASE_DIR / "Paper_output" / "tapproach_sessions"
+BEHAVIOR_DIR: Path = BASE_DIR / "Paper_output" / f"tapproach_sessions_{ALIGN}"
 
 # ---- CCA / pCCA dimensionality & regularisation (matches the 8-panel script)
 N_COMPONENTS: int = 1
@@ -253,11 +291,16 @@ LAMBDA_HAT: float = 1e-4
 #      consumer, PCA_latent_extenal_variable_bar.py's own N_COMPONENTS.
 N_PCA_COMPONENTS: int = 5
 
-# ---- Time windows -----------------------------------------------------------
-TIME_RANGE_S: Tuple[float, float] = (-1.5, 3.0)          # raw neural acquisition window
-BEHAVIOR_TIME_RANGE_S: Tuple[float, float] = (-1.0, 2.0)  # "for example just keep -1 to 2"
-BEHAVIOR_FS: float = 50.0
-BEHAVIOR_T_OFFSET: float = -1.0
+# ---- Time windows -------------------------------------------------------
+# Both the raw neural acquisition window and the behavioural crop window are
+# now simply ALIGN's window (ALIGNMENT_WINDOWS_S) -- segment_mdl_to_trials.m
+# already segments the neural .mat data to exactly this window per
+# alignment mode, and t_approach_python.py already crops its saved
+# pos/speed/time .npy files to the same window, so there is nothing left
+# for crop_time_window() below to actually trim; it is kept as a defensive
+# no-op / mismatch check rather than removed.
+TIME_RANGE_S: Tuple[float, float] = ALIGNMENT_WINDOWS_S[ALIGN]          # raw neural acquisition window
+BEHAVIOR_TIME_RANGE_S: Tuple[float, float] = ALIGNMENT_WINDOWS_S[ALIGN]  # behavioural-tracking window
 
 # ---- Regime toggles (raw regime by default, matching this request; flip
 #      SUBTRACT_PSTH if this pipeline is ever pointed at the residual regime)
@@ -285,22 +328,27 @@ EXCLUDED_REGIONS: List[str] = []
 SESSIONS: Optional[List[str]] = None
 
 
-def mat_subdir_name(trial_type: str) -> str:
-    """Existing MATLAB-pipeline pCCA source folder for `trial_type`."""
-    return f"pcca_sessions_{trial_type}_results"
+def mat_subdir_name(trial_type: str, align_mode: str = ALIGN) -> str:
+    """MATLAB-pipeline session-region-data source folder for `trial_type` /
+    `align_mode`, e.g. "cued_hit_long_cue_onset_results" -- matches
+    SESSION_DATA_DIR's naming convention in
+    pCCA_sensitive_realsingle_Session_11panel.py. `align_mode` defaults to
+    the module-level ALIGN so every existing single-argument call site
+    (this file's own, and PCA_latent_extrenal_variable_part.py's) keeps
+    resolving to whichever alignment mode is currently selected above."""
+    return f"{trial_type}_{align_mode}_results"
 
 
-def out_subdir_name(trial_type: str) -> str:
-    """This script's own output folder for `trial_type` -- item (4)'s
-    naming pattern: same 'pcca_sessions_{trial_type}_results' stem, with
-    the 'pcca_all_regions_out_behaviour' prefix identifying the condition."""
-    return f"pcca_all_regions_out_behaviour_sessions_{trial_type}_results"
+def out_subdir_name(trial_type: str, align_mode: str = ALIGN) -> str:
+    """This script's own output folder for `trial_type` / `align_mode`."""
+    return f"pcca_all_regions_out_behaviour_sessions_{trial_type}_{align_mode}_results"
 
 
 def behavior_label_for(trial_type: str) -> str:
-    """'cued_hit_long' -> 'cued hit long', matching the *_task_label.npy
-    string convention (BEHAVIOR_TRIAL_LABEL in the 8-panel script /
-    _trial_type_to_behavior_label in pCCA_latent_extenal_variable_bar.py)."""
+    """'cued_hit_long' -> 'cued hit long', matching the "task_label" string
+    convention inside each session's consolidated {session}.pkl
+    (BEHAVIOR_TRIAL_LABEL in the 8-panel script / _trial_type_to_behavior_
+    label in pCCA_latent_extenal_variable_bar.py)."""
     return trial_type.replace("_", " ")
 
 
@@ -398,6 +446,81 @@ HUB_REGIONS: List[str] = sorted(
     {region for pair in REGION_PAIRS for region in pair},
     key=get_anatomical_index,
 )
+
+
+# =============================================================================
+# 3b. Subregion / laminar-depth classification for Part 3's weight-ratio
+#     metrics -- LAMINAR_DEPTH_MAP / get_laminar_depth / CORTICAL_REGIONS
+#     copied from pCCA_sensitive_realsingle_Session_11panel.py (the only
+#     existing place in this project that already classifies a cortical
+#     subregion_labels string as superficial or deep), minus the mPFC
+#     entries -- mPFC never appears in this file's HUB_REGIONS.
+# =============================================================================
+
+EXCLUDED_SUBREGION_LABELS: List[str] = ["out"]
+
+LAMINAR_DEPTH_MAP: Dict[str, str] = {
+    # ---- mPFC (kept for completeness even though mPFC is not itself a
+    #      hub region here; harmless if a label never actually occurs) ----
+    "ACAd5":   "layer-deep",
+    "ACAd6a":  "layer-deep",
+    "PL6a":    "layer-deep",
+    "ILA6a":   "layer-deep",
+    "FRP6a":   "layer-deep",
+
+    # ---- ORB ----
+    "ORBl23":  "layer-shallow",
+    "ORBvl23": "layer-shallow",
+    "ORBl5":   "layer-deep",
+    "ORBvl5":  "layer-deep",
+    "ORBl6a":  "layer-deep",
+    "ORBm6a":  "layer-deep",
+    "ORBvl6a": "layer-deep",
+    "ORBl6b":  "layer-deep",
+    "ORBvl6b": "layer-deep",
+
+    # ---- MOp ----
+    "MOp1":    "layer-shallow",
+    "MOp23":   "layer-shallow",
+    "MOp5":    "layer-deep",
+    "MOp6a":   "layer-deep",
+    "MOp6b":   "layer-deep",
+
+    # ---- MOs ----
+    "MOs1":    "layer-shallow",
+    "MOs23":   "layer-shallow",
+    "MOs5":    "layer-deep",
+    "MOs6a":   "layer-deep",
+    "MOs6b":   "layer-deep",
+}
+
+
+def get_laminar_depth(
+        subregion_label: str,
+        depth_map: Dict[str, str] = LAMINAR_DEPTH_MAP,
+        strict: bool = False,
+) -> Optional[str]:
+    """Map a cortical subregion label (e.g. 'MOp5') to 'layer-shallow' /
+    'layer-deep'. `strict=False` (this file's default -- the opposite of
+    the 11panel script's) returns None for an unmapped label instead of
+    raising, since Part 3's metrics must degrade gracefully: an
+    unrecognised or unresolved cortical label should simply drop out of
+    the ratio, not abort the whole session's computation."""
+    if subregion_label in depth_map:
+        return depth_map[subregion_label]
+    if strict:
+        raise KeyError(
+            f"'{subregion_label}' has no laminar depth assignment "
+            f"(not a laminar cortical subregion, or an unresolved/"
+            f"subcortical label)."
+        )
+    return None
+
+
+# Hub regions in REGION_PAIRS whose subregion labels are laminar-cortical
+# (every key of LAMINAR_DEPTH_MAP belongs to one of these, plus mPFC, which
+# never appears in this file's HUB_REGIONS).
+CORTICAL_REGIONS: List[str] = ["MOp", "MOs", "ORB"]
 
 
 # =============================================================================
@@ -633,12 +756,32 @@ def pca_fit_and_project(
 #     pCCA_sensitive_realsingle_Session_8panel.py.
 # =============================================================================
 
-def load_region_spikes(session_path: str) -> Tuple[Dict[str, np.ndarray], int, int]:
+def load_region_spikes(
+        session_path: str,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, List[str]], int, int]:
+    """Load per-region spike tensors AND per-neuron subregion labels for one
+    session.
+
+    ``region_data.regions.<region>.subregion_labels`` sits at the same
+    hierarchical level as ``spike_data`` (item 4): it is subset with the
+    IDENTICAL ``selected_neurons`` index array already applied to
+    ``spike_data``, so ``region_subregion_labels[r][i]`` stays aligned
+    one-to-one with neuron ``i`` of ``region_spikes[r]``. Unlike
+    ``pCCA_sensitive_realsingle_Session_11panel.py``'s own
+    ``load_region_spikes``, a neuron whose label is in
+    ``EXCLUDED_SUBREGION_LABELS`` (or missing) is NOT dropped here -- doing
+    so would change which neurons PCA/pCCA fit on, altering every existing
+    result this script produces. Such labels are instead treated as
+    "unresolved" only inside Part 3's weight-ratio metrics
+    (`compute_subregion_weight_metrics`), which is the sole consumer of
+    this second return value.
+    """
     data = mat73.loadmat(session_path)
     rd   = data.get("region_data", {})
     regs = rd.get("regions", {})
 
     region_spikes: Dict[str, np.ndarray] = {}
+    region_subregion_labels: Dict[str, List[str]] = {}
     n_trials_out = T_out = None
 
     for rname, info in regs.items():
@@ -647,10 +790,32 @@ def load_region_spikes(session_path: str) -> Tuple[Dict[str, np.ndarray], int, i
         sd = safe_array(info.get("spike_data"))
         if sd is None or sd.ndim != 3:
             continue
+        n_full = sd.shape[1]
+
+        labels_full = info.get("subregion_labels")
+        if labels_full is None:
+            labels_full = ["unknown"] * n_full
+        elif not isinstance(labels_full, list):
+            labels_full = [str(v) for v in np.asarray(labels_full).ravel()]
+        else:
+            labels_full = [str(v) for v in labels_full]
+        if len(labels_full) != n_full:
+            warnings.warn(
+                f"[load_region_spikes] {rname}: subregion_labels length "
+                f"({len(labels_full)}) != n_neurons ({n_full}); ignoring labels."
+            )
+            labels_full = ["unknown"] * n_full
+
         sel = safe_array(info.get("selected_neurons"))
         if sel is not None and sel.size > 0:
-            sd = sd[:, sel.ravel().astype(int) - 1, :]
+            idx0 = sel.ravel().astype(int) - 1
+            sd = sd[:, idx0, :]
+            labels = [labels_full[i] for i in idx0]
+        else:
+            labels = labels_full
+
         region_spikes[rname] = sd.astype(np.float32)
+        region_subregion_labels[rname] = labels
         if n_trials_out is None:
             n_trials_out, _, T_out = sd.shape
 
@@ -658,7 +823,7 @@ def load_region_spikes(session_path: str) -> Tuple[Dict[str, np.ndarray], int, i
         f"    [load_region_spikes]  {len(region_spikes)} regions loaded  "
         f"| n_trials={n_trials_out}  T={T_out}"
     )
-    return region_spikes, int(n_trials_out), int(T_out)
+    return region_spikes, region_subregion_labels, int(n_trials_out), int(T_out)
 
 
 def crop_time_window(
@@ -684,11 +849,19 @@ def load_behavior_regressors(
         session_name: str,
         behavior_dir: Path = BEHAVIOR_DIR,
         trial_label: str = "cued hit long",
-        fs: float = BEHAVIOR_FS,
-        t_offset: float = BEHAVIOR_T_OFFSET,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Load per-trial position (x, y, z) and speed traces for one session,
     filtered to trials matching `trial_label`.
+
+    Reads t_approach_python.py's consolidated `{session}.pkl` (one dict per
+    session: "pos", "task_label", "movement_label", "speed", "time",
+    "trigger_times") instead of the four separate `{session}_*.npy` files
+    that format replaced. The time axis comes directly from the pkl's own
+    "time" field, written by t_approach_python.py's per-alignment-mode
+    window crop (ALIGNMENT_WINDOWS_S there == ALIGNMENT_WINDOWS_S here) --
+    this is what actually guarantees the behavioural axis matches the
+    neural one sample-for-sample for whichever alignment mode produced
+    `behavior_dir`, instead of merely assuming it.
 
     Returns
     -------
@@ -696,16 +869,17 @@ def load_behavior_regressors(
     speed_sel : (n_trials_behav, 1, T_behav)  float32
     t_behav   : (T_behav,)  time vector in seconds
     """
-    pos_path   = behavior_dir / f"{session_name}_pos.npy"
-    speed_path = behavior_dir / f"{session_name}_speed.npy"
-    label_path = behavior_dir / f"{session_name}_task_label.npy"
-    for p in (pos_path, speed_path, label_path):
-        if not p.exists():
-            raise FileNotFoundError(f"Behaviour file not found: {p}")
+    pkl_path = behavior_dir / f"{session_name}.pkl"
+    if not pkl_path.exists():
+        raise FileNotFoundError(f"Behaviour file not found: {pkl_path}")
 
-    pos    = np.load(pos_path)                       # (N, 3, T_behav)
-    speed  = np.load(speed_path)                      # (N, T_behav)
-    labels = np.load(label_path, allow_pickle=True)   # (N,) object array
+    with open(pkl_path, "rb") as fh:
+        session_data = pickle.load(fh)
+
+    pos    = np.asarray(session_data["pos"])                     # (N, 3, T_behav)
+    speed  = np.asarray(session_data["speed"])                    # (N, T_behav)
+    labels = np.asarray(session_data["task_label"], dtype=object)  # (N,)
+    t_behav = np.asarray(session_data["time"], dtype=np.float64)   # (T_behav,)
 
     if speed.ndim == 2:
         speed = speed[:, None, :]                      # → (N, 1, T_behav)
@@ -715,13 +889,11 @@ def load_behavior_regressors(
         available = sorted(set(labels.tolist()))
         raise ValueError(
             f"No behaviour trials with label '{trial_label}' found in "
-            f"{label_path.name} (available labels: {available})."
+            f"{pkl_path.name} (available labels: {available})."
         )
 
     pos_sel   = pos[sel].astype(np.float32)
     speed_sel = speed[sel].astype(np.float32)
-    T_behav   = pos_sel.shape[-1]
-    t_behav   = np.arange(T_behav, dtype=np.float64) / fs + t_offset
     return pos_sel, speed_sel, t_behav
 
 
@@ -749,6 +921,33 @@ class PrivateLatentPairResult:
     n_neurons_j: int
     nuisance_regions: List[str] = field(default_factory=list)
     z_dim_total: int = 0
+    subregion_weight_metrics_i: List[SubregionWeightMetrics] = field(default_factory=list)  # Part 3, one per column of Wx
+    subregion_weight_metrics_j: List[SubregionWeightMetrics] = field(default_factory=list)  # Part 3, one per column of Wy
+
+
+@dataclass
+class SubregionWeightMetrics:
+    """Part 3's weight-ratio measure for ONE PCA/CCA component of ONE
+    region's weight vector: whether the neurons carrying the largest
+    |weight| in this component tend to come from superficial vs. deep
+    cortical layers (`region` in CORTICAL_REGIONS) or from a particular
+    subcortical subregion (every other hub region). See
+    `compute_subregion_weight_metrics` for exactly how each field below is
+    derived. Every dict is keyed by group name -- 'layer-shallow' /
+    'layer-deep' for a cortical region, the raw `subregion_labels` string
+    itself otherwise -- and covers only the neurons this session actually
+    resolved to a group (`n_neurons_resolved` out of `n_neurons_total`;
+    see EXCLUDED_SUBREGION_LABELS)."""
+    region: str
+    is_cortical: bool
+    n_neurons_total: int
+    n_neurons_resolved: int
+    weight_mass_fraction: Dict[str, float] = field(default_factory=dict)
+    neuron_count_fraction: Dict[str, float] = field(default_factory=dict)
+    enrichment_ratio: Dict[str, float] = field(default_factory=dict)
+    dominant_group: Optional[str] = None
+    dominant_ratio: Optional[float] = None
+    dominant_ratio_label: Optional[str] = None
 
 
 @dataclass
@@ -767,6 +966,7 @@ class RegionPCAResult:
     latent: np.ndarray                     # (n_trials, T, K)   projected PCA scores
     mean: np.ndarray                       # (1, n_neurons)     column mean subtracted before the SVD
     n_neurons: int
+    subregion_weight_metrics: List[SubregionWeightMetrics] = field(default_factory=list)  # Part 3, one per column of W
 
 
 @dataclass
@@ -802,6 +1002,8 @@ class HubOrientationPCAResult:
     n_neurons_hub: int
     nuisance_regions: List[str] = field(default_factory=list)
     z_dim_total: int = 0
+    subregion_weight_metrics_network: List[SubregionWeightMetrics] = field(default_factory=list)   # Part 3, one per column of W_network
+    subregion_weight_metrics_residual: List[SubregionWeightMetrics] = field(default_factory=list)  # Part 3, one per column of W_residual
 
 
 @dataclass
@@ -852,6 +1054,8 @@ class PrivateLatentSessionResult:
     region_pca_raw: Dict[str, RegionPCAResult] = field(default_factory=dict)
     region_pca_out_behaviour: Dict[str, RegionPCAResult] = field(default_factory=dict)
     hub_pca_pairs: Dict[Tuple[str, str], HubPairPCAResult] = field(default_factory=dict)
+    align_mode: str = ALIGN
+    region_subregion_labels: Dict[str, List[str]] = field(default_factory=dict)  # item 4, per-neuron, aligned to region_flat's neuron axis
 
 # Force the pickled module name to the real, importable one, independent of
 # how this script happens to be invoked. Running `python
@@ -873,6 +1077,7 @@ def config_fingerprint() -> Dict[str, Any]:
     wired into an actual comparison, not merely computed) in this project's
     working notes."""
     return dict(
+        align_mode=ALIGN,
         n_components=N_COMPONENTS,
         n_pca_components=N_PCA_COMPONENTS,
         lambda_cca=LAMBDA_CCA,
@@ -925,18 +1130,150 @@ def _other_region_nuisance_list(
     ]
 
 
+def _subregion_group_for(region: str, label: str) -> Optional[str]:
+    """Collapse one neuron's raw `subregion_labels` string to the group
+    used by Part 3's weight-ratio metrics: 'layer-shallow' / 'layer-deep'
+    for a cortical hub region (`CORTICAL_REGIONS`), the raw label itself
+    for every other (subcortical) region. Returns None for a neuron whose
+    label carries no usable anatomical information for this purpose --
+    excluded (`EXCLUDED_SUBREGION_LABELS`), missing/unresolved
+    ('unknown'), or (for a cortical region) not one of the laminar labels
+    this project has mapped -- so every fraction below is computed only
+    over neurons that DO resolve to a group, instead of being silently
+    diluted by ones that don't.
+    """
+    if not label or label in EXCLUDED_SUBREGION_LABELS or label == "unknown":
+        return None
+    if region in CORTICAL_REGIONS:
+        return get_laminar_depth(label, strict=False)
+    return label
+
+
+def compute_subregion_weight_metrics(
+        region: str,
+        W: np.ndarray,
+        labels: Optional[List[str]],
+) -> List[SubregionWeightMetrics]:
+    """Part 3's weight-ratio measure: one `SubregionWeightMetrics` per
+    column of `W` (n_neurons, K), computed identically whether `W` is a
+    PCA loading matrix (Parts 1a/1b/2a/2b) or a pCCA canonical weight
+    matrix Wx/Wy (Part 2c) -- only the matrix and the region it belongs to
+    ever differ between call sites.
+
+    For component k, every resolved neuron (`_subregion_group_for`)
+    contributes |W[i, k]| to its group's weight mass. Two views of that
+    mass are reported per group g:
+
+        weight_mass_fraction[g]  = sum(|w_i|, i in g) / sum(|w_i|, i resolved)
+        neuron_count_fraction[g] = n_g / n_resolved
+        enrichment_ratio[g]      = weight_mass_fraction[g] / neuron_count_fraction[g]
+
+    `enrichment_ratio` is the fold-enrichment of group g among the neurons
+    that dominate this component's weight, relative to g's own share of
+    the resolved population: 1.0 means g's neurons carry exactly their
+    numerical "fair share" of |W|, >1 means they are over-represented among
+    the high-magnitude weights, <1 under-represented. This is deliberately
+    a SECOND, population-normalised measure alongside `weight_mass_fraction`
+    alone, since a group with many neurons can dominate the raw mass
+    fraction without any individual neuron in it being unusually
+    high-weighted.
+
+    A single scalar summary is also recorded for convenience:
+    `dominant_ratio` is literally the requested shallow-to-deep ratio
+    (`weight_mass_fraction['layer-shallow'] / weight_mass_fraction
+    ['layer-deep']`) for a cortical region, and its subcortical analogue --
+    the mass fraction of whichever single subregion label carries the most
+    weight in this component, divided by the combined mass fraction of
+    every OTHER subregion label -- for everything else; `dominant_ratio_
+    label` names which comparison it is (e.g. 'layer-shallow:layer-deep'
+    or '<top_label>:rest').
+    """
+    n_neurons, K = W.shape
+    is_cortical = region in CORTICAL_REGIONS
+
+    if not labels or len(labels) != n_neurons:
+        # No usable labels for this region/session -- an all-unresolved
+        # placeholder per component, rather than raising, so a session
+        # missing subregion metadata for one region doesn't abort the
+        # whole session's computation.
+        return [
+            SubregionWeightMetrics(
+                region=region, is_cortical=is_cortical,
+                n_neurons_total=n_neurons, n_neurons_resolved=0,
+            )
+            for _ in range(K)
+        ]
+
+    groups = [_subregion_group_for(region, lab) for lab in labels]
+    resolved_mask = np.array([g is not None for g in groups])
+    n_resolved = int(resolved_mask.sum())
+    groups_res = [g for g, keep in zip(groups, resolved_mask) if keep]
+    unique_groups = sorted(set(groups_res))
+
+    results: List[SubregionWeightMetrics] = []
+    for k in range(K):
+        metrics = SubregionWeightMetrics(
+            region=region, is_cortical=is_cortical,
+            n_neurons_total=n_neurons, n_neurons_resolved=n_resolved,
+        )
+        if n_resolved > 0:
+            w_res = np.abs(W[resolved_mask, k]).astype(np.float64)
+            total_mass = float(w_res.sum())
+
+            mass_frac: Dict[str, float] = {}
+            count_frac: Dict[str, float] = {}
+            for g in unique_groups:
+                g_mask = np.array([gg == g for gg in groups_res])
+                mass_frac[g] = float(w_res[g_mask].sum() / total_mass) if total_mass > 0 else 0.0
+                count_frac[g] = float(g_mask.sum()) / n_resolved
+            metrics.weight_mass_fraction = mass_frac
+            metrics.neuron_count_fraction = count_frac
+            metrics.enrichment_ratio = {
+                g: (mass_frac[g] / count_frac[g]) if count_frac[g] > 0 else float("nan")
+                for g in unique_groups
+            }
+
+            if is_cortical:
+                shallow = mass_frac.get("layer-shallow", 0.0)
+                deep = mass_frac.get("layer-deep", 0.0)
+                metrics.dominant_group = "layer-shallow" if shallow >= deep else "layer-deep"
+                if deep > 0:
+                    metrics.dominant_ratio = shallow / deep
+                elif shallow > 0:
+                    metrics.dominant_ratio = float("inf")
+                else:
+                    metrics.dominant_ratio = float("nan")
+                metrics.dominant_ratio_label = "layer-shallow:layer-deep"
+            elif unique_groups:
+                top_group = max(unique_groups, key=lambda g: mass_frac[g])
+                rest_frac = 1.0 - mass_frac[top_group]
+                metrics.dominant_group = top_group
+                metrics.dominant_ratio = (
+                    mass_frac[top_group] / rest_frac if rest_frac > 0 else float("inf")
+                )
+                metrics.dominant_ratio_label = f"{top_group}:rest"
+
+        results.append(metrics)
+    return results
+
+
 def _compute_region_pca(
         region: str,
         X_flat: np.ndarray,
         n_trials: int,
         T: int,
         n_components: int = N_PCA_COMPONENTS,
+        labels: Optional[List[str]] = None,
 ) -> RegionPCAResult:
     """Part 1a/1b building block: fit + project PCA on one region's
     flattened activity and package the result. The caller decides which
     Part this is purely by what it passes as `X_flat` -- raw
     `region_flat[region]` for Part 1a, or that region's behaviour residual
-    for Part 1b -- and by which dict it stores the return value in."""
+    for Part 1b -- and by which dict it stores the return value in.
+    `labels` (this region's per-neuron subregion labels, item 4) drives
+    Part 3's `subregion_weight_metrics`; both Part 1a and 1b use the SAME
+    labels for a given region, since behaviour regression does not change
+    which neuron is which."""
     W, explained_variance_ratio, mean, latent = pca_fit_and_project(
         X_flat, n_trials, T, n_components)
     return RegionPCAResult(
@@ -946,6 +1283,7 @@ def _compute_region_pca(
         latent=latent.astype(np.float32),
         mean=mean.astype(np.float32),
         n_neurons=int(X_flat.shape[1]),
+        subregion_weight_metrics=compute_subregion_weight_metrics(region, W, labels),
     )
 
 
@@ -957,6 +1295,7 @@ def _compute_hub_orientation_pca(
         n_trials: int,
         T: int,
         n_components: int = N_PCA_COMPONENTS,
+        labels: Optional[List[str]] = None,
 ) -> HubOrientationPCAResult:
     """Parts 2a + 2b for ONE hub orientation: `hub`'s Part-1b behaviour
     residual (`X_hub_behav_res`, precomputed once per hub and passed in
@@ -1000,6 +1339,8 @@ def _compute_hub_orientation_pca(
         n_neurons_hub=int(X_hub_behav_res.shape[1]),
         nuisance_regions=nuisance_all,
         z_dim_total=int(Z_nuisance.shape[1]) if Z_nuisance is not None else 0,
+        subregion_weight_metrics_network=compute_subregion_weight_metrics(hub, W_net, labels),
+        subregion_weight_metrics_residual=compute_subregion_weight_metrics(hub, W_res, labels),
     )
 
 
@@ -1010,6 +1351,7 @@ def _compute_hub_pair_pca_result(
         behav_res_by_region: Dict[str, np.ndarray],
         n_trials: int,
         T: int,
+        region_subregion_labels: Optional[Dict[str, List[str]]] = None,
 ) -> Optional[HubPairPCAResult]:
     """Parts 2a + 2b for one canonicalized pair -- both hub orientations
     (region_i-as-hub/region_j-as-partner AND region_j-as-hub/region_i-as-
@@ -1023,15 +1365,18 @@ def _compute_hub_pair_pca_result(
     if region_i not in behav_res_by_region or region_j not in behav_res_by_region:
         return None
 
+    region_subregion_labels = region_subregion_labels or {}
     region_i_as_hub = _compute_hub_orientation_pca(
         hub=region_i, partner=region_j,
         X_hub_behav_res=behav_res_by_region[region_i],
         behav_res_by_region=behav_res_by_region, n_trials=n_trials, T=T,
+        labels=region_subregion_labels.get(region_i),
     )
     region_j_as_hub = _compute_hub_orientation_pca(
         hub=region_j, partner=region_i,
         X_hub_behav_res=behav_res_by_region[region_j],
         behav_res_by_region=behav_res_by_region, n_trials=n_trials, T=T,
+        labels=region_subregion_labels.get(region_j),
     )
 
     return HubPairPCAResult(
@@ -1048,6 +1393,8 @@ def _compute_pair_result(
         behavior_Z_flat: Optional[np.ndarray],
         n_trials: int,
         T: int,
+        labels_i: Optional[List[str]] = None,
+        labels_j: Optional[List[str]] = None,
 ) -> Optional[PrivateLatentPairResult]:
     """Fit the AllRegions+Behaviour pCCA condition for one canonicalized
     region pair -- the per-pair generalisation of
@@ -1088,6 +1435,8 @@ def _compute_pair_result(
         n_neurons_j=int(region_flat[region_j].shape[1]),
         nuisance_regions=nuisance_all,
         z_dim_total=int(Z_full.shape[1]),
+        subregion_weight_metrics_i=compute_subregion_weight_metrics(region_i, Wx, labels_i),
+        subregion_weight_metrics_j=compute_subregion_weight_metrics(region_j, Wy, labels_j),
     )
 
 
@@ -1095,22 +1444,23 @@ def compute_private_latents_for_session(
         session_name: str,
         trial_type: str = TRIAL_TYPE,
         mat_dir: Optional[Path] = None,
+        align_mode: str = ALIGN,
 ) -> Optional[PrivateLatentSessionResult]:
     """Compute the AllRegions+Behaviour private pCCA latent for every pair
-    in REGION_PAIRS, for one session of one trial type.
+    in REGION_PAIRS, for one session of one trial type / alignment mode.
 
     Returns None if the session cannot be processed at all: missing source
     .mat file, a crop window with < 2 overlapping samples, or (when
     REQUIRE_BEHAVIOR=True, the default) missing/unmatched behavioural
     tracking.
     """
-    mat_dir = mat_dir if mat_dir is not None else (BASE_DIR / mat_subdir_name(trial_type))
+    mat_dir = mat_dir if mat_dir is not None else (BASE_DIR / mat_subdir_name(trial_type, align_mode))
     session_file = mat_dir / f"{session_name}_analysis_results.mat"
     if not session_file.exists():
         print(f"  [skip] {session_name}: source file not found -> {session_file}")
         return None
 
-    region_spikes, n_trials, T = load_region_spikes(str(session_file))
+    region_spikes, region_subregion_labels, n_trials, T = load_region_spikes(str(session_file))
     if not region_spikes:
         print(f"  [skip] {session_name}: no regions loaded")
         return None
@@ -1190,12 +1540,14 @@ def compute_private_latents_for_session(
         if region not in region_flat:
             continue
         region_pca_raw[region] = _compute_region_pca(
-            region, region_flat[region], n_trials, T)
+            region, region_flat[region], n_trials, T,
+            labels=region_subregion_labels.get(region))
 
         X_behav_res = residualize(region_flat[region], behavior_Z_flat, LAMBDA_HAT)
         behav_res_by_region[region] = X_behav_res
         region_pca_out_behaviour[region] = _compute_region_pca(
-            region, X_behav_res, n_trials, T)
+            region, X_behav_res, n_trials, T,
+            labels=region_subregion_labels.get(region))
 
     # ---- Part 2: every pair in REGION_PAIRS -- 2a/2b (hub-orientation
     #      PCA, both directions) computed side by side with 2c (existing,
@@ -1209,12 +1561,17 @@ def compute_private_latents_for_session(
         region_i, region_j = sort_pair_by_anatomy(ri_raw, rj_raw)
 
         result = _compute_pair_result(
-            region_i, region_j, region_flat, behavior_Z_flat, n_trials, T)
+            region_i, region_j, region_flat, behavior_Z_flat, n_trials, T,
+            labels_i=region_subregion_labels.get(region_i),
+            labels_j=region_subregion_labels.get(region_j),
+        )
         if result is not None:
             pairs[(region_i, region_j)] = result
 
         hub_result = _compute_hub_pair_pca_result(
-            region_i, region_j, region_flat, behav_res_by_region, n_trials, T)
+            region_i, region_j, region_flat, behav_res_by_region, n_trials, T,
+            region_subregion_labels=region_subregion_labels,
+        )
         if hub_result is not None:
             hub_pca_pairs[(region_i, region_j)] = hub_result
 
@@ -1240,6 +1597,8 @@ def compute_private_latents_for_session(
         region_pca_raw=region_pca_raw,
         region_pca_out_behaviour=region_pca_out_behaviour,
         hub_pca_pairs=hub_pca_pairs,
+        align_mode=align_mode,
+        region_subregion_labels=region_subregion_labels,
     )
 
 
@@ -1251,11 +1610,12 @@ def run_all_sessions(
         trial_type: str = TRIAL_TYPE,
         sessions: Optional[List[str]] = None,
         overwrite: bool = False,
+        align_mode: str = ALIGN,
 ) -> None:
     """Compute and pickle every session's PrivateLatentSessionResult for
-    `trial_type`. `sessions=None` (default) auto-discovers every session
-    under the source .mat folder; pass an explicit list to restrict to a
-    subset (e.g. while testing).
+    `trial_type` / `align_mode`. `sessions=None` (default) auto-discovers
+    every session under the source .mat folder; pass an explicit list to
+    restrict to a subset (e.g. while testing).
 
     Caching: an existing {session}_analysis_results.pkl is reused as-is
     only if its stored `config` matches `config_fingerprint()` for the
@@ -1263,8 +1623,8 @@ def run_all_sessions(
     with a clear printed message either way (never a silent stale reload).
     """
     sessions = sessions if sessions is not None else SESSIONS
-    mat_dir = BASE_DIR / mat_subdir_name(trial_type)
-    out_dir = BASE_DIR / out_subdir_name(trial_type)
+    mat_dir = BASE_DIR / mat_subdir_name(trial_type, align_mode)
+    out_dir = BASE_DIR / out_subdir_name(trial_type, align_mode)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if sessions is None:
@@ -1274,6 +1634,7 @@ def run_all_sessions(
     print("=" * 70)
     print("Region/hub PCA (1a/1b/2a/2b) + private pCCA (2c)  |  AllRegions + Behaviour")
     print(f"  trial_type : {trial_type}   (behaviour label = '{behavior_label_for(trial_type)}')")
+    print(f"  align_mode : {align_mode}")
     print(f"  source dir : {mat_dir}")
     print(f"  output dir : {out_dir}")
     print(f"  sessions   : {len(sessions)}")
@@ -1302,7 +1663,8 @@ def run_all_sessions(
                 print(f"  cached copy unreadable ({exc}) -> recomputing")
 
         try:
-            result = compute_private_latents_for_session(session_name, trial_type, mat_dir)
+            result = compute_private_latents_for_session(
+                session_name, trial_type, mat_dir, align_mode=align_mode)
         except Exception as exc:
             print(f"  \U0001F4A5 [ERROR] {session_name}: {exc}")
             n_skipped += 1
@@ -1369,10 +1731,16 @@ class PrivateLatentAnalyzer:
         hub.latent_residual[:, :, 0]   # 2b -- left over after removing 2a
     """
 
-    def __init__(self, base_dir: Path = BASE_DIR, trial_type: str = TRIAL_TYPE) -> None:
+    def __init__(
+            self,
+            base_dir: Path = BASE_DIR,
+            trial_type: str = TRIAL_TYPE,
+            align_mode: str = ALIGN,
+    ) -> None:
         self.base_dir = Path(base_dir)
         self.trial_type = trial_type
-        self.results_dir = self.base_dir / out_subdir_name(trial_type)
+        self.align_mode = align_mode
+        self.results_dir = self.base_dir / out_subdir_name(trial_type, align_mode)
         self.sessions: Dict[str, PrivateLatentSessionResult] = {}
 
     def available_sessions(self) -> List[str]:

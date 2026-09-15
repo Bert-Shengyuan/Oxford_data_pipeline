@@ -1,0 +1,4 @@
+manim
+mat73
+scipy
+numpy

@@ -191,7 +191,6 @@ from pCCA_all_regions_out_behaviour import (  # noqa: E402
     LAMBDA_HAT,
     SUBTRACT_PSTH,
     SHUFFLE_TRIALS,
-    SubregionWeightMetrics
 )
 
 # `pcca_all_regions_out_behaviour.py` is typically *run* directly (as
@@ -224,25 +223,15 @@ except Exception:
 
 # ---- Reference / trial-type selection --------------------------------------
 REFERENCE_TYPE: str = 'cued_hit_long'
-ALIGN: str = "cue_onset"
-
-Align_type_value = ALIGN.replace("_", " ")
-if ALIGN == 'default_move_onset':
-    Align_type_value = 'Move onset'
-
-ACTIVE_TRIAL_TYPES: List[str] = [ 
+ACTIVE_TRIAL_TYPES: List[str] = [
     'cued_hit_long',
     # 'spont_hit_long',
 ]
 
 # ---- Paths -------------------------------------------------------------
 BASE_DIR = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
-# `ALIGN` (imported from pCCA_all_regions_out_behaviour.py) picks BOTH the
-# neural session-region-data folder (via `mat_subdir_name`'s default
-# `align_mode=ALIGN`) AND this behavioural regressor folder, so the two
-# stay in sync automatically whenever ALIGN changes upstream.
-BEHAVIOR_DIR = BASE_DIR / "Paper_output" / f"tapproach_sessions_{ALIGN}"
-OUTPUT_DIR = BASE_DIR / "Paper_output" / f"pca_all_regions_out_behaviour_{REFERENCE_TYPE}_{ALIGN}"
+BEHAVIOR_DIR = BASE_DIR / "Paper_output" / "tapproach_sessions"
+OUTPUT_DIR = BASE_DIR / "Paper_output" / f"pca_all_regions_out_behaviour_{REFERENCE_TYPE}_task345"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---- Sessions ------------------------------------------------------------
@@ -292,7 +281,7 @@ REWARD_SPLINE_DEGREE: int = 2
 #      already used. ------------------------------------------------------
 BAR_XLIM_RAW: Tuple[float, float] = (0.0, 0.5)        # Part 1a only
 
-BAR_XLIM_RESIDUAL: Tuple[float, float] = (0.0, 0.2)  # Parts 1b, 2a, 2b
+BAR_XLIM_RESIDUAL: Tuple[float, float] = (0.0, 0.05)  # Parts 1b, 2a, 2b
 
 # ---- Caching / output -----------------------------------------------------
 USE_CACHED_DATA: bool = True
@@ -422,21 +411,12 @@ HUB_MODE_EXTERNAL_VARIABLES: List[str] = ['reward_presence', 'reward_consumption
 HUB_MODE_BAR_XLIM_NETWORK: Tuple[float, float] = (0.0, 0.2)
 HUB_MODE_BAR_XLIM_RESIDUAL: Tuple[float, float] = (0.0, 0.05)
 
-# ---- a.3b: x-axis limits for the trial-averaged ("denoised") R^2 panels --
-#      these regress each session's TRIAL-AVERAGED latent trace (Task 5's
-#      own signal, one point per timepoint) rather than raw single trials,
-#      so they can legitimately land anywhere in [0, 1] -- a much wider
-#      range than single-trial R^2 ever reaches -- hence their own,
-#      generously wide scale rather than reusing HUB_MODE_BAR_XLIM_NETWORK/
-#      _RESIDUAL (which would clip them).
-HUB_MODE_BAR_XLIM_TRIALAVG: Tuple[float, float] = (0.0, 1.0)
-
 # ---- b.2: independent y-axis limits for the network vs. residual Task-5
 #      latent-trace panels. None (default) leaves matplotlib's own
 #      autoscale in place, exactly like the panels this mode's visual
 #      style is copied from.
 HUB_MODE_LATENT_YLIM_NETWORK: Optional[Tuple[float, float]] = [-2,2]
-HUB_MODE_LATENT_YLIM_RESIDUAL: Optional[Tuple[float, float]] = [-0.5,0.9]
+HUB_MODE_LATENT_YLIM_RESIDUAL: Optional[Tuple[float, float]] = [-0.5,0.5]
 
 # ---- Background band colour per hub region (mirrors REGION_CATEGORY_COLORS
 #      / PAIR_CATEGORY_COLORS above, keyed by hub region instead of by
@@ -723,83 +703,6 @@ def _r2_records_for_latent(
     return out
 
 
-# ---- 3d-bis. Trial-averaged ("denoised") counterpart of 3d's per-trial R^2.
-#      Regresses one session's TRIAL-AVERAGED latent trace (what Task 5's
-#      plot actually shows -- one point per timepoint, trial-to-trial and
-#      moment-to-moment noise already averaged away) against the same
-#      behavioural design, instead of `_r2_records_for_latent`'s raw
-#      single-trial-resolution regression. The two metrics answer different
-#      questions: single-trial R^2 asks "how much of this trial's raw
-#      variance does the design explain", trial-averaged R^2 asks "how much
-#      of the session's average response SHAPE does the design explain" --
-#      a real reward-locked effect can be small relative to single-trial
-#      noise (low single-trial R^2) while still being a large fraction of
-#      the averaged trace's own variance (high trial-averaged R^2); neither
-#      number is wrong, they are just different statistics. Kept as its own
-#      function rather than a flag on `_prepare_regression_inputs` because
-#      that function's `n < 3` guard (a real trial-count sanity check for
-#      the single-trial path) does not apply here -- there is deliberately
-#      only ONE effective "trial" (the average), so re-using it unmodified
-#      would silently drop every trial-averaged record.
-def _prepare_averaged_regression_inputs(
-        latent_avg: np.ndarray, time_bins: np.ndarray,
-        pos_full: np.ndarray, speed_full: np.ndarray, t_behav_full: np.ndarray,
-) -> Optional[Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]]:
-    """Same crop-to-BEHAVIOR_TIME_RANGE_S / shorter-of-the-two-truncate
-    logic as `_prepare_regression_inputs`, specialised for a single
-    trial-averaged latent trace (`latent_avg`, shape (1, T_neural)) against
-    a design built from this session's own trial-averaged position/speed."""
-    lo, hi = BEHAVIOR_TIME_RANGE_S
-    neural_mask = (time_bins >= lo - 1e-6) & (time_bins <= hi + 1e-6)
-    behav_mask = (t_behav_full >= lo - 1e-6) & (t_behav_full <= hi + 1e-6)
-    if neural_mask.sum() < 2 or behav_mask.sum() < 2:
-        return None
-
-    L = latent_avg[:, neural_mask]
-    P = pos_full.mean(axis=0, keepdims=True)[:, :, behav_mask]
-    S = speed_full.mean(axis=0, keepdims=True)[:, :, behav_mask]
-    t_win = t_behav_full[behav_mask]
-
-    T = min(L.shape[1], P.shape[2], t_win.size)
-    if T < 2:
-        return None
-    L = L[:, :T]
-    P = P[:, :, :T]
-    S = S[:, :, :T]
-    t_win = t_win[:T]
-
-    design_dict = _build_predictor_designs(P, S, t_win, n_trials=1)
-    return L, design_dict, t_win
-
-
-def _r2_records_for_averaged_latent(
-        latent_trials: np.ndarray, time_bins: np.ndarray,
-        pos_full: np.ndarray, speed_full: np.ndarray, t_behav_full: np.ndarray,
-        component_indices: List[int],
-) -> Dict[int, Dict[str, float]]:
-    """Trial-averaged analogue of `_r2_records_for_latent`: collapses
-    `latent_trials[:, :, comp_idx]` to its trial mean BEFORE regressing,
-    for every requested component."""
-    out: Dict[int, Dict[str, float]] = {}
-    for comp_idx in component_indices:
-        if comp_idx >= latent_trials.shape[2]:
-            continue
-        latent_avg = latent_trials[:, :, comp_idx].mean(axis=0, keepdims=True)
-        prep = _prepare_averaged_regression_inputs(
-            latent_avg, time_bins, pos_full, speed_full, t_behav_full)
-        if prep is None:
-            continue
-        latent_c, design_dict, t_win = prep
-        if VARIANCE_METHOD == 'marginal':
-            r2_by_var = {name: variance_explained(latent_c, d) for name, d in design_dict.items()}
-        elif VARIANCE_METHOD == 'leave_one_out':
-            r2_by_var = variance_explained_unique_loo(latent_c, design_dict)
-        else:
-            raise ValueError(f"Unknown VARIANCE_METHOD: {VARIANCE_METHOD!r}")
-        out[comp_idx] = r2_by_var
-    return out
-
-
 # ---- 3e. Duck-typed adapter for CrossSessionCCAAnalyzer.add_session_result,
 #     copied verbatim from pCCA_latent_extrenal_variable_bar.py's own
 #     _PrivateLatentSessionAdapter (used there for Part 2c; used here for
@@ -856,7 +759,7 @@ def run_full_analysis_region_pca(
     py's previous `run_full_analysis` returned, so every task 3/4/5 call
     below is unchanged in how it consumes them."""
     analyzers_by_trial_type: Dict[str, PrivateLatentAnalyzer] = {
-        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t, align_mode=ALIGN) for t in active_trial_types
+        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t) for t in active_trial_types
     }
     for az in analyzers_by_trial_type.values():
         az.load_all()
@@ -968,7 +871,7 @@ def run_full_analysis_hub_pca(
     since Parts 2a/2b are hub-directional (see
     pcca_all_regions_out_behaviour.py's Part 2 framework note)."""
     analyzers_by_trial_type: Dict[str, PrivateLatentAnalyzer] = {
-        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t, align_mode=ALIGN) for t in active_trial_types
+        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t) for t in active_trial_types
     }
     for az in analyzers_by_trial_type.values():
         az.load_all()
@@ -1209,7 +1112,7 @@ def plot_task5_region_latent_traces(
             line, = ax.plot(cs.time_bins, mean_trace, color=color, linewidth=2.0 if is_ref else 1.4,
                     alpha=0.85 if is_ref else 0.75,
                     label=f"{trial_type.replace('_', ' ')} (n={agg['n_sessions']})", zorder=3)
-            legend_handles.setdefault(trial_type.replace('_', ' ')+f" {Align_type_value}", line)
+            legend_handles.setdefault(trial_type.replace('_', ' '), line)
             ax.fill_between(cs.time_bins, mean_trace - sem_trace, mean_trace + sem_trace,
                             color=color, alpha=0.15, zorder=2)
 
@@ -1561,13 +1464,13 @@ def _plot_hub_latent_traces_one_figure(
                     alpha=0.85 if is_ref else 0.75,
                     label=f"{trial_type.replace('_', ' ')} (n={agg['n_sessions']})", zorder=3)
             if role == 'network':
-                legend_handles.setdefault(trial_type.replace('_', ' ') + f" {Align_type_value}", line)
+                legend_handles.setdefault(trial_type.replace('_', ' '), line)
             ax.fill_between(cs.time_bins, mean_trace - sem_trace, mean_trace + sem_trace,
                             color=color, alpha=0.15, zorder=2)
 
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.4, linewidth=1.2, zorder=0)
         ax.set_xlim(cs.time_bins[0], cs.time_bins[-1])
-        role_label = 'network' if role == 'network' else 'residual'
+        role_label = 'network (2a)' if role == 'network' else 'residual (2b)'
         ax.text(0.01, 0.90, f"{_display_hub_pair(hub, partner)}  \u2014  {role_label}",
                 transform=ax.transAxes, fontsize=TICK_FONTSIZE - 6, va='top', ha='left')
         for sp in ('top', 'right'):
@@ -1701,16 +1604,12 @@ def plot_grouped_region_bars_multipanel(
         y += GROUP_GAP - 1.0
 
     n_panels = len(variable_names)
-    ncols = 2 if n_panels > 1 else 1
-    nrows = int(np.ceil(n_panels / ncols))
     fig_h = max(5.0, 0.42 * y + 2.2)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(panel_width * ncols, fig_h * nrows), sharey=True)
-    axes = np.atleast_1d(axes).reshape(nrows, ncols)
+    fig, axes = plt.subplots(1, n_panels, figsize=(panel_width * n_panels, fig_h), sharey=True)
+    axes = np.atleast_1d(axes)
     rng = np.random.default_rng(0)
 
-    for panel_idx, variable_name in enumerate(variable_names):
-        row, col = divmod(panel_idx, ncols)
-        ax = axes[row, col]
+    for panel_idx, (variable_name, ax) in enumerate(zip(variable_names, axes)):
         for category, y_lo, y_hi in group_spans:
             ax.axhspan(y_lo - BAR_HEIGHT / 2 - 0.25, y_hi + BAR_HEIGHT / 2 + 0.25,
                        color=REGION_CATEGORY_COLORS.get(category, '#888888'), alpha=0.07, zorder=0)
@@ -1744,18 +1643,17 @@ def plot_grouped_region_bars_multipanel(
         ax.tick_params(axis='x', labelsize=TICK_FONTSIZE - 2)
         for sp in ('top', 'right'):
             ax.spines[sp].set_visible(False)
-        if col > 0:
+        if panel_idx > 0:
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis='y', left=False)
         if legend_entries and panel_idx == n_panels - 1:
             handles = [Patch(facecolor=c, label=l, alpha=0.9, hatch=h) for l, c, h in legend_entries]
             ax.legend(handles=handles, fontsize=LEGEND_FONTSIZE, frameon=False, loc='lower right')
 
-    for row in range(nrows):
-        axes[row, 0].set_yticks(list(region_label_pos.values()))
-        axes[row, 0].set_yticklabels([_display_name(r) for r in region_label_pos.keys()], fontsize=TICK_FONTSIZE)
-        axes[row, 0].margins(y=0.015)
-    axes[0, 0].invert_yaxis()
+    axes[0].set_yticks(list(region_label_pos.values()))
+    axes[0].set_yticklabels([_display_name(r) for r in region_label_pos.keys()], fontsize=TICK_FONTSIZE)
+    axes[0].margins(y=0.015)
+    axes[0].invert_yaxis()
     fig.supxlabel(common_xlabel, fontsize=TICK_FONTSIZE)
 
     fig.tight_layout()
@@ -1910,7 +1808,7 @@ def _load_raw_region_flat_and_behav(
     themselves). Used ONLY by the Task-(c) reference-projection path (see
     `run_hub_mode_analysis`) -- never touched when ACTIVE_TRIAL_TYPES is
     just [REFERENCE_TYPE]."""
-    mat_dir = base_dir / mat_subdir_name(trial_type,ALIGN)
+    mat_dir = base_dir / mat_subdir_name(trial_type)
     session_file = mat_dir / f"{session_name}_analysis_results.mat"
     if not session_file.exists():
         return None
@@ -2012,7 +1910,7 @@ def run_hub_mode_analysis(
     needs_projection = bool(set(active_trial_types) - {reference_type})
     trial_types_to_load = list(dict.fromkeys(list(active_trial_types) + [reference_type]))
     analyzers_by_trial_type: Dict[str, PrivateLatentAnalyzer] = {
-        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t, align_mode=ALIGN) for t in trial_types_to_load
+        t: PrivateLatentAnalyzer(base_dir=base_dir, trial_type=t) for t in trial_types_to_load
     }
     for az in analyzers_by_trial_type.values():
         az.load_all()
@@ -2123,25 +2021,7 @@ def run_hub_mode_analysis(
                             behavior_records.append(dict(
                                 session=session_name, hub=hub, partner=partner, role=role,
                                 trial_type=trial_type, component=comp_idx,
-                                predictor=var_name, r2=r2_val, metric='single_trial',
-                            ))
-
-                    # ---- trial-averaged ("denoised") counterpart: same
-                    #      regression, but against this session's trial-
-                    #      averaged latent trace -- see `_r2_records_for_
-                    #      averaged_latent`'s own docstring for why this is
-                    #      a genuinely different statistic from the single-
-                    #      trial R^2 immediately above, not a duplicate of it.
-                    r2_by_comp_avg = _r2_records_for_averaged_latent(
-                        trials, time_vec_for_session, pos_full, speed_full, t_behav_full,
-                        component_indices,
-                    )
-                    for comp_idx, r2_by_var in r2_by_comp_avg.items():
-                        for var_name, r2_val in r2_by_var.items():
-                            behavior_records.append(dict(
-                                session=session_name, hub=hub, partner=partner, role=role,
-                                trial_type=trial_type, component=comp_idx,
-                                predictor=var_name, r2=r2_val, metric='trial_avg',
+                                predictor=var_name, r2=r2_val,
                             ))
 
     print("\n" + "=" * 70)
@@ -2162,46 +2042,21 @@ def run_hub_mode_analysis(
     return hub_analyzers, behavior_records
 
 
-# ---- 12c.  Tasks 3/4 -- behavioural variance bars, TWO figures per hub ----
-# (a.2) Panel layout: trial-averaged and non-averaged (single-trial) R^2
-# are now split into their OWN figure each (see `hubmode_plot_task3_bars`/
-# `hubmode_plot_task4_bars`), rather than eight panels sharing one figure.
-# Each figure is a 2x2 grid, ROLE-major by row, VARIABLE-minor by column:
-# row 1 is the network panels for HUB_MODE_EXTERNAL_VARIABLES, row 2 is the
-# residual panels for the same variables -- e.g.
-# [[reward_presence-network, reward_consumption-network],
-#  [reward_presence-residual, reward_consumption-residual]]. The
-# single-trial-vs-trial-avg distinction is carried only by the saved file
-# name (see `suffix` in `hubmode_plot_task3_bars`/`hubmode_plot_task4_bars`),
-# not by the in-figure panel titles -- see `_hub_mode_panel_titles`.
-def _hub_mode_panel_layout(metric: str) -> List[Tuple[str, str, str]]:
-    return (
-        [(v, 'network', metric) for v in HUB_MODE_EXTERNAL_VARIABLES]
-        + [(v, 'residual', metric) for v in HUB_MODE_EXTERNAL_VARIABLES]
-    )
-
-
-def _hub_mode_panel_titles(layout: List[Tuple[str, str, str]]) -> List[str]:
-    # The single-trial-vs-trial-avg distinction lives only in the saved
-    # file name (via `suffix` at the two call sites below), not here --
-    # both metrics reuse the same in-figure title.
-    return [f"{v.replace('_', ' ')} — {role}" for v, role, metric in layout]
-
-
-def _hub_mode_panel_xlims(layout: List[Tuple[str, str, str]]) -> List[Tuple[float, float]]:
-    return [
-        (HUB_MODE_BAR_XLIM_NETWORK if role == 'network' else HUB_MODE_BAR_XLIM_RESIDUAL)
-        if metric == 'single_trial' else HUB_MODE_BAR_XLIM_TRIALAVG
-        for _, role, metric in layout
-    ]
-
-
-HUB_MODE_PANEL_LAYOUT_SINGLE_TRIAL: List[Tuple[str, str, str]] = _hub_mode_panel_layout('single_trial')
-HUB_MODE_PANEL_LAYOUT_TRIAL_AVG: List[Tuple[str, str, str]] = _hub_mode_panel_layout('trial_avg')
-HUB_MODE_PANEL_TITLES_SINGLE_TRIAL: List[str] = _hub_mode_panel_titles(HUB_MODE_PANEL_LAYOUT_SINGLE_TRIAL)
-HUB_MODE_PANEL_TITLES_TRIAL_AVG: List[str] = _hub_mode_panel_titles(HUB_MODE_PANEL_LAYOUT_TRIAL_AVG)
-HUB_MODE_PANEL_XLIMS_SINGLE_TRIAL: List[Tuple[float, float]] = _hub_mode_panel_xlims(HUB_MODE_PANEL_LAYOUT_SINGLE_TRIAL)
-HUB_MODE_PANEL_XLIMS_TRIAL_AVG: List[Tuple[float, float]] = _hub_mode_panel_xlims(HUB_MODE_PANEL_LAYOUT_TRIAL_AVG)
+# ---- 12c.  Tasks 3/4 -- behavioural variance bars, one figure per hub -----
+# (a.2) Panel layout: for each entry in HUB_MODE_EXTERNAL_VARIABLES (the
+# two reward conditions), network gets the first of its two panels,
+# residual the second -- e.g. [reward_presence-network, reward_presence-
+# residual, reward_consumption-network, reward_consumption-residual].
+HUB_MODE_PANEL_LAYOUT: List[Tuple[str, str]] = [
+    (v, role) for v in HUB_MODE_EXTERNAL_VARIABLES for role in ('network', 'residual')
+]
+HUB_MODE_PANEL_TITLES: List[str] = [
+    f"{v.replace('_', ' ')} — {role}" for v, role in HUB_MODE_PANEL_LAYOUT
+]
+HUB_MODE_PANEL_XLIMS: List[Tuple[float, float]] = [
+    HUB_MODE_BAR_XLIM_NETWORK if role == 'network' else HUB_MODE_BAR_XLIM_RESIDUAL
+    for _, role in HUB_MODE_PANEL_LAYOUT
+]
 
 
 def hubmode_plot_multipanel_bars(
@@ -2245,16 +2100,12 @@ def hubmode_plot_multipanel_bars(
         y += footprint + REGION_GAP
 
     n_panels = len(panel_titles)
-    ncols = 2 if n_panels > 1 else 1
-    nrows = int(np.ceil(n_panels / ncols))
     fig_h = max(4.0, 0.42 * y + 2.2)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(panel_width * ncols, fig_h * nrows), sharey=True)
-    axes = np.atleast_1d(axes).reshape(nrows, ncols)
+    fig, axes = plt.subplots(1, n_panels, figsize=(panel_width * n_panels, fig_h), sharey=True)
+    axes = np.atleast_1d(axes)
     rng = np.random.default_rng(0)
 
-    for panel_idx, title in enumerate(panel_titles):
-        row, col = divmod(panel_idx, ncols)
-        ax = axes[row, col]
+    for panel_idx, (title, ax) in enumerate(zip(panel_titles, axes)):
         ax.axhspan(-BAR_HEIGHT / 2 - 0.25, y - REGION_GAP + BAR_HEIGHT / 2 + 0.25,
                    color=HUB_MODE_BAND_COLORS.get(hub, '#888888'), alpha=0.07, zorder=0)
 
@@ -2287,19 +2138,18 @@ def hubmode_plot_multipanel_bars(
         ax.tick_params(axis='x', labelsize=TICK_FONTSIZE - 2)
         for sp in ('top', 'right'):
             ax.spines[sp].set_visible(False)
-        if col > 0:
+        if panel_idx > 0:
             ax.spines['left'].set_visible(False)
             ax.tick_params(axis='y', left=False)
         if legend_entries and panel_idx == n_panels - 1:
             handles = [Patch(facecolor=c, label=l, alpha=0.9, hatch=h) for l, c, h in legend_entries]
             ax.legend(handles=handles, fontsize=LEGEND_FONTSIZE, frameon=False, loc='lower right')
 
-    for row in range(nrows):
-        axes[row, 0].set_yticks(list(row_label_pos.values()))
-        axes[row, 0].set_yticklabels([_display_name(r) for r in row_label_pos.keys()], fontsize=TICK_FONTSIZE)
-        axes[row, 0].margins(y=0.015)
-    axes[0, 0].invert_yaxis()
-    fig.suptitle(f"Hub: {_display_name(hub)} \n {Align_type_value}", fontsize=TICK_FONTSIZE + 2)
+    axes[0].set_yticks(list(row_label_pos.values()))
+    axes[0].set_yticklabels([_display_name(r) for r in row_label_pos.keys()], fontsize=TICK_FONTSIZE)
+    axes[0].margins(y=0.015)
+    axes[0].invert_yaxis()
+    fig.suptitle(f"Hub: {_display_name(hub)}", fontsize=TICK_FONTSIZE + 2)
 
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2313,45 +2163,27 @@ def hubmode_plot_task3_bars(
         summary: dict,
         hub_bands: List[Tuple[str, List[Tuple[str, str]]]],
         output_dir: Path,
-        summary_trial_avg: Optional[dict] = None,
         reference_type: str = REFERENCE_TYPE,
-) -> Dict[str, Dict[str, Optional[plt.Figure]]]:
-    """TWO figures per hub region, reference-condition-only bars: one for
-    the single-trial R^2 (from `summary`), one for the trial-averaged R^2
-    (from `summary_trial_avg`, if given -- same `aggregate_hub_behavior_
-    variance` shape, just built from `metric='trial_avg'` records). Each
-    figure has 4 columns: network-{variable} first, residual-{variable}
-    last (see `_hub_mode_panel_layout`); the row/cluster/bar drawing logic
-    itself is untouched, only WHICH dict/layout a given figure reads from
-    changes."""
-    figs: Dict[str, Dict[str, Optional[plt.Figure]]] = {}
-    metric_specs = (
-        ('single_trial', summary, HUB_MODE_PANEL_LAYOUT_SINGLE_TRIAL,
-         HUB_MODE_PANEL_TITLES_SINGLE_TRIAL, HUB_MODE_PANEL_XLIMS_SINGLE_TRIAL, ''),
-        ('trial_avg', summary_trial_avg, HUB_MODE_PANEL_LAYOUT_TRIAL_AVG,
-         HUB_MODE_PANEL_TITLES_TRIAL_AVG, HUB_MODE_PANEL_XLIMS_TRIAL_AVG, '_trialavg'),
-    )
+) -> Dict[str, Optional[plt.Figure]]:
+    """ONE figure per hub region, reference-condition-only bars."""
+    figs: Dict[str, Optional[plt.Figure]] = {}
     for hub, hub_partner_pairs in hub_bands:
         partner_rows = [p for _, p in hub_partner_pairs]
-        figs[hub] = {}
-        for metric, src, layout, titles, xlims, suffix in metric_specs:
-            if src is None:
-                figs[hub][metric] = None
-                continue
-            clusters_by_panel: Dict[int, Dict[str, List[list]]] = {i: {} for i in range(len(layout))}
-            for partner in partner_rows:
-                for panel_idx, (v, role, _metric) in enumerate(layout):
-                    per_pred = src.get(((hub, partner), role, reference_type))
-                    if per_pred is None or v not in per_pred:
-                        continue
-                    stats = per_pred[v]
-                    bar = dict(mean=stats['mean'], sem=stats['sem'], values=stats['values'],
-                              color=EXTERNAL_VAR_COLORS.get(v, 'gray'), alpha=0.9, hatch=None)
-                    clusters_by_panel[panel_idx][partner] = [[bar]]
-            save_path = output_dir / f"hubmode_task3_variance_{hub}{suffix}.png"
-            figs[hub][metric] = hubmode_plot_multipanel_bars(
-                hub, partner_rows, clusters_by_panel, titles, xlims, save_path,
-            )
+        clusters_by_panel: Dict[int, Dict[str, List[list]]] = {i: {} for i in range(len(HUB_MODE_PANEL_LAYOUT))}
+        for partner in partner_rows:
+            for panel_idx, (v, role) in enumerate(HUB_MODE_PANEL_LAYOUT):
+                per_pred = summary.get(((hub, partner), role, reference_type))
+                if per_pred is None or v not in per_pred:
+                    continue
+                stats = per_pred[v]
+                bar = dict(mean=stats['mean'], sem=stats['sem'], values=stats['values'],
+                          color=EXTERNAL_VAR_COLORS.get(v, 'gray'), alpha=0.9, hatch=None)
+                clusters_by_panel[panel_idx][partner] = [[bar]]
+        save_path = output_dir / f"hubmode_task3_variance_{hub}.png"
+        figs[hub] = hubmode_plot_multipanel_bars(
+            hub, partner_rows, clusters_by_panel, HUB_MODE_PANEL_TITLES, HUB_MODE_PANEL_XLIMS,
+            save_path,
+        )
     return figs
 
 
@@ -2359,52 +2191,37 @@ def hubmode_plot_task4_bars(
         summary: dict,
         hub_bands: List[Tuple[str, List[Tuple[str, str]]]],
         output_dir: Path,
-        summary_trial_avg: Optional[dict] = None,
         active_trial_types: List[str] = ACTIVE_TRIAL_TYPES,
         reference_type: str = REFERENCE_TYPE,
-) -> Dict[str, Dict[str, Optional[plt.Figure]]]:
-    """TWO figures per hub region (single-trial / trial-avg, same split as
-    `hubmode_plot_task3_bars`); every row holds one CLUSTER per non-
+) -> Dict[str, Optional[plt.Figure]]:
+    """ONE figure per hub region; every row holds one CLUSTER per non-
     reference trial type (hatch-coded), one bar per cluster, in whichever
-    of the four (reward condition x role) panels it belongs to.
-    `summary_trial_avg` plays the same per-figure-source role documented on
-    `hubmode_plot_task3_bars`."""
+    of the four (reward condition x role) panels it belongs to."""
     non_ref = [t for t in active_trial_types if t != reference_type]
-    legend = [(t.replace('_', ' '), '#bbbbbb', CLUSTER_HATCH_CYCLE[ti % len(CLUSTER_HATCH_CYCLE)])
-              for ti, t in enumerate(non_ref)]
-    metric_specs = (
-        ('single_trial', summary, HUB_MODE_PANEL_LAYOUT_SINGLE_TRIAL,
-         HUB_MODE_PANEL_TITLES_SINGLE_TRIAL, HUB_MODE_PANEL_XLIMS_SINGLE_TRIAL, ''),
-        ('trial_avg', summary_trial_avg, HUB_MODE_PANEL_LAYOUT_TRIAL_AVG,
-         HUB_MODE_PANEL_TITLES_TRIAL_AVG, HUB_MODE_PANEL_XLIMS_TRIAL_AVG, '_trialavg'),
-    )
-    figs: Dict[str, Dict[str, Optional[plt.Figure]]] = {}
+    figs: Dict[str, Optional[plt.Figure]] = {}
     for hub, hub_partner_pairs in hub_bands:
         partner_rows = [p for _, p in hub_partner_pairs]
-        figs[hub] = {}
-        for metric, src, layout, titles, xlims, suffix in metric_specs:
-            if src is None:
-                figs[hub][metric] = None
-                continue
-            clusters_by_panel: Dict[int, Dict[str, List[list]]] = {i: {} for i in range(len(layout))}
-            for partner in partner_rows:
-                for panel_idx, (v, role, _metric) in enumerate(layout):
-                    clusters: List[list] = []
-                    for ti, trial_type in enumerate(non_ref):
-                        hatch = CLUSTER_HATCH_CYCLE[ti % len(CLUSTER_HATCH_CYCLE)]
-                        per_pred = src.get(((hub, partner), role, trial_type))
-                        if per_pred and v in per_pred:
-                            stats = per_pred[v]
-                            bar = dict(mean=stats['mean'], sem=stats['sem'], values=stats['values'],
-                                      color=EXTERNAL_VAR_COLORS.get(v, 'gray'), alpha=0.9, hatch=hatch)
-                            clusters.append([bar])
-                    if clusters:
-                        clusters_by_panel[panel_idx][partner] = clusters
-            save_path = output_dir / f"hubmode_task4_variance_{hub}{suffix}.png"
-            figs[hub][metric] = hubmode_plot_multipanel_bars(
-                hub, partner_rows, clusters_by_panel, titles, xlims,
-                save_path, legend_entries=legend,
-            )
+        clusters_by_panel: Dict[int, Dict[str, List[list]]] = {i: {} for i in range(len(HUB_MODE_PANEL_LAYOUT))}
+        for partner in partner_rows:
+            for panel_idx, (v, role) in enumerate(HUB_MODE_PANEL_LAYOUT):
+                clusters: List[list] = []
+                for ti, trial_type in enumerate(non_ref):
+                    hatch = CLUSTER_HATCH_CYCLE[ti % len(CLUSTER_HATCH_CYCLE)]
+                    per_pred = summary.get(((hub, partner), role, trial_type))
+                    if per_pred and v in per_pred:
+                        stats = per_pred[v]
+                        bar = dict(mean=stats['mean'], sem=stats['sem'], values=stats['values'],
+                                  color=EXTERNAL_VAR_COLORS.get(v, 'gray'), alpha=0.9, hatch=hatch)
+                        clusters.append([bar])
+                if clusters:
+                    clusters_by_panel[panel_idx][partner] = clusters
+        legend = [(t.replace('_', ' '), '#bbbbbb', CLUSTER_HATCH_CYCLE[ti % len(CLUSTER_HATCH_CYCLE)])
+                  for ti, t in enumerate(non_ref)]
+        save_path = output_dir / f"hubmode_task4_variance_{hub}.png"
+        figs[hub] = hubmode_plot_multipanel_bars(
+            hub, partner_rows, clusters_by_panel, HUB_MODE_PANEL_TITLES, HUB_MODE_PANEL_XLIMS,
+            save_path, legend_entries=legend,
+        )
     return figs
 
 
@@ -2463,7 +2280,7 @@ def _hubmode_plot_latent_traces_one_figure(
                     alpha=0.85 if is_ref else 0.75,
                     label=f"{trial_type.replace('_', ' ')} (n={agg['n_sessions']})", zorder=3)
             if role == 'network':
-                legend_handles.setdefault(trial_type.replace('_', ' ') + f" {Align_type_value}", line)
+                legend_handles.setdefault(trial_type.replace('_', ' '), line)
             ax.fill_between(cs.time_bins, mean_trace - sem_trace, mean_trace + sem_trace,
                             color=color, alpha=0.15, zorder=2)
 
@@ -2472,7 +2289,7 @@ def _hubmode_plot_latent_traces_one_figure(
         ylim = HUB_MODE_LATENT_YLIM_NETWORK if role == 'network' else HUB_MODE_LATENT_YLIM_RESIDUAL
         if ylim is not None:
             ax.set_ylim(*ylim)
-        role_label = 'network' if role == 'network' else 'residual'
+        role_label = 'network (2a)' if role == 'network' else 'residual (2b)'
         ax.text(0.01, 0.90, f"{_display_hub_pair(hub, partner)}  —  {role_label}",
                 transform=ax.transAxes, fontsize=TICK_FONTSIZE - 6, va='top', ha='left')
         for sp in ('top', 'right'):
@@ -2600,26 +2417,11 @@ def _run_hub_mode_tasks() -> None:
 
     print("\n--- Tasks 3-4: behavioural variance explained (hub-mode) ---")
     _write_records_csv(behavior_records, OUTPUT_DIR / "hubmode_behavior_variance_records.csv")
-
-    # Split by metric before aggregating -- `aggregate_hub_behavior_variance`
-    # itself is untouched (still pools whatever list of records it's given
-    # by (hub, partner, role, trial_type, predictor)), so each metric gets
-    # its own independent summary rather than being pooled together, which
-    # would silently average single-trial and trial-averaged R^2 into one
-    # meaningless number.
-    single_trial_records = [r for r in behavior_records if r.get('metric', 'single_trial') == 'single_trial']
-    trial_avg_records = [r for r in behavior_records if r.get('metric') == 'trial_avg']
-
-    variance_summary = aggregate_hub_behavior_variance(single_trial_records)
-    variance_summary_trial_avg = aggregate_hub_behavior_variance(trial_avg_records)
+    variance_summary = aggregate_hub_behavior_variance(behavior_records)
     _write_hub_variance_summary_csv(
         variance_summary, OUTPUT_DIR / "hubmode_task3_4_variance_summary.csv")
-    _write_hub_variance_summary_csv(
-        variance_summary_trial_avg, OUTPUT_DIR / "hubmode_task3_4_variance_summary_trial_avg.csv")
-    hubmode_plot_task3_bars(variance_summary, hub_bands, OUTPUT_DIR,
-                            summary_trial_avg=variance_summary_trial_avg)
-    hubmode_plot_task4_bars(variance_summary, hub_bands, OUTPUT_DIR,
-                            summary_trial_avg=variance_summary_trial_avg)
+    hubmode_plot_task3_bars(variance_summary, hub_bands, OUTPUT_DIR)
+    hubmode_plot_task4_bars(variance_summary, hub_bands, OUTPUT_DIR)
 
     print("\n--- Task 5: latent traces across sessions (hub-mode) ---")
     for comp_idx in COMPONENT_INDICES:

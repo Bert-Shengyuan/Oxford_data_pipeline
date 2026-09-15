@@ -85,12 +85,48 @@ from Useful_definition import ANATOMICAL_ORDER, safe_array
 # 0.  Configuration
 # =============================================================================
 
-TARGET_I = "MOp"
-TARGET_J = "VPMPO"
 
+
+# ── Alignment hyperparameter ─────────────────────────────────────────────
+# Selects which behavioural event trials are aligned to. This single switch
+# picks BOTH the neural region-data directory (SESSION_DATA_DIR — one
+# *_analysis_results.mat per session, produced upstream by the MATLAB
+# pipeline separately for each alignment) AND the behavioural regressor
+# directory (BEHAVIOR_DIR — produced by tapproach_extract_and_segment.py for
+# the same alignment), so the two always stay in sync. In every mode,
+# t_approach.start_time is the trial-alignment timestamp fed to the MATLAB
+# segmentation / tapproach extraction; the four modes differ in how that
+# timestamp itself is computed upstream:
+#
+#   'default_move_onset' — align to movement onset: t_approach.start_time (unchanged)
+#   'cue_onset'           — align to cue onset:       start_time - t_approach.cue
+#   'bar_on_onset'        — align to bar-on onset:     start_time - t_approach.bar_on
+#   'bar_off_onset'       — align to bar-off onset:    start_time - t_approach.bar_off
+#   'reward_onset'        — align to reward onset:     start_time - t_approach.drop_time
+TARGET_I = "MOp"
+TARGET_J = "VPMPO" #VPMPO
+
+ALIGN_MODES: Dict[str, str] = {
+    "default_move_onset": "align to movement onset using t_approach.start_time directly",
+    "cue_onset":           "align to cue onset: start_time - t_approach.cue",
+    "bar_on_onset":        "align to bar-on onset: start_time - t_approach.bar_on",
+    "bar_off_onset":       "align to bar-off onset: start_time - t_approach.bar_off",
+    "reward_onset":        "align to reward onset: start_time - t_approach.drop_time",
+}
+
+ALIGN: str = "reward_onset"
+if ALIGN not in ALIGN_MODES:
+    raise ValueError(
+        f"ALIGN={ALIGN!r} is not a supported alignment mode; "
+        f"choose one of {sorted(ALIGN_MODES)}."
+    )
+
+# different trial-type is analysed.
+BEHAVIOR_TRIAL_LABEL: str = "cued hit long" #cued hit long spont miss long
+Trial_type_value = BEHAVIOR_TRIAL_LABEL.replace(" ", "_")
 
 SESSIONS_TO_RUN = [
-'yp021_220407'
+'yp021_220404'
     # MOs + VPMPO
     # 'yp020_220331', 'yp020_220401', 'yp021_220331', 'yp021_220402',
     # 'yp021_220403', 'yp021_220404', 'yp021_220405', 'yp021_220407',
@@ -102,6 +138,137 @@ SESSIONS_TO_RUN = [
 
 SUBTRACT_PSTH:  bool = False
 SHUFFLE_TRIALS: bool = False
+
+BEHAVIOR_DIR = Path(
+    f"/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/tapproach_sessions_{ALIGN}"
+)
+
+SESSION_DATA_DIR = Path(
+    f"/Users/shengyuancai/Downloads/Oxford_dataset/{Trial_type_value}_{ALIGN}_results"
+)
+
+BEHAVIOR_TIME_RANGE_S: Tuple[float, float] = (-1.0, 2.0)  # behavioural tracking window
+BEHAVIOR_FS: float = 50.0
+BEHAVIOR_T_OFFSET: float = -1.0
+# Must match the trial type baked into SESSION_DATA_DIR (§0) —
+# "cued hit long" ↔ cued_hit_long_{ALIGN}_results; update both together if a
+
+
+# Directory holding one {session}_analysis_results.mat per session for the
+# selected alignment, produced by the MATLAB pipeline
+# (Matlab_part/single_session_oxford_CCA_mdl.m / perform_region_analysis.m).
+# load_region_spikes() reads region_data.regions from these files
+# (spike_data + subregion_labels).
+
+
+# ── Display-name mapping ─────────────────────────────────────────────────
+# Human-readable overrides for region names shown in figure titles/labels
+# (raw MATLAB region names otherwise pass through unchanged). Add entries
+# here to rename additional regions in every panel at once.
+DISPLAY_NAME_MAP: Dict[str, str] = {
+    "VPMPO": "sens Thal",
+    "VALVM": "motor Thal",
+}
+
+
+def display_name(region_name: Optional[str]) -> Optional[str]:
+    """Human-readable label for a region name, per DISPLAY_NAME_MAP."""
+    if region_name is None:
+        return None
+    return DISPLAY_NAME_MAP.get(region_name, region_name)
+
+
+# ── Subregion-label exclusion list ───────────────────────────────────────
+# Neurons whose region_data.regions.<region>.subregion_labels entry matches
+# one of these strings are dropped (spike data + label) in load_region_spikes,
+# before any downstream analysis. Add more labels here to filter them too.
+EXCLUDED_SUBREGION_LABELS: List[str] = ["out"]
+
+# ============================================================
+# Laminar depth categorization for cortical subregion labels
+# Shallow: Layer 1, Layer 2/3
+# Deep:    Layer 5, Layer 6a, Layer 6b
+# (Agranular/dysgranular frontal cortex -> no Layer 4 bin)
+# ============================================================
+LAMINAR_DEPTH_MAP: Dict[str, str] = {
+    # ---- mPFC ----
+    "ACAd5":   "layer-deep",
+    "ACAd6a":  "layer-deep",
+    "PL6a":    "layer-deep",
+    "ILA6a":   "layer-deep",
+    "FRP6a":   "layer-deep",
+
+    # ---- ORB ----
+    "ORBl23":  "layer-shallow",
+    "ORBvl23": "layer-shallow",
+    "ORBl5":   "layer-deep",
+    "ORBvl5":  "layer-deep",
+    "ORBl6a":  "layer-deep",
+    "ORBm6a":  "layer-deep",
+    "ORBvl6a": "layer-deep",
+    "ORBl6b":  "layer-deep",
+    "ORBvl6b": "layer-deep",
+
+    # ---- MOp ----
+    "MOp1":    "layer-shallow",
+    "MOp23":   "layer-shallow",
+    "MOp5":    "layer-deep",
+    "MOp6a":   "layer-deep",
+    "MOp6b":   "layer-deep",
+
+    # ---- MOs ----
+    "MOs1":    "layer-shallow",
+    "MOs23":   "layer-shallow",
+    "MOs5":    "layer-deep",
+    "MOs6a":   "layer-deep",
+    "MOs6b":   "layer-deep",
+}
+
+
+def get_laminar_depth(
+        subregion_label: str,
+        depth_map: Dict[str, str] = LAMINAR_DEPTH_MAP,
+        strict: bool = True,
+) -> Optional[str]:
+    """
+    Map a cortical subregion label (e.g. 'MOp5') to its laminar depth
+    category ('layer-shallow' or 'layer-deep').
+
+    Parameters
+    ----------
+    subregion_label : str
+        Raw subregion label as it appears in the dataset (e.g. 'MOp5',
+        'ORBvl6a', 'ACAd6a').
+    depth_map : dict
+        Lookup table; defaults to LAMINAR_DEPTH_MAP.
+    strict : bool
+        If True, raise KeyError for labels not in the map (e.g. non-cortical
+        or unresolved labels like 'STR', 'PO', 'VAL'). If False, return
+        None for unmapped labels, allowing callers to filter/mask instead
+        of failing.
+
+    Returns
+    -------
+    str or None
+        'layer-shallow', 'layer-deep', or None (if strict=False and label
+        is not a laminar cortical label).
+    """
+    if subregion_label in depth_map:
+        return depth_map[subregion_label]
+    if strict:
+        raise KeyError(
+            f"'{subregion_label}' has no laminar depth assignment "
+            f"(not a laminar cortical subregion, or an unresolved/"
+            f"subcortical label)."
+        )
+    return None
+
+
+# Regions whose subregion labels are laminar-cortical (keys of
+# LAMINAR_DEPTH_MAP belong to exactly these regions). Used to decide, per
+# region, whether the neuron display order should be grouped by laminar
+# depth (Instruction 6) — subcortical regions keep their Rastermap order.
+CORTICAL_REGIONS: List[str] = ["MOp", "MOs", "ORB", "mPFC"]
 
 
 # Build the trial permutation once so flat and 3-D views are always in sync.
@@ -120,7 +287,8 @@ TIME_RANGE_S = (-1.5, 3.0)
 
 # ── NEW — Behavioural nuisance regressors (position / speed) ────────────────
 # tapproach_extract_and_segment.py writes {session}_pos.npy / _speed.npy /
-# _task_label.npy to BEHAVIOR_DIR.  Tracking only covers t ∈ [-1.0, 2.0] s
+# _task_label.npy to BEHAVIOR_DIR (see ALIGN in §0 — BEHAVIOR_DIR is one of
+# the two directories that hyperparameter selects).  Tracking only covers t ∈ [-1.0, 2.0] s
 # (T ≈ 151 @ 50 Hz; the final sample is frequently NaN), which is narrower
 # than the neural acquisition window TIME_RANGE_S above.
 #
@@ -140,17 +308,7 @@ TIME_RANGE_S = (-1.5, 3.0)
 RUN_BEHAVIOR_ABLATION: bool = True
 CROP_NEURAL_TO_BEHAVIOR_WINDOW: bool = True
 
-BEHAVIOR_DIR = Path(
-    "/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/tapproach_sessions"
-)
-BEHAVIOR_TIME_RANGE_S: Tuple[float, float] = (-1.0, 2.0)  # behavioural tracking window
-BEHAVIOR_FS: float = 50.0
-BEHAVIOR_T_OFFSET: float = -1.0
-# Must match the condition folder used to build SESSION_FILE below
-# ("pcca_sessions_cued_hit_long_results" ↔ "cued hit long"); update both
-# together if a different trial-type folder is analysed.
-BEHAVIOR_TRIAL_LABEL: str = "cued hit long" #cued hit long spont miss long
-Trial_type_value = BEHAVIOR_TRIAL_LABEL.replace(" ", "_")
+
 
 
 # ── Colour palette ─────────────────────────────────────────────────────────
@@ -164,6 +322,12 @@ _C_CCA_POS = '#E08214'    # amber — positive CCA weight (mirrors C_COMM)
 _C_CCA_NEG = '#762A83'    # purple — negative CCA weight (mirrors C_COMP)
 _C_BETA_POS = '#4DAC26'   # green  — positive nuisance β·w₁
 _C_BETA_NEG = '#969696'   # grey   — negative nuisance β·w₁
+
+# ── Subregion-identity panel palette ─────────────────────────────────────
+_C_LAYER_SHALLOW = "#7FB3D5"   # light blue — cortical shallow (L1, L2/3)
+_C_LAYER_DEEP    = "#B03A2E"   # dark red   — cortical deep    (L5, L6a, L6b)
+_SUBREGION_CMAP_NAME = "tab20"          # categorical palette for subcortical labels
+SUBREGION_PANEL_FONTSIZE = 6.0          # label text size inside the strip (not poster-scaled — the panel is dense)
 
 
 # =============================================================================
@@ -326,12 +490,23 @@ def _cos_sim_abs(a: np.ndarray, b: np.ndarray) -> float:
 
 def load_region_spikes(
         session_path: str,
-) -> Tuple[Dict[str, np.ndarray], int, int]:
+) -> Tuple[Dict[str, np.ndarray], Dict[str, List[str]], int, int]:
+    """Load per-region spike tensors and subregion labels for one session.
+
+    Mirrors the (n_trials, n_neurons, T) subsetting already applied to
+    ``spike_data`` via ``selected_neurons``: ``region_data.regions.<region>.
+    subregion_labels`` (same hierarchical level as ``spike_data``) is loaded,
+    subset with the identical index array, and any label in
+    ``EXCLUDED_SUBREGION_LABELS`` (e.g. 'out') is dropped from both the
+    spikes and the labels — so ``region_subregion_labels[r]`` stays aligned
+    one-to-one with the neuron axis of ``region_spikes[r]`` for every caller.
+    """
     data = mat73.loadmat(session_path)
     rd   = data.get("region_data", {})
     regs = rd.get("regions", {})
 
     region_spikes: Dict[str, np.ndarray] = {}
+    region_subregion_labels: Dict[str, List[str]] = {}
     n_trials_out = T_out = None
 
     for rname, info in regs.items():
@@ -340,10 +515,40 @@ def load_region_spikes(
         sd = safe_array(info.get("spike_data"))
         if sd is None or sd.ndim != 3:
             continue
+        n_full = sd.shape[1]
+
+        labels_full = info.get("subregion_labels")
+        if labels_full is None:
+            labels_full = ["unknown"] * n_full
+        elif not isinstance(labels_full, list):
+            labels_full = [str(v) for v in np.asarray(labels_full).ravel()]
+        else:
+            labels_full = [str(v) for v in labels_full]
+        if len(labels_full) != n_full:
+            warnings.warn(
+                f"[load_region_spikes] {rname}: subregion_labels length "
+                f"({len(labels_full)}) != n_neurons ({n_full}); ignoring labels."
+            )
+            labels_full = ["unknown"] * n_full
+
         sel = safe_array(info.get("selected_neurons"))
         if sel is not None and sel.size > 0:
-            sd = sd[:, sel.ravel().astype(int) - 1, :]
+            idx0 = sel.ravel().astype(int) - 1
+            sd = sd[:, idx0, :]
+            labels = [labels_full[i] for i in idx0]
+        else:
+            labels = labels_full
+
+        # ── Drop excluded subregion labels (e.g. 'out') ─────────────────
+        keep = np.array([lab not in EXCLUDED_SUBREGION_LABELS for lab in labels])
+        if not keep.all():
+            sd = sd[:, keep, :]
+            labels = [lab for lab, k in zip(labels, keep) if k]
+        if sd.shape[1] == 0:
+            continue
+
         region_spikes[rname] = sd.astype(np.float32)
+        region_subregion_labels[rname] = labels
         if n_trials_out is None:
             n_trials_out, _, T_out = sd.shape
 
@@ -351,7 +556,7 @@ def load_region_spikes(
         f"  [load_region_spikes]  {len(region_spikes)} regions loaded  "
         f"| n_trials={n_trials_out}  T={T_out}"
     )
-    return region_spikes, int(n_trials_out), int(T_out)
+    return region_spikes, region_subregion_labels, int(n_trials_out), int(T_out)
 
 
 # =============================================================================
@@ -369,7 +574,8 @@ def get_neuron_order(X: np.ndarray) -> np.ndarray:
             mdl = Rastermap(
                 n_PCs=min(50, n_neurons),
                 locality=0.0,
-                grid_upsample=5,
+                time_lag_window=10,
+                grid_upsample=10,
             )
             mdl.fit(mat)
             return mdl.isort
@@ -382,7 +588,8 @@ def get_neuron_order(X: np.ndarray) -> np.ndarray:
 def compute_global_neuron_order(
         region_spikes: Dict[str, np.ndarray],
         all_region_names: List[str],
-        output_dir: Path
+        output_dir: Path,
+        default_align_cache_dir: Optional[Path] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Fit a single Rastermap model on the concatenated activity of all
@@ -399,6 +606,16 @@ def compute_global_neuron_order(
     region_spikes     : mapping from region name → raw spike array (n_trials, n, T)
     all_region_names  : ordered list of region names to include
                         (targets + all nuisance regions present in the session)
+    default_align_cache_dir : output directory this same session would use
+                        under ALIGN='default_move_onset' (§0). Rastermap
+                        ordering is a property of the session's spike data,
+                        not of the alignment mode, so if a sorting already
+                        exists there it is reused directly instead of
+                        refitting — the per-ALIGN ``cache_file`` below is
+                        only consulted/written as a fallback (and is the
+                        same path as this one when ALIGN is itself
+                        'default_move_onset'). None when no such directory
+                        applies (e.g. ALIGN is already 'default_move_onset').
 
     Returns
     -------
@@ -410,6 +627,10 @@ def compute_global_neuron_order(
     # ── Build per-region flat matrices and record neuron offsets ───────────
 
     cache_file = output_dir / "global_rastermap_isort.npy"
+    default_cache_file = (
+        default_align_cache_dir / "global_rastermap_isort.npy"
+        if default_align_cache_dir is not None else None
+    )
 
     flat_rows: List[np.ndarray] = []   # each entry: (n_neurons_r, n_obs)
     offsets:   Dict[str, Tuple[int, int]] = {}
@@ -428,7 +649,32 @@ def compute_global_neuron_order(
     # ── Attempt global Rastermap ───────────────────────────────────────────
     global_isort: Optional[np.ndarray] = None
 
-    if cache_file.exists():
+    # 1) Prefer a sorting already computed for this session under
+    #    default_move_onset — Rastermap order shouldn't depend on which
+    #    behavioural event trials are aligned to, so reuse it if present.
+    if default_cache_file is not None and default_cache_file != cache_file \
+            and default_cache_file.exists():
+        try:
+            global_isort = np.load(default_cache_file)
+            print(
+                f"  [global Rastermap]  Loaded default_move_onset embedding "
+                f"from {default_cache_file}"
+            )
+            if len(global_isort) != total_n:
+                warnings.warn(
+                    "Cached default_move_onset Rastermap size mismatch! "
+                    "Falling back to this ALIGN's own cache/refit."
+                )
+                global_isort = None
+        except Exception as exc:
+            warnings.warn(
+                f"Failed to load default_move_onset Rastermap cache "
+                f"({exc}). Falling back to this ALIGN's own cache/refit."
+            )
+            global_isort = None
+
+    # 2) Otherwise fall back to this ALIGN's own cache (unchanged behaviour).
+    if global_isort is None and cache_file.exists():
         try:
             global_isort = np.load(cache_file)
             print(f"  [global Rastermap]  Loaded cached embedding from {cache_file}")
@@ -440,6 +686,7 @@ def compute_global_neuron_order(
             warnings.warn(f"Failed to load Rastermap cache ({exc}). Re-fitting model.")
             global_isort = None
 
+    # 3) No existing result anywhere — compute our own sorting.
     if global_isort is None and _RASTERMAP_OK and total_n >= 5:
         try:
             mdl = Rastermap(
@@ -475,6 +722,25 @@ def compute_global_neuron_order(
             per_region_order[rname] = get_neuron_order(region_spikes[rname])
 
     return per_region_order
+
+
+def _group_by_laminar_depth(
+        sort_idx: np.ndarray,
+        labels: List[str],
+) -> np.ndarray:
+    """Reorder a neuron sort index so shallow-layer neurons (L1, L2/3)
+    precede deep-layer neurons (L5, L6a, L6b), for cortical regions
+    (Instruction 6). A stable sort preserves each neuron's relative
+    Rastermap position within its depth group. Neurons whose label has no
+    laminar-depth assignment (unresolved / non-laminar) are grouped with
+    the shallow half so a stray label can't split an otherwise-contiguous
+    deep block.
+    """
+    depth_key = np.array([
+        1 if get_laminar_depth(labels[i], strict=False) == 'layer-deep' else 0
+        for i in sort_idx
+    ])
+    return sort_idx[np.argsort(depth_key, kind='stable')]
 
 
 # =============================================================================
@@ -523,10 +789,7 @@ def _draw_psth(
     ax.axvline(0.0, color="k", ls="--", lw=1.0 * POSTER_SCALE, alpha=0.7)
     ax.set_xlabel("Time (s)", fontsize=_fs(SIZE))
     ax.set_ylabel("Neurons (sorted)", fontsize=_fs(SIZE))
-    if region_name == 'VPMPO':
-        region_name = 'sens Thal'
-    elif region_name == 'VALVM':
-        region_name = 'motor Thal'
+    region_name = display_name(region_name)
     ax.set_title(f"{region_name}", fontsize=_fs(SIZE-1), fontweight="normal",y=1.04)
     ax.tick_params(labelsize=_fs(SIZE), width=1.2 * POSTER_SCALE, length=4 * POSTER_SCALE)
 
@@ -644,6 +907,80 @@ def _draw_weight_bar(
         ax.spines[sp].set_visible(False)
 
 
+# ── Categorical colour cache for subcortical subregion labels ─────────────
+# Assigns each unique label a stable colour (persists across panels/figures
+# within one process) drawn from _SUBREGION_CMAP_NAME.
+_subregion_color_cache: Dict[str, Tuple[float, float, float, float]] = {}
+
+
+def _get_subregion_color(label: str) -> Tuple[float, float, float, float]:
+    if label not in _subregion_color_cache:
+        cmap = plt.get_cmap(_SUBREGION_CMAP_NAME)
+        _subregion_color_cache[label] = cmap(len(_subregion_color_cache) % cmap.N)
+    return _subregion_color_cache[label]
+
+
+def _draw_subregion_panel(
+        ax: plt.Axes,
+        labels: Optional[List[str]],
+        sort_idx: Optional[np.ndarray],
+        n_show: int,
+        title: str = "Subregion",
+) -> None:
+    """Per-neuron subregion-identity strip, row-aligned with the adjacent
+    ``_draw_weight_bar`` panel (identical ``sort_idx`` / ``n_show`` row
+    subsampling, so row *k* here is the same neuron as row *k* there).
+
+    Two rendering modes, chosen independently for EACH displayed neuron
+    (not for the region as a whole — this matters for concatenated
+    multi-region nuisance blocks such as 'AllRegions', where cortical and
+    subcortical neurons are interleaved after the shared Rastermap sort):
+
+      * Cortical (subregion label present in LAMINAR_DEPTH_MAP): a signed
+        ±1 bar — +1 (deep: L5/L6a/L6b) or −1 (shallow: L1/L2-3) — coloured
+        by ``_C_LAYER_DEEP`` / ``_C_LAYER_SHALLOW``.
+      * Subcortical / unresolved (any other label, e.g. 'CP', 'PO', 'ZI',
+        multiple subregions per region): a full-width strip in a
+        categorical colour unique to that label (``_get_subregion_color``),
+        annotated with the literal label text.
+    """
+    if not labels or sort_idx is None:
+        ax.text(0.5, 0.5, '—', ha='center', va='center',
+                fontsize=_fs(SIZE - 4), color='#AAAAAA',
+                transform=ax.transAxes)
+        ax.set_title(title, fontsize=_fs(SIZE - 2), fontweight="normal", y=1.05)
+        ax.axis('off')
+        return
+
+    n_neurons = len(labels)
+    step = max(1, n_neurons // n_show)
+    sel = sort_idx[::step][:n_show]
+    sel_labels = [labels[i] for i in sel]
+    ypos = np.arange(len(sel_labels)) + 0.5
+
+    for y, lab in zip(ypos, sel_labels):
+        depth = get_laminar_depth(lab, strict=False)
+        if depth is not None:
+            val = 1.0 if depth == 'layer-deep' else -1.0
+            color = _C_LAYER_DEEP if depth == 'layer-deep' else _C_LAYER_SHALLOW
+            ax.barh(y, val, height=0.82, color=color, alpha=0.85)
+        else:
+            color = _get_subregion_color(lab)
+            ax.barh(y, 1.0, left=-0.5, height=0.82, color=color, alpha=0.85)
+            ax.text(0.0, y, lab, ha='center', va='center',
+                    fontsize=SUBREGION_PANEL_FONTSIZE, color='black', clip_on=True)
+
+    ax.axvline(0.0, color='k', lw=0.5 * POSTER_SCALE, alpha=0.3)
+    ax.set_xlim(-1.05, 1.05)
+    ax.set_ylim(len(sel_labels), 0)
+    ax.set_title(title, fontsize=_fs(SIZE - 2), fontweight="normal", y=1.05)
+    ax.tick_params(labelsize=0)
+
+    plt.setp(ax.get_yticklabels(), visible=False)
+    for sp in ('top', 'right', 'left'):
+        ax.spines[sp].set_visible(False)
+
+
 def _draw_latent(
         ax: plt.Axes,
         trials: np.ndarray,
@@ -734,19 +1071,39 @@ def plot_step_panel(
         psth_vmax: Optional[float] = None,
         Z_is_behavior: bool = False,
         Z_channel_labels: Optional[List[str]] = None,
+        labels_i: Optional[List[str]] = None,
+        labels_j: Optional[List[str]] = None,
+        labels_z: Optional[List[str]] = None,
+        omit_nuisance: bool = False,
 ) -> plt.Figure:
-    """2-row × 8-column diagnostic panel for one pCCA ablation step.
+    """2-row × 11-column diagnostic panel for one pCCA ablation step.
 
-    Column layout (mirrors ``fig_simulation_psth_latents``, 0-indexed):
+    Column layout, 0-indexed (``omit_nuisance=False``, the default):
 
-        col 0  Raw PSTH              z-scored RdBu_r (Rastermap order)
-        col 1  CCA canonical weight  barh; amber/purple
-        col 2  CCA latent z(t)       trials + mean ± SEM; fixed y ∈ [-3, 3]
-        col 3  Nuisance PSTH         z-scored RdBu_r
-        col 4  Nuisance → target β·w₁  barh; green/grey
-        col 5  pCCA canonical weight barh; C3/C0
-        col 6  Residual PSTH         z-scored residual after nuisance regression
-        col 7  pCCA latent z(t)      trials + mean ± SEM; fixed y ∈ [-3, 3]
+        col  0  Raw PSTH                z-scored RdBu_r (Rastermap order)
+        col  1  CCA canonical weight    barh; amber/purple
+        col  2  CCA weight subregion    per-neuron layer / subregion strip
+        col  3  CCA latent z(t)         trials + mean ± SEM; fixed y ∈ [-3, 3]
+        col  4  Nuisance PSTH           z-scored RdBu_r
+        col  5  Nuisance → target β·w₁  barh; green/grey
+        col  6  Nuisance subregion      per-neuron layer / subregion strip
+        col  7  Residual PSTH           z-scored residual after nuisance regression
+        col  8  pCCA canonical weight   barh; C3/C0
+        col  9  pCCA weight subregion   per-neuron layer / subregion strip
+        col 10  pCCA latent z(t)        trials + mean ± SEM; fixed y ∈ [-3, 3]
+
+    Each ``_draw_subregion_panel`` (cols 2, 6, 9) is row-aligned one-to-one
+    with the weight-bar panel immediately to its left (identical
+    ``sort_idx`` / ``n_show`` row subsampling) — see ``_draw_subregion_panel``
+    for the cortical-binary vs. subcortical-categorical rendering rule.
+
+    ``omit_nuisance=True`` drops the entire nuisance block (cols 4–6 above:
+    Nuisance PSTH, Nuisance weight bar, Nuisance subregion strip), giving an
+    8-column figure (0: PSTH, 1: CCA weight, 2: CCA subregion, 3: CCA latent,
+    4: Residual PSTH, 5: pCCA weight, 6: pCCA subregion, 7: pCCA latent) —
+    used for the 'AllRegions+Behaviour' ablation step, where Z mixes hundreds
+    of concatenated anatomical neurons with behavioural channels and no
+    single per-neuron nuisance panel is meaningful.
 
     Row 0: TARGET_I (MOs)  |  Row 1: TARGET_J (VPMPO)
 
@@ -754,8 +1111,8 @@ def plot_step_panel(
     --------------------------------------------
     ``apply_latent_sign_correction`` enforces Steps 4–5 of the Z2
     synchronisation algorithm on each canonical-variate pair independently.
-    Resulting flips are propagated to the weight vectors so that cols 1/5
-    are spatially consistent with cols 2/7 respectively:
+    Resulting flips are propagated to the weight vectors so the weight-bar
+    columns stay spatially consistent with their latent columns:
 
         z = X_res @ w   ⟹   flip(z) ≡ X_res @ (−w)
 
@@ -785,7 +1142,7 @@ def plot_step_panel(
     nu_w_i / nu_w_j      : (n_Z,)  nuisance regression projection β·w₁, or None.
     psth_vmax            : shared colour scale for raw and nuisance PSTH panels.
                            The residual PSTH always uses its own per-panel scale.
-    Z_is_behavior         : if True, col 3 ("Nuisance PSTH") is rendered as a
+    Z_is_behavior         : if True, the nuisance PSTH panel is rendered as a
                            per-trial channel-stacked heatmap (see
                            ``_draw_behavior_trials_heatmap``) instead of the
                            usual trial-averaged Rastermap-ordered PSTH — used
@@ -798,6 +1155,18 @@ def plot_step_panel(
     Z_channel_labels       : channel names for the behavioural heatmap (e.g.
                            ['x', 'y', 'z']), in the same order as Z_z3d's
                            channel axis.  Required when Z_is_behavior=True.
+    labels_i / labels_j   : subregion label per neuron for TARGET_I / TARGET_J,
+                           aligned one-to-one with X_i_z3d / X_j_z3d's neuron
+                           axis (i.e. with sort_i / sort_j). None disables
+                           the corresponding subregion strips.
+    labels_z               : subregion label per neuron for the nuisance
+                           region Z, aligned with Z_z3d's neuron axis (i.e.
+                           with sort_z). None (e.g. behavioural Z, or
+                           omit_nuisance=True) disables the nuisance
+                           subregion strip.
+    omit_nuisance          : if True, drop the nuisance PSTH / weight-bar /
+                           subregion columns entirely (see column layout
+                           above).
     """
 
     # ── Residual PSTH: reconstruct 3-D from flat ─────────────────────────────
@@ -834,16 +1203,32 @@ def plot_step_panel(
     w_cca_i = Wx_cca[:, 0] * (-1.0 if flip_ic else 1.0)
     w_cca_j = Wy_cca[:, 0] * (-1.0 if flip_jc else 1.0)
 
-    # ── Figure scaffold (8 columns) ───────────────────────────────────────────
-    # Width ratios mirror the simulation figure:
-    #   PSTH / residual PSTH  →  3.5
+    # ── Figure scaffold ───────────────────────────────────────────────────────
+    # Width ratios mirror the simulation figure, with a narrow (0.6) strip
+    # inserted immediately after each weight-bar column (0.9) for the new
+    # per-neuron subregion panel:
+    #   PSTH / residual PSTH  →  4.0 / 3.5
     #   weight bars           →  0.9
+    #   subregion strips      →  0.6
     #   latent z(t)           →  2.8
+    if omit_nuisance:
+        n_cols = 8
+        (COL_PSTH, COL_CCA_W, COL_CCA_SUB, COL_CCA_Z,
+         COL_RESID, COL_PCCA_W, COL_PCCA_SUB, COL_PCCA_Z) = range(8)
+        COL_NUIS_PSTH = COL_NUIS_W = COL_NUIS_SUB = None
+        width_ratios = [4.0, 0.9, 0.6, 2.8, 3.5, 0.9, 0.6, 2.8]
+    else:
+        n_cols = 11
+        (COL_PSTH, COL_CCA_W, COL_CCA_SUB, COL_CCA_Z,
+         COL_NUIS_PSTH, COL_NUIS_W, COL_NUIS_SUB,
+         COL_RESID, COL_PCCA_W, COL_PCCA_SUB, COL_PCCA_Z) = range(11)
+        width_ratios = [4.0, 0.9, 0.6, 2.8, 3.5, 0.9, 0.6, 3.5, 0.9, 0.6, 2.8]
+
     fig, axes = plt.subplots(
-        2, 8,
-        figsize=(33.0 * (POSTER_SCALE / 1.4), 8.0 * (POSTER_SCALE / 1.4)),
+        2, n_cols,
+        figsize=(33.0 * (POSTER_SCALE / 1.4) * (n_cols / 8.0), 8.0 * (POSTER_SCALE / 1.4)),
         gridspec_kw={
-            'width_ratios': [4.0, 0.9, 2.8, 3.5, 0.9, 3.5, 0.9, 2.8],
+            'width_ratios': width_ratios,
             'hspace': 0.5,     # a bit more headroom than 0.52 — titles are now bigger
             'wspace': 0.5,
         },
@@ -851,18 +1236,14 @@ def plot_step_panel(
 
     rho0_p = float(rho_pcca[0]) if len(rho_pcca) > 0 else float('nan')
     rho0_c = float(rho_cca[0]) if len(rho_cca) > 0 else float('nan')
-    z_label = Z_name if Z_name is not None else 'Z'
-    if z_label == 'VPMPO':
-        z_label = 'sens Thal'
-    elif z_label == 'VALVM':
-        z_label = 'motor Thal'
+    z_label = display_name(Z_name) if Z_name is not None else 'Z'
 
     # ── Per-row configuration ─────────────────────────────────────────────────
     row_cfg = [
         dict(
             name=TARGET_I,
             X_z3d=X_i_z3d,
-            X_res_z3d=X_i_res_z3d,  # residual PSTH (col 6)
+            X_res_z3d=X_i_res_z3d,
             sort_idx=sort_i,
             w_pcca=w_pcca_i,
             w_cca=w_cca_i,
@@ -871,6 +1252,7 @@ def plot_step_panel(
             c_pcca=_CI_PCCA,  # dark red
             c_cca=_CI_CCA,  # warm orange
             nu_w=nu_w_i,
+            labels=labels_i,
         ),
         dict(
             name=TARGET_J,
@@ -884,125 +1266,135 @@ def plot_step_panel(
             c_pcca=_CJ_PCCA,  # dark blue
             c_cca=_CJ_CCA,  # sky blue
             nu_w=nu_w_j,
+            labels=labels_j,
         ),
     ]
 
     for row, rd in enumerate(row_cfg):
 
-        # ── Col 0  Raw PSTH ───────────────────────────────────────────────────
+        # ── Col: Raw PSTH ─────────────────────────────────────────────────────
         # Shared colour scale (psth_vmax) so amplitude is comparable
         # across all ablation steps.
         _draw_psth(
-            axes[row, 0], rd['X_z3d'], rd['sort_idx'],
+            axes[row, COL_PSTH], rd['X_z3d'], rd['sort_idx'],
             time_vec, rd['name'], n_show, vmax=psth_vmax,show_colorbar=True
         )
 
-        # ── Col 1  CCA canonical weight (amber / purple) ──────────────────────
+        # ── Col: CCA canonical weight (amber / purple) ─────────────────────────
         _draw_weight_bar(
-            axes[row, 1], rd['w_cca'], rd['sort_idx'], n_show,
+            axes[row, COL_CCA_W], rd['w_cca'], rd['sort_idx'], n_show,
             f"CCA weight",
             pos_color=_C_CCA_POS,
             neg_color=_C_CCA_NEG,
         )
 
-        # ── Col 2  CCA latent z(t) ────────────────────────────────────────────
+        # ── Col: CCA weight subregion strip ──────────────────────────────────
+        _draw_subregion_panel(
+            axes[row, COL_CCA_SUB], rd['labels'], rd['sort_idx'], n_show,
+        )
+
+        # ── Col: CCA latent z(t) ─────────────────────────────────────────────
         _draw_latent(
-            axes[row, 2], rd['z_c'], time_vec,
+            axes[row, COL_CCA_Z], rd['z_c'], time_vec,
             rd['c_cca'],
             f"CCA  z(t)   ρ₁={rho0_c:.3f}",
         )
         if row == 0:
-            axes[row, 2].set_ylabel('Latent projection', fontsize=_fs(SIZE))
+            axes[row, COL_CCA_Z].set_ylabel('Latent projection', fontsize=_fs(SIZE))
 
-        # ── Col 3  Nuisance PSTH / per-trial behavioural heatmap ──────────────
-        if Z_z3d is not None and Z_name is not None and Z_is_behavior:
-            # Behavioural nuisance (abl-pos / abl-speed / abl-Behaviour):
-            # show every individual trial, stacked by channel, with a
-            # colour scale computed from Z_z3d itself (not psth_vmax) and
-            # its own colorbar — see _draw_behavior_trials_heatmap.
-            _draw_behavior_trials_heatmap(
-                axes[row, 3], Z_z3d,
-                Z_channel_labels if Z_channel_labels is not None else [z_label],
-                time_vec, f'Nuisance: {z_label}  (all trials)',
-            )
-        elif Z_z3d is not None and sort_z is not None and Z_name is not None:
-            if z_label == 'AllRegions':
-                n_show = 1000
-            _draw_psth(
-                axes[row, 3], Z_z3d, sort_z,
-                time_vec, f'Nuisance: {z_label}', n_show, vmax=psth_vmax,
-            )
-        else:
-            axes[row, 3].text(
-                0.5, 0.5, 'No nuisance\nregion',
-                ha='center', va='center', fontsize=9, color='gray',
-                transform=axes[row, 3].transAxes,
-            )
-            axes[row, 3].axis('off')
+        if not omit_nuisance:
+            # ── Col: Nuisance PSTH / per-trial behavioural heatmap ─────────────
+            if Z_z3d is not None and Z_name is not None and Z_is_behavior:
+                # Behavioural nuisance (abl-pos / abl-speed / abl-Behaviour):
+                # show every individual trial, stacked by channel, with a
+                # colour scale computed from Z_z3d itself (not psth_vmax) and
+                # its own colorbar — see _draw_behavior_trials_heatmap.
+                _draw_behavior_trials_heatmap(
+                    axes[row, COL_NUIS_PSTH], Z_z3d,
+                    Z_channel_labels if Z_channel_labels is not None else [z_label],
+                    time_vec, f'Nuisance: {z_label}  (all trials)',
+                )
+            elif Z_z3d is not None and sort_z is not None and Z_name is not None:
+                if z_label == 'AllRegions':
+                    n_show = 1000
+                _draw_psth(
+                    axes[row, COL_NUIS_PSTH], Z_z3d, sort_z,
+                    time_vec, f'Nuisance: {z_label}', n_show, vmax=psth_vmax,
+                )
+            else:
+                axes[row, COL_NUIS_PSTH].text(
+                    0.5, 0.5, 'No nuisance\nregion',
+                    ha='center', va='center', fontsize=9, color='gray',
+                    transform=axes[row, COL_NUIS_PSTH].transAxes,
+                )
+                axes[row, COL_NUIS_PSTH].axis('off')
 
-        if rd['name'] == 'VPMPO':
-            region_n = 'sens Thal'
-        elif rd['name'] == 'VALVM':
-            region_n = 'motor Thal'
-        else:
-            region_n = rd['name']
+            region_n = display_name(rd['name'])
 
-        # ── Col 4  Nuisance → target β·w₁ ────────────────────────────────────
-        if rd['nu_w'] is not None and sort_z is not None:
-            _draw_weight_bar(
-                axes[row, 4], rd['nu_w'], sort_z, n_show,
-                f"{z_label}→{region_n}\nβ·w₁",
-                pos_color=_C_BETA_POS,  # green
-                neg_color=_C_BETA_NEG,  # grey
+            # ── Col: Nuisance → target β·w₁ ─────────────────────────────────
+            if rd['nu_w'] is not None and sort_z is not None:
+                _draw_weight_bar(
+                    axes[row, COL_NUIS_W], rd['nu_w'], sort_z, n_show,
+                    f"{z_label}→{region_n}\nβ·w₁",
+                    pos_color=_C_BETA_POS,  # green
+                    neg_color=_C_BETA_NEG,  # grey
+                )
+            else:
+                axes[row, COL_NUIS_W].text(
+                    0.5, 0.5, '—',
+                    ha='center', va='center', fontsize=12, color='#AAAAAA',
+                    transform=axes[row, COL_NUIS_W].transAxes,
+                )
+                axes[row, COL_NUIS_W].set_title(
+                    f"{z_label}→{rd['name']}\nβ·w₁",
+                    fontsize=7, color='#AAAAAA',
+                )
+                axes[row, COL_NUIS_W].axis('off')
+
+            # ── Col: Nuisance weight subregion strip ────────────────────────
+            # Z_is_behavior=True ⟹ Z's "neurons" are behavioural channels
+            # (no subregion identity); labels_z is None in that case too.
+            _draw_subregion_panel(
+                axes[row, COL_NUIS_SUB],
+                labels_z if not Z_is_behavior else None,
+                sort_z, n_show,
             )
-        else:
-            axes[row, 4].text(
-                0.5, 0.5, '—',
-                ha='center', va='center', fontsize=12, color='#AAAAAA',
-                transform=axes[row, 4].transAxes,
-            )
-            axes[row, 4].set_title(
-                f"{z_label}→{rd['name']}\nβ·w₁",
-                fontsize=7, color='#AAAAAA',
-            )
-            axes[row, 4].axis('off')
-        # ── Col 6  Residual PSTH ──────────────────────────────────────────────
+
+        # ── Col: Residual PSTH ────────────────────────────────────────────────
         # Activity remaining after nuisance regression.  The same sort_idx as
-        # col 0 is applied so that neuron ordering is consistent, making the
-        # weight-bar panel (col 5) directly readable against the residual.
+        # the raw-PSTH column is applied so neuron ordering stays consistent,
+        # making the pCCA weight-bar panel directly readable against it.
         # vmax=None: independent per-panel scale because the residual amplitude
         # is generically smaller than the raw PSTH after regression.
-
-        region_short = rd['name'].split()[0]  # 'MOs' or 'VPMPO'
-        if region_short == 'VPMPO':
-            region_short = 'sens Thal'
-        elif region_short == 'VALVM':
-            region_short = 'motor  Thal'
+        region_short = display_name(rd['name'].split()[0])  # 'MOs' or 'sens Thal'
 
         _draw_psth(
-            axes[row, 5], rd['X_res_z3d'], rd['sort_idx'],
+            axes[row, COL_RESID], rd['X_res_z3d'], rd['sort_idx'],
             time_vec, f'{region_short} resid', n_show,
             vmax=None,  # auto-scale per panel
         )
 
-
-        # ── Col 5  pCCA canonical weight (C3/C0 red-blue) ────────────────────
+        # ── Col: pCCA canonical weight (C3/C0 red-blue) ──────────────────────
         _draw_weight_bar(
-            axes[row, 6], rd['w_pcca'], rd['sort_idx'], n_show,
+            axes[row, COL_PCCA_W], rd['w_pcca'], rd['sort_idx'], n_show,
             f"pCCA weight",
             pos_color=_C_POS,
             neg_color=_C_NEG,
         )
 
+        # ── Col: pCCA weight subregion strip ─────────────────────────────────
+        _draw_subregion_panel(
+            axes[row, COL_PCCA_SUB], rd['labels'], rd['sort_idx'], n_show,
+        )
 
-        # ── Col 7  pCCA latent z(t) ───────────────────────────────────────────
+        # ── Col: pCCA latent z(t) ─────────────────────────────────────────────
         _draw_latent(
-            axes[row, 7], rd['z_p'], time_vec,
+            axes[row, COL_PCCA_Z], rd['z_p'], time_vec,
             rd['c_pcca'],
             f"pCCA  z(t)   ρ₁={rho0_p:.3f}",
         )
         if row == 0:
-            axes[row, 7].set_ylabel('Latent projection', fontsize=_fs(SIZE))
+            axes[row, COL_PCCA_Z].set_ylabel('Latent projection', fontsize=_fs(SIZE))
 
     # fig.suptitle(fig_title, fontsize=11, fontweight="normal", y=1.02)
     #fig.suptitle(fig_title, fontsize=_fs(11) * 1.6, fontweight="normal", y=1.03)
@@ -2280,10 +2672,11 @@ def load_behavior_regressors(
     filtered to trials matching `trial_label`.
 
     `trial_label` must match the neural condition folder used to build
-    SESSION_FILE (e.g. 'cued hit long' ↔ pcca_sessions_cued_hit_long_results),
-    since {session}_pos.npy / {session}_speed.npy on disk span *all* trial
-    types recorded in the session, not just the one used for the neural
-    .mat file currently being analysed.
+    SESSION_FILE (e.g. 'cued hit long' ↔ SESSION_DATA_DIR =
+    cued_hit_long_{ALIGN}_results — see §0), since {session}_pos.npy /
+    {session}_speed.npy on disk span *all* trial types recorded in the
+    session, not just the one used for the neural .mat file currently being
+    analysed.
 
     Returns
     -------
@@ -2351,10 +2744,14 @@ def _run_one_ablation_step(
         n_show: int = N_NEURONS_SHOW,
         Z_is_behavior: bool = False,
         Z_channel_labels: Optional[List[str]] = None,
+        labels_i: Optional[List[str]] = None,
+        labels_j: Optional[List[str]] = None,
+        labels_z: Optional[List[str]] = None,
+        omit_nuisance: bool = False,
 ) -> Tuple[StepResult, SupplementaryMetrics]:
     """One pCCA ablation step: fit pCCA with Z = Z_flat, sign-correct the
     canonical pair, build the StepResult / SupplementaryMetrics bundle, and
-    render + save the 8-panel diagnostic figure.
+    render + save the 11-panel diagnostic figure.
 
     This is the single source of truth for per-step logic.  It is shared
     by BOTH the anatomical single-region-ablation loop and the new
@@ -2366,9 +2763,14 @@ def _run_one_ablation_step(
     never assigned, since its definition had been commented out.)
 
     ``Z_is_behavior`` / ``Z_channel_labels`` are passed straight through to
-    ``plot_step_panel`` (col 3): when True, the nuisance panel shows every
+    ``plot_step_panel``: when True, the nuisance panel shows every
     individual trial stacked by behavioural channel instead of the usual
     trial-averaged PSTH — see ``_draw_behavior_trials_heatmap``.
+
+    ``labels_i`` / ``labels_j`` / ``labels_z`` and ``omit_nuisance`` are
+    likewise passed straight through to ``plot_step_panel``, which draws the
+    per-neuron subregion strips (or drops the nuisance block entirely when
+    ``omit_nuisance=True`` — used for the 'AllRegions+Behaviour' step).
     """
     Wx_p, Wy_p, rho_p, X_i_res, X_j_res = pcca(X_i_flat, X_j_flat, Z_flat)
 
@@ -2449,6 +2851,10 @@ def _run_one_ablation_step(
         psth_vmax=global_vmax,
         Z_is_behavior=Z_is_behavior,
         Z_channel_labels=Z_channel_labels,
+        labels_i=labels_i,
+        labels_j=labels_j,
+        labels_z=labels_z,
+        omit_nuisance=omit_nuisance,
     )
 
     fig_path = (
@@ -2472,11 +2878,13 @@ def _run_one_ablation_step(
 
 def run_single_ablation(
         region_spikes: Dict[str, np.ndarray],
+        region_subregion_labels: Dict[str, List[str]],
         n_trials: int,
         T: int,
         output_dir: Path,
         session_name: str,
         n_show: int = N_NEURONS_SHOW,
+        default_align_cache_dir: Optional[Path] = None,
 ) -> None:
     # out_part2 = output_dir / "part2_ablation"
     out_part2 = output_dir
@@ -2596,7 +3004,23 @@ def run_single_ablation(
     # # ── Global Rastermap: fit on targets + all nuisance regions ──────────
     # all_regions_ordered = [TARGET_I, TARGET_J] + nuisance_all
 
-    global_sort = compute_global_neuron_order(region_spikes, all_regions_ordered,output_dir= out_part2)
+    global_sort = compute_global_neuron_order(
+        region_spikes, all_regions_ordered, output_dir=out_part2,
+        default_align_cache_dir=default_align_cache_dir,
+    )
+
+    # ── Group cortical-region neurons by laminar depth (Instruction 6) ────
+    # Shallow (L1, L2/3) and deep (L5, L6a, L6b) neurons are grouped
+    # together in the display, preserving Rastermap order within each
+    # group. Subcortical regions retain their raw global_sort order.
+    # Every downstream user of global_sort[r] (sort_i, sort_j, the
+    # single-region nuisance loop, and the AllRegions concatenation) picks
+    # this up automatically since it's applied once, in place, here.
+    for _rname in list(global_sort.keys()):
+        if _rname in CORTICAL_REGIONS and _rname in region_subregion_labels:
+            global_sort[_rname] = _group_by_laminar_depth(
+                global_sort[_rname], region_subregion_labels[_rname]
+            )
 
     sort_i = global_sort[TARGET_I]
     sort_j = global_sort[TARGET_J]
@@ -2712,6 +3136,9 @@ def run_single_ablation(
             global_vmax=global_vmax,
             out_dir=out_part2, session_name=session_name,
             abl_idx=abl_idx, n_show=n_show,
+            labels_i=region_subregion_labels.get(TARGET_I),
+            labels_j=region_subregion_labels.get(TARGET_J),
+            labels_z=region_subregion_labels.get(region),
         )
         ablation_results.append(step_result)
         supp_list_abl.append(supp)
@@ -2761,6 +3188,9 @@ def run_single_ablation(
                 abl_idx=len(nuisance_all) + k, n_show=n_show,
                 Z_is_behavior=True,
                 Z_channel_labels=beh_channel_labels,
+                labels_i=region_subregion_labels.get(TARGET_I),
+                labels_j=region_subregion_labels.get(TARGET_J),
+                labels_z=None,  # behavioural channels have no subregion identity
             )
             behavior_results.append(step_result)
             supp_list_behav.append(supp)
@@ -2803,6 +3233,14 @@ def run_single_ablation(
         _offset += nuisance_z3d[r].shape[1]
     sort_z_all = np.concatenate(_sort_parts)
 
+    # Subregion labels concatenated in the SAME order as Z_z3d_all (region
+    # order = nuisance_all, per-region raw neuron order) so that indexing
+    # with sort_z_all in _draw_subregion_panel lines up one-to-one with the
+    # neuron rows shown by the nuisance PSTH / weight-bar panels.
+    labels_z_all: List[str] = []
+    for r in nuisance_all:
+        labels_z_all.extend(region_subregion_labels.get(r, []))
+
     step_result, supp = _run_one_ablation_step(
         step_label="abl-AllRegions",
         Z_name="AllRegions",
@@ -2818,6 +3256,9 @@ def run_single_ablation(
         out_dir=out_part2, session_name=session_name,
         abl_idx=extra_idx_start, n_show=n_show,
         Z_is_behavior=False,
+        labels_i=region_subregion_labels.get(TARGET_I),
+        labels_j=region_subregion_labels.get(TARGET_J),
+        labels_z=labels_z_all,
     )
     extra_results.append(step_result)
     supp_list_extra.append(supp)
@@ -2836,6 +3277,10 @@ def run_single_ablation(
             np.arange(behav_combined_raw.shape[1]) + _offset,
         ])
 
+        # omit_nuisance=True: this step's Z mixes hundreds of concatenated
+        # anatomical neurons across many regions with 4 behavioural channels,
+        # so the nuisance PSTH / weight-bar / subregion columns are dropped
+        # entirely for this figure (see plot_step_panel's omit_nuisance).
         step_result, supp = _run_one_ablation_step(
             step_label="abl-AllRegions+Behaviour",
             Z_name="AllRegions+Behaviour",
@@ -2851,6 +3296,9 @@ def run_single_ablation(
             out_dir=out_part2, session_name=session_name,
             abl_idx=extra_idx_start + 1, n_show=n_show,
             Z_is_behavior=False,
+            labels_i=region_subregion_labels.get(TARGET_I),
+            labels_j=region_subregion_labels.get(TARGET_J),
+            omit_nuisance=True,
         )
         extra_results.append(step_result)
         supp_list_extra.append(supp)
@@ -3054,21 +3502,29 @@ def plot_region_residual_distributions(
 def run_single_session(SESSION_NAME: str) -> None:
     """运行单个 Session 的完整分析流程"""
     BASE_DIR = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
-    SESSION_FILE = (
-            BASE_DIR
-            / f"pcca_sessions_{Trial_type_value}_results"
-            / f"{SESSION_NAME}_analysis_results.mat"
-    )
+    SESSION_FILE = SESSION_DATA_DIR / f"{SESSION_NAME}_analysis_results.mat"
 
 
     # 1. 动态生成目标配对的文件夹名称，例如 "MOs_mPFC"
     target_pair_name = f"{TARGET_I} ↔ {TARGET_J}- subtract_psth={SUBTRACT_PSTH}-shuffle_trials={SHUFFLE_TRIALS}"
 
     # 2. 将新层级加入到 OUTPUT_DIR 的构建中
-    OUTPUT_DIR = BASE_DIR / "Paper_output" / f"pcca_ablation_8panel_{Trial_type_value}" / SESSION_NAME / target_pair_name
+    # ALIGN is folded into the output folder name so runs under different
+    # alignment modes (see §0) never silently overwrite each other's figures.
+    OUTPUT_DIR = BASE_DIR / "Paper_output" / f"pcca_ablation_8panel_{Trial_type_value}_{ALIGN}" / SESSION_NAME / target_pair_name
 
     # 确保新创建的带有两层子目录的路径可以成功建立
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Directory this same session/pair would use under ALIGN='default_move_onset'.
+    # Rastermap neuron ordering doesn't depend on alignment mode, so
+    # compute_global_neuron_order() reuses a sorting found there instead of
+    # refitting when this session is (re-)run under a different ALIGN.
+    DEFAULT_ALIGN = "default_move_onset" #reward_onset default_move_onset
+    DEFAULT_ALIGN_OUTPUT_DIR = (
+        BASE_DIR / "Paper_output" / f"pcca_ablation_8panel_{Trial_type_value}_{DEFAULT_ALIGN}"
+        / SESSION_NAME / target_pair_name
+    )
 
     print("\n" + "=" * 70)
     print(f"pCCA Sequential Ablation Analysis")
@@ -3081,16 +3537,18 @@ def run_single_session(SESSION_NAME: str) -> None:
         print(f"❌ [WARNING] File not found, skipping: {SESSION_FILE}")
         return
 
-    region_spikes, n_trials, T = load_region_spikes(str(SESSION_FILE))
+    region_spikes, region_subregion_labels, n_trials, T = load_region_spikes(str(SESSION_FILE))
 
 
     print("\nSingle-region ablation ─────────────────────────────────")
     run_single_ablation(
         region_spikes=region_spikes,
+        region_subregion_labels=region_subregion_labels,
         n_trials=n_trials,
         T=T,
         output_dir=OUTPUT_DIR,
         session_name=SESSION_NAME,
+        default_align_cache_dir=DEFAULT_ALIGN_OUTPUT_DIR,
     )
     print(f"✨ Session {SESSION_NAME} Done.")
 

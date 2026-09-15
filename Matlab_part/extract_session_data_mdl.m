@@ -21,7 +21,8 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
 %   date_str    - Recording date in YYMMDD format (e.g., '220401')
 %   config      - Configuration struct containing:
 %                 .local_base_dir - Base directory for downloaded data
-%                 .time_window    - [start, end] in seconds (default: [-1.5, 3.0])
+%                 .alignment_mode - Trial onset alignment; also selects the
+%                                   trial window (see segment_mdl_to_trials.m)
 %                 .min_neurons_per_region - Minimum neurons for valid region
 %   t_approach  - Table from get_tapproach.m with columns including:
 %                 {animal_id, session_date, session_name, ..., start_time, label}
@@ -38,7 +39,7 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
 %
 % EXAMPLE USAGE:
 %   config.local_base_dir = '/Users/shengyuancai/Downloads/Oxford_dataset/';
-%   config.time_window = [-1.5, 3.0];
+%   config.alignment_mode = 'bar_off_onset';
 %   t_approach = load('t_approach.mat').t_approach;
 %   session_data = extract_session_data_mdl('yp020', '220401', config, t_approach);
 %
@@ -137,9 +138,18 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
                 return;
             end
         end
-        
+
         n_neurons_cm = length(cell_metrics.brainRegion_final);
         fprintf('  Cell metrics contain %d neurons\n', n_neurons_cm);
+
+        % Subregion labels (finer-grained than brainRegion_final, e.g. layer
+        % or subdivision info) are read from cell_metrics.brainRegion
+        if isfield(cell_metrics, 'brainRegion')
+            subregion_all = cell_metrics.brainRegion;
+        else
+            fprintf('  Warning: brainRegion field not found - subregion labels unavailable\n');
+            subregion_all = repmat({'Unknown'}, size(cell_metrics.brainRegion_final));
+        end
         
         % Validate neuron count consistency between MDL and cell metrics
         if n_neurons_mdl ~= n_neurons_cm
@@ -198,13 +208,15 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
             n_stable = sum(stable_mask);
             fprintf('  Stable units: %d / %d (%.1f%%)\n', n_stable, n_neurons, 100*n_stable/n_neurons);
             
-            % Apply stable unit filter to firing rates and brain regions
+            % Apply stable unit filter to firing rates, brain regions, and subregions
             trial_firing_rates = trial_firing_rates(:, stable_mask, :);
             brain_regions = cell_metrics.brainRegion_final(stable_mask);
+            subregions = subregion_all(stable_mask);
         else
             fprintf('  No stable_unit information found - using all neurons\n');
             stable_mask = true(n_neurons, 1);
             brain_regions = cell_metrics.brainRegion_final(1:n_neurons);
+            subregions = subregion_all(1:n_neurons);
         end
         
         %% Stage 5: Construct Session Data Structure
@@ -214,6 +226,7 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
         session_data.session_name = session_name;
         session_data.spike_rates = trial_firing_rates;  % [N_trials × N_neurons × N_timepoints]
         session_data.brain_regions = brain_regions;
+        session_data.subregions = subregions;  % finer-grained region labels, from cell_metrics.brainRegion
         session_data.cell_metrics = cell_metrics;
         session_data.stable_units = stable_mask;
         session_data.trial_info = trial_info;

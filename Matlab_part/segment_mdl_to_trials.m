@@ -1,4 +1,4 @@
-function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_approach, session_id, date_str, config)
+    function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_approach, session_id, date_str, config)
 % SEGMENT_MDL_TO_TRIALS - Extract trial-segmented firing rates from continuous MDL data
 %
 % This function implements the critical transformation from continuous neural recordings
@@ -9,12 +9,14 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
 % The continuous firing rate matrix F_mdl ∈ ℝ^{N_neurons × T_total} is segmented into
 % K trials using the alignment times τ_k from t_approach:
 %
-%   F_trial(k) = F_mdl[:, τ_k - 75 : τ_k + 150]
+%   F_trial(k) = F_mdl[:, τ_k - pre_bins(mode) : τ_k + post_bins(mode)]
 %
-% where τ_k is the start_time bin for trial k. This yields:
-%   - Pre-event window: 75 bins × 20ms/bin = 1.5 seconds
-%   - Post-event window: 150 bins × 20ms/bin = 3.0 seconds
-%   - Total window: 225 bins × 20ms/bin = 4.5 seconds
+% where τ_k is the alignment-event bin for trial k, and (pre_bins, post_bins)
+% depend on the alignment mode (all spanning 3.0s total at 50Hz/20ms bins):
+%   - cue_onset          : [-0.8s, +2.2s] -> [-40, +110] bins
+%   - default_move_onset : [-1.0s, +2.0s] -> [-50, +100] bins
+%   - reward_onset       : [-1.2s, +1.8s] -> [-60, +90]  bins
+%   - bar_off_onset      : [-2.0s, +1.0s] -> [-100, +50] bins
 %
 % TRIAL SELECTION CRITERION:
 % Only trials with label == 'cued hit long' are extracted, starting from the first
@@ -26,7 +28,13 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
 %                 Note: start_time should be in bins (not seconds)
 %   session_id  - Animal identifier (e.g., 'yp020')
 %   date_str    - Recording date in YYMMDD format (e.g., '220401')
-%   config      - Configuration struct with time_window field
+%   config      - Configuration struct, optionally with .alignment_mode
+%                 controlling trial onset alignment AND its trial window
+%                 (see the per-mode windows above):
+%                   'default_move_onset' (default) - start_time
+%                   'cue_onset'                     - start_time - t_approach.cue
+%                   'bar_off_onset'                 - start_time + t_approach.bar_off
+%                   'reward_onset'                  - start_time + t_approach.drop_time
 %
 % OUTPUTS:
 %   trial_firing_rates - [N_trials × N_neurons × N_timepoints] tensor
@@ -45,20 +53,37 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
 % - Assumes 50Hz binning (20ms bins) in the MDL firing rate data
 
     fprintf('  Segmenting continuous MDL data into trials...\n');
-    
-    % Define bin parameters for 50Hz data (20ms bins)
-    % Time window: [-1.5s, 3.0s] → bins: [-75, +150] relative to start_time
-    pre_event_bins = 75;    % 1.5 seconds before event
-    post_event_bins = 150;  % 3.0 seconds after event
-    total_bins = pre_event_bins + post_event_bins + 1;  % 226 bins total (including start bin)
-    
-    % Validate time window consistency with config
-    expected_pre = abs(config.time_window(1)) * 50;   % Convert seconds to bins at 50Hz
-    expected_post = config.time_window(2) * 50;
-    if abs(expected_pre - pre_event_bins) > 1 || abs(expected_post - post_event_bins) > 1
-        warning('Time window parameters may not match config. Using [-1.5s, 3.0s] as specified.');
+
+    %% Step 0: Resolve alignment mode and its per-mode trial window
+    % Each alignment condition uses its own pre/post window around the
+    % alignment event (all spanning 3.0s total, at 50Hz / 20ms bins):
+    alignment_mode = 'default_move_onset';
+    if isfield(config, 'alignment_mode') && ~isempty(config.alignment_mode)
+        alignment_mode = config.alignment_mode;
     end
-    
+    alignment_key = lower(alignment_mode);
+
+    alignment_windows_s = struct( ...
+        'cue_onset',          [-0.8, 2.2], ...
+        'default_move_onset', [-1.0, 2.0], ...
+        'reward_onset',       [-1.2, 1.8], ...
+        'bar_off_onset',      [-2.0, 1.0]);
+
+    if ~isfield(alignment_windows_s, alignment_key)
+        error(['Unknown alignment_mode "%s" (expected one of: %s)'], ...
+              alignment_mode, strjoin(fieldnames(alignment_windows_s), ', '));
+    end
+
+    trial_window_s = alignment_windows_s.(alignment_key);
+
+    % Define bin parameters for 50Hz data (20ms bins)
+    pre_event_bins = round(abs(trial_window_s(1)) * 50);
+    post_event_bins = round(trial_window_s(2) * 50);
+    total_bins = pre_event_bins + post_event_bins + 1;  % includes the alignment-event bin
+
+    fprintf('    Alignment mode: %s, trial window [%.1fs, %.1fs] -> bins [-%d, +%d]\n', ...
+            alignment_mode, trial_window_s(1), trial_window_s(2), pre_event_bins, post_event_bins);
+
     %% Step 1: Extract firing rate matrix from MDL structure
     % The MDL data contains firing rates in mdl.predictor.firingrate
     if isfield(mdl_data, 'mdl')
@@ -172,25 +197,73 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
     % Get the subset of t_approach for valid trials
     valid_trials_table = t_approach(valid_trial_mask, :);
     start_times = valid_trials_table.start_time;
-    
+
     % Ensure start_times are numeric (bin indices)
     if iscell(start_times)
         start_times = cell2mat(start_times);
     end
-    
+
+    %% Step 4b: Apply trial onset alignment strategy
+    % 'default_move_onset' (default) - use start_time directly (movement onset)
+    % 'cue_onset'                    - align to cue onset:      start_time - cue
+    % 'bar_off_onset'                - align to bar-off onset:  start_time + bar_off
+    % 'reward_onset'                 - align to reward onset:   start_time + drop_time
+    % (cue precedes start_time, so its column is start_time - event, and
+    %  recovering the event timestamp needs subtraction; bar_off/drop_time
+    %  follow start_time, so their column is event - start_time, and
+    %  recovering the event timestamp needs addition. See get_tapproach.m,
+    %  e.g. tapproach.cue = tapproach.start_time - cue.timestamps(idx_cue).)
+    % alignment_mode / alignment_key were already resolved in Step 0 above
+    % (needed there to pick this trial's pre/post window).
+
+    alignment_event_columns = struct( ...
+        'default_move_onset', '', ...
+        'cue_onset',          'cue', ...
+        'bar_off_onset',      'bar_off', ...
+        'reward_onset',       'drop_time');
+
+    event_col = alignment_event_columns.(alignment_key);
+
+    if isempty(event_col)
+        fprintf('    Alignment mode: default_move_onset (start_time)\n');
+    else
+        if ~ismember(event_col, col_names)
+            error('t_approach table must contain a "%s" column for %s alignment', ...
+                  event_col, alignment_mode);
+        end
+        event_values = valid_trials_table.(event_col);
+        if iscell(event_values)
+            event_values = cell2mat(event_values);
+        end
+
+        % Sign convention differs by event: cue precedes start_time
+        % (movement onset), so its column is start_time - event_timestamp
+        % and recovering event_timestamp requires subtraction. bar_off and
+        % drop_time (reward) instead follow start_time, so their column is
+        % event_timestamp - start_time and recovering event_timestamp
+        % requires addition.
+        if any(strcmp(alignment_key, {'reward_onset', 'bar_off_onset'}))
+            start_times = start_times + event_values;
+            fprintf('    Alignment mode: %s (start_time + %s)\n', alignment_mode, event_col);
+        else
+            start_times = start_times - event_values;
+            fprintf('    Alignment mode: %s (start_time - %s)\n', alignment_mode, event_col);
+        end
+    end
+
     % Convert to integer bin indices if they appear to be in seconds
     % Heuristic: if max start_time is small relative to n_total_bins, it's likely in seconds
     if max(start_times) < n_total_bins / 50
         fprintf('    WARNING: start_time appears to be in seconds, converting to bins...\n');
         start_times = round(start_times * 50);  % Convert seconds to bins at 50Hz
     end
-    
+
     start_times = round(start_times);  % Ensure integer bin indices
-    
+
     fprintf('    Start time range: bins %d to %d\n', min(start_times), max(start_times));
     
     %% Step 5: Segment continuous data into trial epochs
-    % For each valid trial, extract: [start_bin - 75, start_bin + 150]
+    % For each valid trial, extract: [start_bin - pre_event_bins, start_bin + post_event_bins]
     
     % Preallocate output tensor
     trial_firing_rates = zeros(n_valid_trials, n_neurons, total_bins);
@@ -200,11 +273,21 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
     trial_idx = 0;
     for i = 1:n_valid_trials
         start_bin = start_times(i);
-        
+
+        % Skip trials with no recorded alignment event (e.g. a trial with no
+        % reward drop logged when aligning to reward_onset, or a missing
+        % bar_off/cue timestamp). NaN would otherwise pass the
+        % boundary checks below undetected and crash the colon-indexing.
+        if isnan(start_bin)
+            fprintf('    Skipping trial %d: no %s value recorded (NaN)\n', i, alignment_mode);
+            skipped_trials = skipped_trials + 1;
+            continue;
+        end
+
         % Calculate epoch boundaries
         epoch_start = start_bin - pre_event_bins;
         epoch_end = start_bin + post_event_bins;
-        
+
         % Validate boundaries (ensure we don't exceed data limits)
         if epoch_start < 1
             fprintf('    Skipping trial %d: start bin %d requires pre-event data before recording start\n', i, start_bin);
@@ -242,10 +325,11 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
     trial_info.start_times = start_times(valid_trial_indices);
     trial_info.valid_trial_indices = valid_trial_indices;
     trial_info.skipped_trials = skipped_trials;
-    trial_info.time_window = [-1.5, 3.0];  % seconds
+    trial_info.time_window = trial_window_s;  % seconds, relative to the alignment event
     trial_info.bin_window = [-pre_event_bins, post_event_bins];  % bins relative to start
     trial_info.sampling_rate_hz = 50;
-    trial_info.time_axis = linspace(-1.5, 3.0, total_bins);  % Time axis in seconds
+    trial_info.alignment_mode = alignment_mode;
+    trial_info.time_axis = linspace(trial_window_s(1), trial_window_s(2), total_bins);  % Time axis in seconds
     
     % Summary statistics
     fprintf('    Trial segmentation complete:\n');
@@ -253,8 +337,8 @@ function [trial_firing_rates, trial_info] = segment_mdl_to_trials(mdl_data, t_ap
     fprintf('      Skipped (boundary issues): %d trials\n', skipped_trials);
     fprintf('      Output dimensions: [%d trials × %d neurons × %d timepoints]\n', ...
             actual_n_trials, n_neurons, total_bins);
-    fprintf('      Time window: [%.1fs, %.1fs] relative to start_time\n', ...
-            trial_info.time_window(1), trial_info.time_window(2));
+    fprintf('      Time window: [%.1fs, %.1fs] relative to the %s alignment event\n', ...
+            trial_info.time_window(1), trial_info.time_window(2), alignment_mode);
     
     %% Validation: Check for NaN or Inf values
     if any(isnan(trial_firing_rates(:)))

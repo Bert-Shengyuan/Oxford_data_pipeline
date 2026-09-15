@@ -7,6 +7,9 @@ directly from the reference images:
     R_MAIN / R_SMALL  ~ 31 px / 17.5 px ~ 0.56
     d(A,C) / R_MAIN    ~ 169.5 px / 31 px ~ 5.47
     arrow colour       #969797 (identical in both reference figures)
+
+Upper "other region" points now draw their colours from the same palette
+used in the brain-atlas legend figure (extracted directly from that image).
 """
 
 import random
@@ -17,11 +20,27 @@ from matplotlib.patches import Circle, FancyArrowPatch
 # --------------------------------------------------------------------------
 # Style constants, taken from Figure 1 / Figure 2
 # --------------------------------------------------------------------------
-ORANGE     = "#E69636"   # region A
-BLUE       = "#3265A9"   # region C
+ORANGE     = "#a6cee3"   # region A = MOp -> Primary motor cortex (CFA) in atlas
+BLUE       = "#fb9a99"   # region C = motor Thal -> Motor thalamus (VAL, VM) in atlas
 ARROW_GRAY = "#f5f5f5"   # bidirectional interaction arrows
 ARROW_GRAY_main = "#969797"
-DARK_GREEN = "#2E7D32"   # the two randomly "highlighted" source points
+
+# Colours extracted from the brain-atlas legend image (ColorBrewer "Paired"
+# palette + matplotlib purple for Striatum). ORANGE/BLUE above (MOp / motor
+# Thal) are removed from this pool so the upper "other region" points never
+# duplicate the A/C circle colours.
+ATLAS_PALETTE = [
+    "#1f78b4",  # Premotor cortex (RFA)
+    "#33a02c",  # Medial prefrontal cortex
+    "#b2df8a",  # Orbitofrontal cortex
+    "#b15928",  # Olfactory area
+    "#cab2d6",  # Pulvinar (LP)
+    "#ff7f00",  # Mediodorsal thalamus (MD)
+    "#fdbf6f",  # Interthalamic nuclei
+    "#6a3d9a",  # Hypothalamus
+    "#9467bd",  # Striatum
+]
+HIGHLIGHT_COLOR = "#e31a1c"  # Sensory thalamus (PO, VPM) - the "highlighted" source points
 
 R_MAIN       = 0.9            # radius of A and C  (reference unit)
 R_SMALL      = 0.66 * R_MAIN        # radius of upper source points
@@ -62,15 +81,14 @@ def build_figure(n_points=6, seed=None, savepath="reworked_figure.png"):
 
     # ---------------- colour assignment for the upper points ----------------
     dark_idx = set(random.sample(range(n_points), k=min(2, n_points)))
-    cmap = plt.get_cmap("Greens")
 
     top_circles = []
     for i, x in enumerate(xs_top):
         if i in dark_idx:
-            color, alpha = DARK_GREEN, 1.0
+            color, alpha = HIGHLIGHT_COLOR, 1.0
         else:
-            color = cmap(np.random.uniform(0.30, 0.65))
-            alpha = np.random.uniform(0.35, 0.85)
+            color = random.choice(ATLAS_PALETTE)
+            alpha = np.random.uniform(0.55, 0.95)
         c = Circle((x, y_top), R_SMALL, facecolor=color, edgecolor="none",
                    alpha=alpha, zorder=3)
         top_circles.append(c)
@@ -96,7 +114,7 @@ def build_figure(n_points=6, seed=None, savepath="reworked_figure.png"):
 
     # ---------------- labels ----------------
     ax.text(xA, y_main - R_MAIN - 0.45, "MOp", ha="center", va="top", fontsize=FONT_SIZE)
-    ax.text(xC, y_main - R_MAIN - 0.45, "motor Thal", ha="center", va="top", fontsize=FONT_SIZE)
+    ax.text(xC, y_main - R_MAIN - 0.45, "sens Thal", ha="center", va="top", fontsize=FONT_SIZE)
 
     # ---------------- limits ----------------
     ax.set_xlim(x_mid - span / 2 - 1.2, x_mid + span / 2 + 1.2)

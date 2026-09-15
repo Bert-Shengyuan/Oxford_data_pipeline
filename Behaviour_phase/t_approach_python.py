@@ -2,17 +2,23 @@
 tapproach_extract_and_segment.py
 =================================================================
 Convert the MATLAB `tapproach` struct (position-trajectory dataset,
-50 Hz, t = sample/Fs - 1) into per-session .npy tensors, and assign
-each trial a movement-type label (b2) via hysteresis bout-detection
+50 Hz, t = sample/Fs - 1) into one consolidated .pkl per session, and
+assign each trial a movement-type label (b2) via hysteresis bout-detection
 on the 3-D speed profile.
 
-Outputs, one triplet per session, written to `out_dir`:
+Outputs, written to `out_dir`:
 
-    {session}_pos.npy            float32, shape (n_trials, 3, T)
-                                  axis-1 order: [x, y, z]
-    {session}_task_label.npy     object array, shape (n_trials,)   -- b1
-    {session}_movement_label.npy object array, shape (n_trials,)   -- b2
-    {session}_qc.csv             per-trial QC: n_bouts, bout times/peaks
+    {session}.pkl     one dict per session (pickle.HIGHEST_PROTOCOL):
+                         "pos"            float32, (n_trials, 3, T), axis-1 = [x, y, z]
+                         "task_label"     object array, (n_trials,)  -- b1
+                         "movement_label" object array, (n_trials,)  -- b2
+                         "speed"          float32, (n_trials, T)
+                         "time"           float32, (T,)  seconds, this alignment mode's window
+                         "trigger_times"  dict[str, (n_trials,) float32] or None -- only
+                                          populated when alignment_mode == "default_move_onset":
+                                          per-trial cue/reward/bar-off onset times, seconds
+                                          relative to movement onset (t=0 in this mode)
+    {session}_qc.csv  per-trial QC: n_bouts, bout times/peaks
 
 Author: pipeline extension for Shengyuan's Oxford tapproach analysis.
 =================================================================
@@ -22,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import pickle
 import scipy
 import warnings
 import matplotlib.pyplot as plt
@@ -323,6 +330,96 @@ def label_trial_movement(
 # 5.  Session-level pipeline
 # =============================================================================
 
+ALIGNMENT_FIELDS = {
+    "default_move_onset": None,   # start time = movement onset (start_time), used directly
+    "cue_onset": "cue",       # start time shifted by: start_time - cue
+    "bar_off_onset": "bar_off",  # start time shifted by: start_time + bar_off
+    "reward_onset": "drop_time",  # start time shifted by: start_time + drop_time
+}
+
+# Per-alignment-mode trial window (seconds, relative to the aligned event),
+# matching segment_mdl_to_trials.m's neural trial windows exactly -- all four
+# span 3.0s total at 50Hz (151 samples), matching the native recorded span of
+# this file's own position-tracking input. Trials are cropped to this window
+# (Section 5, `process_sessions`) after re-referencing to the new zero, so
+# the saved position/speed tensors line up 1:1 in time with this alignment
+# mode's neural trial data.
+ALIGNMENT_WINDOWS_S = {
+    "default_move_onset": (-1.0, 2.0),
+    "cue_onset":          (-0.8, 2.2),
+    "bar_off_onset":      (-2.0, 1.0),
+    "reward_onset":       (-1.2, 1.8),
+}
+
+# Display name + plot color for each event, used by plot_session_grid's
+# default-mode trigger-time vertical lines.
+EVENT_DISPLAY = {
+    "cue_onset":          ("cue",            "tab:blue"),
+    "default_move_onset": ("movement onset", "black"),
+    "reward_onset":       ("reward",         "tab:green"),
+    "bar_off_onset":      ("bar-off",        "tab:red"),
+}
+
+
+def _resolve_align_shift(tap: dict, mode: str, n_trials: int) -> np.ndarray:
+    """Per-trial alignment shift (seconds) for `mode`, in
+    shift_trial_to_alignment's own convention (new zero = old time -shift):
+    zeros for default_move_onset; otherwise looked up from the tapproach
+    column named by ALIGNMENT_FIELDS[mode], negated for bar_off_onset/
+    reward_onset (which follow start_time, tapproach.<field> = event -
+    start_time) so that every mode's shift lands on the same absolute event
+    regardless of whether its column precedes or follows start_time -- see
+    process_sessions's own use of this same convention for `align_shift`.
+    """
+    field = ALIGNMENT_FIELDS[mode]
+    if field is None:
+        return np.zeros(n_trials, dtype=np.float64)
+    raw = safe_array(tap.get(field))
+    if raw is None:
+        raise KeyError(
+            f"tapproach struct is missing '{field}' required for "
+            f"alignment_mode='{mode}'."
+        )
+    raw = np.asarray(raw, dtype=np.float64).reshape(-1)
+    if raw.shape[0] != n_trials:
+        raise ValueError(
+            f"'{field}' length mismatch vs. n_trials={n_trials}: got {raw.shape[0]}"
+        )
+    return -raw if mode in ("bar_off_onset", "reward_onset") else raw
+
+
+def shift_trial_to_alignment(
+    pos_trial: np.ndarray, t_source: np.ndarray, shift: float, t_target: np.ndarray
+) -> np.ndarray:
+    """
+    Re-reference a trial's (3, T_source) position trace, recorded on the
+    movement-onset grid `t_source`, onto `t_target` -- a grid whose own
+    zero is `shift` seconds earlier (e.g. shift = tapproach.cue -> new
+    zero = cue onset) -- by resampling each axis with linear
+    interpolation:
+
+        pos_new(t) = pos_original(t - shift)      for t in t_target
+
+    `t_target` is this alignment mode's own trial window
+    (ALIGNMENT_WINDOWS_S), NOT necessarily the same grid as `t_source`:
+    unlike resampling onto `t_source` itself (which silently truncates
+    whichever part of the requested window falls outside `t_source`'s own
+    numeric range, regardless of how much valid shifted data would
+    otherwise be available), evaluating directly on `t_target` is what
+    actually produces the full requested window for alignment modes whose
+    window extends earlier/later than `t_source` does. Samples whose
+    shifted query time falls outside `t_source`'s originally recorded
+    range are still held at the nearest edge value (same convention as
+    `_interp_nan_1d`) -- unchanged from this function's previous behaviour,
+    just now applied per-target-sample rather than per-source-sample.
+    """
+    query_t = t_target - shift
+    out = np.empty((pos_trial.shape[0], t_target.shape[0]), dtype=pos_trial.dtype)
+    for d in range(pos_trial.shape[0]):
+        out[d] = np.interp(query_t, t_source, pos_trial[d])
+    return out
+
+
 def process_sessions(
     mat_path: str,
     out_dir: str,
@@ -335,10 +432,17 @@ def process_sessions(
     min_bout_dur_s: float = 0.06,
     min_gap_merge_s: float = 0.08,
     make_overview_plots: bool = False,  # <-- add this line
+    alignment_mode: str = "default",
 ) -> None:
 
+    if alignment_mode not in ALIGNMENT_FIELDS:
+        raise ValueError(
+            f"Unknown alignment_mode '{alignment_mode}' "
+            f"(expected one of: {', '.join(ALIGNMENT_FIELDS)})"
+        )
 
     out_dir = Path(out_dir)
+    out_dir = out_dir.parent / f"{out_dir.name}_{alignment_mode}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tap = load_tapproach(mat_path)
@@ -346,6 +450,16 @@ def process_sessions(
     n_trials, _, T = pos.shape
     t = np.arange(T) / fs + t_offset
     global_idx = np.arange(n_trials)  # 原始表中的全局行号，session 切分前建立
+
+    # ---- This alignment mode's own trial window/grid (ALIGNMENT_WINDOWS_S),
+    #      matching segment_mdl_to_trials.m's neural window exactly. Every
+    #      trial is resampled onto THIS grid (not `t`) in the per-session
+    #      loop below -- see shift_trial_to_alignment's docstring for why
+    #      resampling onto `t` itself would wrongly truncate any window
+    #      that extends earlier/later than `t`'s own numeric range. ---------
+    win_lo, win_hi = ALIGNMENT_WINDOWS_S[alignment_mode]
+    n_target = int(round((win_hi - win_lo) * fs)) + 1
+    t_target = win_lo + np.arange(n_target, dtype=np.float64) / fs
 
     reach_idx_raw = safe_array(tap.get("idx_since_cue"))
     if reach_idx_raw is None:
@@ -358,8 +472,39 @@ def process_sessions(
                 f"got {reach_idx.shape[0]}"
             )
 
-    if T != 226:
-        warnings.warn(f"Expected T=226 samples; got T={T}. Proceeding with actual T.")
+    if (t[0] > win_lo + 1e-6) or (t[-1] < win_hi - 1e-6):
+        warnings.warn(
+            f"alignment_mode='{alignment_mode}' wants window [{win_lo}, "
+            f"{win_hi}]s but the recorded position trace only covers "
+            f"[{t[0]:.3f}, {t[-1]:.3f}]s (relative to movement onset, "
+            f"before per-trial re-alignment); samples whose shifted query "
+            f"time falls outside that recorded range will be held at the "
+            f"nearest edge value rather than interpolated."
+        )
+
+    align_field = ALIGNMENT_FIELDS[alignment_mode]
+    align_shift = _resolve_align_shift(tap, alignment_mode, n_trials)
+    if align_field is None:
+        print("Alignment mode: default (movement onset / start_time)")
+    elif alignment_mode in ("bar_off_onset", "reward_onset"):
+        print(f"Alignment mode: {alignment_mode} (start_time + {align_field})")
+    else:
+        print(f"Alignment mode: {alignment_mode} (start_time - {align_field})")
+
+    # ---- Trigger times of the OTHER alignment modes, relative to this
+    #      mode's own zero point -- only computed/stored when running in
+    #      default_move_onset (movement onset = 0), where "relative to the
+    #      default mode's own zero point" is unambiguous. `shift_trial_to_
+    #      alignment`'s convention is new-zero = old-time -shift, so a
+    #      mode's event time relative to movement onset is -its own
+    #      align_shift (see _resolve_align_shift's docstring). ------------
+    other_modes = [m for m in ALIGNMENT_FIELDS if m != "default_move_onset"]
+    if alignment_mode == "default_move_onset":
+        trigger_times_all = {
+            m: -_resolve_align_shift(tap, m, n_trials) for m in other_modes
+        }
+    else:
+        trigger_times_all = None
 
     unique_sessions = sorted(set(sessions.tolist()))
     print(f"Loaded {n_trials} trials across {len(unique_sessions)} sessions "
@@ -367,48 +512,73 @@ def process_sessions(
 
     for sess in unique_sessions:
         sel = sessions == sess
-        pos_s = pos[sel]                      # (n_s, 3, T)
+        pos_s_raw = pos[sel]                   # (n_s, 3, T), movement-onset aligned
         b1_s = labels[sel].copy()              # task trial type
         global_idx_s = global_idx[sel]  # 对应每个 trial 在原始表中的行号
         b3_s = reach_idx[sel]  # idx_since_cue, taken as-is from the original table
-        n_s = pos_s.shape[0]
+        shift_s = align_shift[sel]  # per-trial alignment shift (seconds), 0 for default
+        n_s = pos_s_raw.shape[0]
+        trigger_times_s = (
+            {m: trigger_times_all[m][sel].astype(np.float32) for m in other_modes}
+            if trigger_times_all is not None else None
+        )
+
+        # ---- Resample every trial directly onto this alignment mode's own
+        #      target grid `t_target` (ALIGNMENT_WINDOWS_S) -- for
+        #      default_move_onset shift_s is all zeros and t_target ==
+        #      t_offset/T's own grid, so this reduces to the identity; for
+        #      every other mode this is what actually produces the full
+        #      requested window rather than truncating it to `t`'s own
+        #      numeric range (see shift_trial_to_alignment's docstring). ---
+        pos_s = np.stack(
+            [shift_trial_to_alignment(pos_s_raw[i], t, shift_s[i], t_target)
+             for i in range(n_s)],
+            axis=0,
+        )  # (n_s, 3, n_target)
 
         b2_s = np.empty(n_s, dtype=object)
         qc_rows = []
 
         for i in range(n_s):
             b2, bouts, th_on, th_off = label_trial_movement(
-                pos_s[i], t, fs,
+                pos_s[i], t_target, fs,
                 baseline_tmax=baseline_tmax, window_tmin=window_tmin,
                 k_on=k_on, k_off=k_off,
                 min_bout_dur_s=min_bout_dur_s, min_gap_merge_s=min_gap_merge_s,
             )
             b2_s[i] = b2
             bout_times = ";".join(
-                f"[{t[s]:.3f},{t[e]:.3f}]@{pk:.4g}" for s, e, pk in bouts
+                f"[{t_target[s]:.3f},{t_target[e]:.3f}]@{pk:.4g}" for s, e, pk in bouts
             )
             qc_rows.append([i, b1_s[i], b2, len(bouts), th_on, th_off, bout_times])
 
-
-        np.save(out_dir / f"{sess}_pos.npy", pos_s.astype(np.float32))
-        np.save(out_dir / f"{sess}_task_label.npy", b1_s)
-        np.save(out_dir / f"{sess}_movement_label.npy", b2_s)
-
-        # --- new: compute + save speed ---
         speed_s = np.stack(
             [compute_speed(pos_s[i], fs=fs) for i in range(n_s)], axis=0
-        )  # (n_s, T)
-        np.save(out_dir / f"{sess}_speed.npy", speed_s.astype(np.float32))
+        )  # (n_s, n_target)
+
+        session_data = {
+            "session": sess,
+            "alignment_mode": alignment_mode,
+            "pos": pos_s.astype(np.float32),
+            "task_label": b1_s,
+            "movement_label": b2_s,
+            "speed": speed_s.astype(np.float32),
+            "time": t_target.astype(np.float32),
+            "trigger_times": trigger_times_s,
+        }
+        with open(out_dir / f"{sess}.pkl", "wb") as f:
+            pickle.dump(session_data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         if make_overview_plots:
             plot_session_grid(
-                pos_s, speed_s[:, None, :], b1_s, b2_s, t,
+                pos_s, speed_s[:, None, :], b1_s, b2_s, t_target,
                 out_path=out_dir / f"{sess}_overview.png",
                 channel_names=("x", "y", "z", "speed"),
                 ylim_p=(-0.015, 0.015),
                 ylim_speed=(0.0, float(np.nanpercentile(speed_s, 100)) + 0.02),
                 global_idx_s=global_idx_s,
                 b3_s=b3_s,
+                trigger_times_s=trigger_times_s,
             )
 
         with open(out_dir / f"{sess}_qc.csv", "w", newline="") as f:
@@ -423,7 +593,7 @@ def process_sessions(
               f"no_reach={counts['no_reach']:3d}  single={counts['single']:3d}  "
               f"double={counts['double']:3d}  triple_plus={counts['triple_plus']:3d}")
 
-    print(f"\nDone. Per-session .npy + QC .csv files written to: {out_dir}")
+    print(f"\nDone. Per-session .pkl + QC .csv files written to: {out_dir}")
 
 
 # =============================================================================
@@ -475,12 +645,21 @@ def plot_session_grid(
         fontsize: float = 10.0,
         global_idx_s: Optional[np.ndarray] = None,  # 每个 trial 在原始表中的全局行号
         b3_s: Optional[np.ndarray] = None,  # idx_since_cue, from the original table
+        trigger_times_s: Optional[Dict[str, np.ndarray]] = None,  # default-mode only
 ):
     """
     Session-wide QC overview: one compact row per trial, one column per
     channel in `data_s` (e.g. x/y/z position, or a single speed trace),
     each row labeled on the left with `b1 | b2`.
     Only shows up to 100 trials where b1_s == 'cued hit long'.
+
+    `trigger_times_s`, when given (default_move_onset only -- see
+    process_sessions), is {mode: (n_trials,) seconds relative to movement
+    onset} for cue_onset/reward_onset/bar_off_onset (EVENT_DISPLAY's other
+    three modes); each trial's row then gets one vertical line per event
+    (plus movement onset itself, always at 0), in that event's own color,
+    with a shared legend at the top of the figure. Without it (every other
+    alignment mode), each row keeps the previous single dotted line at 0.
     """
     n_channels = data_s.shape[1] +1               # <-- was hardcoded 3
 
@@ -518,9 +697,16 @@ def plot_session_grid(
                     ax.set_ylim(ylim_speed)
 
             ax.plot(t, data, color="k", lw=linewidth)   # <-- was pos_s
-            ax.axvline(0.0, color="0", lw=0.5, ls=":")
-            ax.axvline(1.5, color="0", lw=0.5, ls=":")
-            ax.axvline(2, color="0", lw=0.5, ls=":")
+            if trigger_times_s is not None:
+                ax.axvline(0.0, color=EVENT_DISPLAY["default_move_onset"][1], lw=0.6)
+                for mode in ("cue_onset", "reward_onset", "bar_off_onset"):
+                    trig = trigger_times_s[mode][i]
+                    if np.isfinite(trig):
+                        ax.axvline(trig, color=EVENT_DISPLAY[mode][1], lw=0.6)
+            else:
+                ax.axvline(0.0, color="0", lw=0.5, ls=":")
+                ax.axvline(1.5, color="0", lw=0.5, ls=":")
+                ax.axvline(2, color="0", lw=0.5, ls=":")
             ax.set_xticks([])
             ax.set_yticks([])
 
@@ -545,6 +731,15 @@ def plot_session_grid(
             labelpad=4,
         )
 
+    if trigger_times_s is not None:
+        from matplotlib.lines import Line2D
+        handles = [
+            Line2D([0], [0], color=EVENT_DISPLAY[m][1], lw=1.5, label=EVENT_DISPLAY[m][0])
+            for m in ("cue_onset", "default_move_onset", "reward_onset", "bar_off_onset")
+        ]
+        fig.legend(handles=handles, loc="upper right", ncol=4,
+                   fontsize=fontsize, frameon=False)
+
     # 4. 调整布局
     fig.subplots_adjust(hspace=0.05, wspace=0.05, left=0.30, right=0.99,
                         top=1.0 - 0.5 / max(show_trials, 1), bottom=0.01)
@@ -563,7 +758,16 @@ def main():
 
     parser.add_argument("--out_dir", type=str,
                         default="/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/tapproach_sessions",
-                        help="Path to the output directory")
+                        help="Path to the output directory (a suffix for --alignment_mode "
+                             "is appended, e.g. '..._default', '..._cue')")
+    parser.add_argument("--alignment_mode", type=str, default="default_move_onset",
+                        choices=list(ALIGNMENT_FIELDS),
+                        help="Trial time-zero reference: 'default' uses movement onset "
+                             "(start_time) directly; 'cue'/'bar_off'/'drop_time' "
+                             "(reward onset) shift it by the corresponding per-trial latency "
+                             "stored in tapproach (start_time - <field>). Outputs are written "
+                             "to '{out_dir}_{alignment_mode}', cropped to that alignment "
+                             "mode's trial window (ALIGNMENT_WINDOWS_S).")
     parser.add_argument("--make_overview_plots",
                         default=True,  # 如果默认不想画，这里改成 False
                         help="Also save a {session}_overview.png QC grid per session")
@@ -590,8 +794,8 @@ def main():
         min_bout_dur_s=args.min_bout_dur_s,
         min_gap_merge_s=args.min_gap_merge_s,
         make_overview_plots=args.make_overview_plots,
+        alignment_mode=args.alignment_mode,
     )
-
 
 if __name__ == "__main__":
     main()

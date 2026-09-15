@@ -11,11 +11,7 @@
 %
 % 2. TRIAL SEGMENTATION: Uses t_approach table for behavioral alignment
 %    - Filters for label == 'cued hit long' trials only
-%    - Time window depends on alignment_mode (all span 3.0s total, 50Hz/20ms bins):
-%        cue_onset          [-0.8s, +2.2s]
-%        default_move_onset [-1.0s, +2.0s]
-%        reward_onset       [-1.2s, +1.8s]
-%        bar_off_onset      [-2.0s, +1.0s]
+%    - Time window: [-1.5s, +3.0s] → bins [start_bin - 75, start_bin + 150]
 %    - Assumes 50Hz (20ms) binning in MDL data
 %
 % 3. CLEANUP: Raw MDL and cell_metrics files under proc/ are kept by default
@@ -35,14 +31,13 @@
 % =======================
 % The continuous firing rate matrix F ∈ ℝ^{N×T} is transformed to trial structure:
 %
-%   F_trial(k) = F[:, τ_k - pre_bins(mode) : τ_k + post_bins(mode)]
+%   F_trial(k) = F[:, τ_k - 75 : τ_k + 150]
 %
-% where τ_k is the alignment-event bin for trial k with label 'cued hit long',
-% and (pre_bins, post_bins) depend on alignment_mode (see segment_mdl_to_trials.m).
-% This yields a tensor F_trials ∈ ℝ^{K × N × 151} where:
+% where τ_k is the start_time bin for trial k with label 'cued hit long'.
+% This yields a tensor F_trials ∈ ℝ^{K × N × 226} where:
 %   - K = number of valid trials
 %   - N = number of neurons
-%   - 151 = time bins (3.0s total at 50Hz + 1 align bin, split per alignment_mode)
+%   - 226 = time bins (75 pre + 1 align + 150 post)
 
 clear; clc;
 fprintf('═══════════════════════════════════════════════════════════════════\n');
@@ -63,6 +58,7 @@ analysis_config = struct();
 analysis_config.local_base_dir = '/Users/shengyuancai/Downloads/Oxford_dataset/';
 analysis_config.min_neurons_per_region = 50;    % Minimum for statistical reliability
 analysis_config.target_neurons = analysis_config.min_neurons_per_region;            % Standardized count for fair comparison
+analysis_config.time_window = [-1.5, 3.0];      % Time window (seconds)
 analysis_config.n_components = 10;               % Maximum canonical components
 analysis_config.cv_folds = 10;                  % Cross-validation folds
 analysis_config.significance_threshold = 90;   % Percentile threshold
@@ -70,21 +66,14 @@ analysis_config.significance_threshold = 90;   % Percentile threshold
 analysis_config.trial_type = 'cued hit long'; % cued hit long  spont short spont miss long
 trial_type_folder = strrep(analysis_config.trial_type, ' ', '_');
 
-% Trial onset alignment strategy, and its trial window (seconds, relative
-% to the alignment event; see segment_mdl_to_trials.m for the source of
-% truth -- all four windows span 3.0s total at 50Hz):
-%   'default_move_onset' - use t_approach.start_time directly (movement onset), [-1.0, 2.0]
-%   'cue_onset'           - align to cue onset:     start_time - t_approach.cue,       [-0.8, 2.2]
-%   'bar_off_onset'       - align to bar-off onset: start_time + t_approach.bar_off,   [-2.0, 1.0]
-%   'reward_onset'        - align to reward onset:  start_time + t_approach.drop_time, [-1.2, 1.8]
-analysis_config.alignment_mode = 'bar_off_onset';
-
-alignment_windows_s = struct( ...
-    'cue_onset',          [-0.8, 2.2], ...
-    'default_move_onset', [-1.0, 2.0], ...
-    'reward_onset',       [-1.2, 1.8], ...
-    'bar_off_onset',      [-2.0, 1.0]);
-analysis_config.time_window = alignment_windows_s.(analysis_config.alignment_mode);  % seconds, informational (segment_mdl_to_trials.m is the source of truth)
+% Trial onset alignment strategy:
+%   'default_move_onset' - use t_approach.start_time directly (movement onset)
+%   'cue_onset'           - align to cue onset:     start_time - t_approach.cue
+%   'bar_on_onset'        - align to bar-on onset:  start_time - t_approach.bar_on
+%   'bar_off_onset'       - align to bar-off onset: start_time + t_approach.bar_off
+%   'reward_onset'        - align to reward onset:  start_time + t_approach.drop_time
+analysis_config.alignment_mode = ['r' ...
+'eward_onset'];
 
 % Kernel selection for cross-region analysis:
 %   'cca'   - standard canonical correlation analysis (perform_session_cca)
@@ -361,7 +350,5 @@ fprintf('  Pipeline Complete\n');
 fprintf('═══════════════════════════════════════════════════════════════════\n');
 fprintf('Data format: MDL (continuous firing rates segmented via t_approach)\n');
 fprintf('Trial selection: label == ''cued hit long''\n');
-fprintf('Alignment mode: %s\n', analysis_config.alignment_mode);
 fprintf('Time window: [%.1f, %.1f] seconds → [%d, +%d] bins\n', ...
-        analysis_config.time_window(1), analysis_config.time_window(2), ...
-        -round(abs(analysis_config.time_window(1)) * 50), round(analysis_config.time_window(2) * 50));
+        analysis_config.time_window(1), analysis_config.time_window(2), -75, 150);
