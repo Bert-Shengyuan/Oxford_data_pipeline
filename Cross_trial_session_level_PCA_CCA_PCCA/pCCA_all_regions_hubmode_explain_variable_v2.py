@@ -1,152 +1,85 @@
 #!/usr/bin/env python3
 r"""
-pCCA_all_regions_hubmode_task345.py
+pCCA_all_regions_hubmode_explain_variable_v2.py
 ================================================================================
 
-Hub-mode Tasks 3, 4, 5 (behavioural-variance-explained bars and cross-session
-latent traces) PLUS Task 6 (subregion/laminar weight-ratio boxplots) for
-Part 2c/2c' (the private pCCA latent) of ``pCCA_all_regions_out_
-behaviour.py``.
+v2 counterpart of ``pCCA_all_regions_hubmode_explain_variable.py`` ("v1"):
+same Tasks 3/4/5/6 (behavioural-variance bars, cross-session latent traces,
+subregion/laminar enrichment boxplots), reading from
+``pCCA_all_regions_out_behaviour_v2.py``'s pickles instead of v1's --
+PLUS two NEW tasks, 7 and 8, that visualise the top-pCCA-weight neurons v2
+already identifies and saves.
 
 --------------------------------------------------------------------------------
-Two pCCA regress-out variants, everywhere (latest revision)
+Why a separate script, and what actually changes
 --------------------------------------------------------------------------------
-``pCCA_all_regions_out_behaviour.py`` now stores TWO independently-fit
-versions of Part 2c's private latent per pair, per session: ``.pairs``
-("AllRegions + Behaviour" -- the nuisance Z includes every other recorded
-region AND behaviour, unchanged from before) and ``.pairs_regions_only``
-("AllRegions only" -- same computation, behaviour never enters the nuisance
-Z). ``PCCA_VARIANTS = ('regions_only', 'regions_behavior')`` drives BOTH
-the data-gathering pass (``run_hubmode_analysis``, which now reads and
-tags records from both dicts via ``PrivateLatentAnalyzer.get_pair(...,
-regions_only=True/False)``) and every plotting task below, each producing
-TWO output artifacts (filenames disambiguated by ``VARIANT_FILE_SUFFIX``
-for Tasks 3/6, or by a renumbered task label -- ``task4_1``/``task4_2``,
-``task5_1``/``task5_2`` -- for Tasks 4/5, per this revision's request):
+``pCCA_all_regions_out_behaviour_v2.py`` fits Part 2c/2c' (and 2a/2b) on
+``N_SAMPLE_DRAWS`` (10) independently RESAMPLED neuron draws per pair, per
+session, instead of v1's single fixed-neuron-set fit -- so every quantity
+this script's v1 counterpart reads as ONE value per session is now 10
+values per session (``PrivateLatentPairResult.draws``, one
+``PrivateLatentPairDrawResult`` per draw). Three different things happen
+to that "x10" depending on the task (per this revision's request):
 
-    Task 3  (``hubmode_plot_task3_bars``)             -- default_move_onset ONLY
-                                                          (TASK3_ALIGN_MODES; skipped
-                                                          for every other align_mode)
-              regions_only      -> 4 panels: position, speed, reward_presence,
-                                   reward_consumption (position/speed are meaningful
-                                   again here, since behaviour was NOT regressed out --
-                                   EXTERNAL_VARIABLES_BY_VARIANT)
-              regions_behavior  -> 2 panels: reward_presence, reward_consumption
-                                   (unchanged from before this revision)
-    Task 4.1 / 4.2  (``hubmode_plot_task4_bars``)      -- both variants, both align
-                                                          modes; always the 2-panel
-                                                          reward-only view
-    Task 5.1 / 5.2  (``hubmode_plot_task5_latent_traces``) -- both variants' own
-                                                          cross-session latent traces
-    Task 6  (``hubmode_plot_task6_enrichment_boxplots``) -- both variants, same
-                                                          enrichment_ratio boxplots
-                                                          (no log2/dominant_ratio
-                                                          reduction, unchanged)
+    Tasks 3/4  (R^2 bars)              -- compute R^2 PER DRAW (10 ridge
+                                           fits per session, same as
+                                           before, just repeated), then
+                                           AVERAGE the 10 R^2 SCALARS into
+                                           ONE value per session -- so
+                                           `aggregate_behavior_variance` /
+                                           `hubmode_plot_task3_bars` /
+                                           `hubmode_plot_task4_bars` /
+                                           `hubmode_plot_multipanel_bars`
+                                           are copied UNCHANGED from v1;
+                                           only the per-session INPUT is
+                                           now a 10-draw average instead
+                                           of a single fit.
+    Task 5     (latent traces)         -- the light per-session lines now
+                                           show EVERY trial of EVERY draw
+                                           (10x more lines than v1's
+                                           one-line-per-session), while the
+                                           dark cross-session mean line is
+                                           unchanged in FORMULA -- it is
+                                           still `CrossSessionCCAAnalyzer`'s
+                                           own mean-of-session-means -- only
+                                           each session's own mean is now
+                                           computed over 10x more
+                                           (draw, trial) samples than
+                                           before. See "Task 5" below for
+                                           how the per-session sign flip
+                                           `CrossSessionCCAAnalyzer`
+                                           computes (but does not expose)
+                                           is recovered for the light lines.
+    Task 6     (enrichment boxplots)   -- same average-the-10-draws-into-
+                                           one-session-value pattern as
+                                           Tasks 3/4, applied to each
+                                           group's `enrichment_ratio`
+                                           instead of an R^2.
 
-Reward-kernel definition, ``align_mode == 'default_move_onset'`` only: the
-fixed REWARD_PRESENCE_WINDOW_S/REWARD_CONSUMPTION_WINDOW_S this script
-otherwise falls back to assume t=0 IS the reward (only true when align_mode
-== 'reward_onset'). In default_move_onset, each trial's OWN reward-onset
-time is available instead (t_approach_python.py's per-trial
-``trigger_times['reward_onset']``, seconds relative to movement onset), so
-``build_reward_presence_design``/``build_reward_consumption_design`` use a
-PER-TRIAL kernel there: presence = (0, that trial's reward onset),
-consumption = (that trial's reward onset, + REWARD_CONSUMPTION_DURATION_S).
-A trial with no recorded reward (NaN) contributes an all-zero row rather
-than being dropped.
+Tasks 7 & 8 are NEW: v2 also identifies, per pair, per session, per
+region side, the neurons whose pCCA weight fell in the top
+`TOP_WEIGHT_FRACTION` (20%) pooled across the 10 draws, deduplicated, with
+their residualized activity already saved
+(``PrivateLatentPairResult.selected_neurons_i`` / ``_j``, a
+``SelectedNeuronSet``). Task 7 pools these neurons' ORIGINAL (pre-
+residualization, z-scored) firing-rate PSTH across every session that
+contributed any, one heatmap per (hub, partner) pairing; Task 8 is the
+same layout with RESIDUALIZED activity instead (already saved, no reload
+needed). See Section 9 below for the full design, including why Rastermap
+sorting is applied PER SESSION BLOCK rather than across the pooled matrix
+as a whole (sessions generally have different trial counts, so their raw
+continuous-cross-trial traces are not directly comparable in one joint
+Rastermap fit -- only the trial-AVERAGED PSTH, sharing one common T, can
+be pooled across sessions).
 
-This script is a PURE downstream consumer of ``pCCA_all_regions_out_
-behaviour.py``: every quantity it plots is read straight out of that
-script's pickled ``*_analysis_results.pkl`` files via ``PrivateLatentAnalyzer``
-(``.pairs`` / ``.pairs_regions_only`` / ``PrivateLatentPairResult`` -- Part
-2c / 2c'). Behavioural (position/speed/reward-timing) data is read from
-t_approach_python.py's consolidated ``{session}.pkl`` per session (NOT the
-older separate ``{session}_pos.npy`` etc. files) via this file's own
-``load_behavior_regressors``. Unlike
-``pCCA_latent_extrenal_variable_bar.py`` (which can also fit/reproject a
-CCA/pCCA subspace straight from the raw ``.mat`` pipeline when
-``KERNEL_MODE`` is ``'pcca'``/``'cca'``) and unlike ``PCA_latent_extrenal_
-variable_part.py``'s own hub-based mode (whose Task-(c) reference-projection
-path reloads raw region tensors from ``.mat`` whenever more than one trial
-type is active -- see that file's Section 12), this script never imports
-``mat73``, ``load_region_spikes``, ``residualize``, or any other raw-``.mat``
-primitive: it only ever calls ``PrivateLatentAnalyzer.load_all()`` /
-``.get_pair()``. If a session/pair/trial-type combination has no cached
-pickle, it is skipped -- never recomputed.
-
---------------------------------------------------------------------------------
-What this script reproduces, and what is new
---------------------------------------------------------------------------------
-Tasks 3 & 4 (``hubmode_plot_task3_bars`` / ``hubmode_plot_task4_bars``) and
-the underlying data-gathering pass are carried over from
-``pCCA_latent_extrenal_variable_bar.py``'s own Section 9b (hub-mode display)
-essentially unchanged -- same row layout (``hubmode_band_pairs``: one band
-per ``HUB_MODE_HUB_REGIONS`` entry, one row per ``HUB_MODE_ROI_REGIONS``
-partner), same two-panel (reward presence / reward consumption) bar-plot
-engine, same single-trial/trial-averaged split, same file-naming convention
-(``hubmode_task3_variance_{hub}{suffix}.png`` / ``hubmode_task4_variance_
-{hub}{suffix}.png``).
-
-Task 5 (``hubmode_plot_task5_latent_traces``) reproduces the SAME trace
-styling (per-session thin traces, bold mean, SEM shading, dashed t=0 line)
-but, per this version's request, is split into ONE FIGURE PER HUB REGION
-instead of one figure pooling every hub's rows together -- saved as
-``hubmode_task5_latent_traces_comp{component_idx}_{hub}.png`` -- mirroring
-the per-hub split ``PCA_latent_extrenal_variable_part.py``'s own hub-mode
-Task 5 already uses for Parts 2a/2b.
-
-Task 6 (``hubmode_plot_task6_enrichment_boxplots``) is NEW: it visualises
-Part 3's subregion/laminar-depth weight metric (``compute_subregion_
-weight_metrics`` in ``pCCA_all_regions_out_behaviour.py``, stored per pair
-as ``PrivateLatentPairResult.subregion_weight_metrics_i`` / ``_j``) for the
-hub's own Wx/Wy canonical weight column -- a quantity neither ``pCCA_
-latent_extrenal_variable_bar.py`` nor ``PCA_latent_extrenal_variable_
-part.py`` ever plots (both only import ``SubregionWeightMetrics`` for
-typing).
-
-Task 6 plots the ``enrichment_ratio`` field -- NOT ``dominant_ratio`` (the
-single-scalar "top group : rest" reduction an earlier revision of this
-script used): ``enrichment_ratio[g] = weight_mass_fraction[g] /
-neuron_count_fraction[g]`` is reported PER GROUP, so every group's own
-cross-session distribution is shown side by side, not collapsed to
-whichever group happened to dominate. Layout, per this version's request:
-ONE FIGURE per hub region, laid out 1xn -- one PANEL per partner ROI
-region (not one row per partner, the way Tasks 3/4/the earlier Task 6
-revision lay out their bars). For a cortical hub (``CORTICAL_REGIONS``),
-every panel is a 2-box plot ('Superficial' / 'Deep'); for a subcortical
-hub, every panel has one box per subregion label actually observed for
-that hub -- the SAME category list and category-to-colour assignment is
-shared across every partner's panel within one hub's figure, so panels
-stay directly comparable at a glance. Each box is a cross-session boxplot
-(median / IQR / whiskers, matplotlib's default 1.5x-IQR rule) of that
-group's per-session enrichment ratio, with individual sessions overlaid as
-jittered dots -- the style requested, matching the attached reference
-figure (pale, category-tinted box fill; black outline/median/whiskers;
-solid, category-coloured dots; see ``_boxplot_one_panel``). A dashed
-horizontal line at y=1.0 marks "no enrichment" (a group carrying exactly
-its numerical fair share of |W|) -- the natural neutral point for a ratio
-metric, analogous to Tasks 3/4's own y=0 baseline for R^2.
-
---------------------------------------------------------------------------------
-Direct trial_type / align_mode configuration
---------------------------------------------------------------------------------
-``pCCA_all_regions_out_behaviour.py`` ties its neural-data source folder to
-``mat_subdir_name(trial_type, align_mode) == f"{trial_type}_{align_mode}_
-results"`` and its own pickle output folder to ``out_subdir_name(trial_type,
-align_mode)``. This script never touches the first (it has no raw-``.mat``
-path at all), but it reads the SECOND for every trial type it loads, so it
-exposes ``REFERENCE_TYPE`` / ``ACTIVE_TRIAL_TYPES`` (trial_type) and
-``ALIGN_MODE`` (align_mode) as direct, top-level configuration constants --
-not derived from each other or from any other hardcoded string -- feeding
-``PrivateLatentAnalyzer(trial_type=t, align_mode=ALIGN_MODE)`` for every
-entry of ``ACTIVE_TRIAL_TYPES`` (one independently-computed pickle folder
-per trial type, all sharing the one ``ALIGN_MODE``, exactly mirroring how
-``ALIGN`` is a single global in ``pCCA_all_regions_out_behaviour.py`` even
-though ``TRIAL_TYPE`` there is swapped per run). ``BEHAVIOR_DIR`` is derived
-from ``ALIGN_MODE`` the same align-aware way ``pCCA_all_regions_out_
-behaviour.py``'s own ``BEHAVIOR_DIR`` is (``tapproach_sessions_{align_mode}``),
-NOT the fixed, align-oblivious ``tapproach_sessions`` folder
-``pCCA_latent_extrenal_variable_bar.py`` happens to hardcode.
+Everything else -- data source (``PrivateLatentAnalyzer`` reading v2's own
+``pcca_all_regions_out_behaviour_v2_sampled_sessions_{trial_type}_
+{align_mode}_results`` pickles), the two pCCA regress-out variants
+(``PCCA_VARIANTS`` = 'regions_only' / 'regions_behavior', i.e. ``.pairs``
+vs ``.pairs_regions_only``), the reward-kernel/B-spline machinery, the
+hub-mode row/panel layout, and every plot's visual styling -- is copied
+verbatim from v1's own file, per this revision's "keep the bar plot
+style/display style unchanged" instructions for Tasks 3/4/6.
 
 Author: Oxford Neural Analysis Pipeline
 Date:   2026
@@ -165,18 +98,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from scipy.interpolate import BSpline
+from scipy.stats import zscore
 
 warnings.filterwarnings('ignore')
 
+try:
+    from rastermap import Rastermap
+    _RASTERMAP_OK = True
+except ImportError:
+    _RASTERMAP_OK = False
+    warnings.warn(
+        "rastermap not found; Tasks 7/8 fall back to peak-time neuron ordering."
+    )
+
 # =============================================================================
-# 0.  Imports. `cross_trial_type_cca_analysis.py` is treated as a stable
-#     library module (per this project's convention) purely for its
-#     cross-session, sign-aligned aggregator (`CrossSessionCCAAnalyzer`) --
-#     Task 5's own trace-styling engine needs its spectral sign-alignment
-#     step, exactly as every sibling script's own Task 5 does. Nothing in
-#     THIS file ever touches that module's `.mat`-loading machinery.
-#     `pCCA_all_regions_out_behaviour.py` is this script's ONLY source of
-#     neural data -- see module docstring.
+# 0.  Imports. `cross_trial_type_cca_analysis` is the same stable library
+#     module v1 uses for Task 5's sign-aligned cross-session aggregator.
+#     `pCCA_all_regions_out_behaviour_v2.py` is this script's ONLY source
+#     of neural data (Tasks 3-6/pCCA weights) and ALSO the source of the
+#     raw-reload primitives Task 7 needs (`load_region_spikes_full` /
+#     `crop_time_window` / `_zscore_flat` / `load_behavior_regressors`) --
+#     the SAME functions v2 itself used to build the region_flat_full pool
+#     `SelectedNeuronSet.neurons[].neuron_idx` indexes into, so reloading
+#     with them (rather than reimplementing the load/crop/truncate
+#     sequence a second, possibly-diverging way) guarantees the neuron
+#     axis lines up. Task 8 needs no such reload -- its data
+#     (`SelectedNeuronResidual.residual`) is already saved.
 # =============================================================================
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cross_trial_type_cca_analysis import (   # noqa: E402
@@ -184,71 +131,74 @@ from cross_trial_type_cca_analysis import (   # noqa: E402
     TRIAL_TYPE_COLORS,
     MIN_SESSIONS_THRESHOLD,
 )
-from pCCA_all_regions_out_behaviour import (  # noqa: E402
+from pCCA_all_regions_out_behaviour_v2 import (  # noqa: E402
     PrivateLatentAnalyzer,
     PrivateLatentSessionResult,
     PrivateLatentPairResult,
+    PrivateLatentPairDrawResult,
     RegionPCAResult,
-    HubOrientationPCAResult,
+    HubOrientationPCADrawResult,
     HubPairPCAResult,
     SubregionWeightMetrics,
+    SelectedNeuronSet,
+    SelectedNeuronResidual,
     REGION_PAIRS,
     N_COMPONENTS,
+    N_SAMPLE_DRAWS,
+    TOP_WEIGHT_FRACTION,
     CORTICAL_REGIONS,
     sort_pair_by_anatomy,
     get_anatomical_index,
     out_subdir_name,
+    mat_subdir_name as v2_mat_subdir_name,
+    load_region_spikes_full as v2_load_region_spikes_full,
+    crop_time_window as v2_crop_time_window,
+    _zscore_flat as v2_zscore_flat,
+    load_behavior_regressors as v2_load_behavior_regressors,
+    BASE_DIR as V2_BASE_DIR,
+    SUBTRACT_PSTH as V2_SUBTRACT_PSTH,
+    SHUFFLE_TRIALS as V2_SHUFFLE_TRIALS,
 )
 
-# `pcca_all_regions_out_behaviour.py` bakes '__main__' into every pickled
+# `pCCA_all_regions_out_behaviour_v2.py` bakes '__main__' into every pickled
 # dataclass instance's module reference (it is normally *run* directly);
 # unpickling those files from THIS script's own '__main__' therefore needs
-# the same classes reachable under `__main__` here too -- identical fix,
-# identical reasoning, to every sibling script's own copy of this block.
-sys.modules['__main__'].PrivateLatentSessionResult = PrivateLatentSessionResult
-sys.modules['__main__'].PrivateLatentPairResult = PrivateLatentPairResult
-sys.modules['__main__'].RegionPCAResult = RegionPCAResult
-sys.modules['__main__'].HubOrientationPCAResult = HubOrientationPCAResult
-sys.modules['__main__'].HubPairPCAResult = HubPairPCAResult
+# the same classes reachable under `__main__` here too -- every dataclass
+# that can appear nested inside a pickled `PrivateLatentSessionResult`
+# needs registering, not just the top-level one.
+for _cls in (
+        PrivateLatentSessionResult, PrivateLatentPairResult,
+        PrivateLatentPairDrawResult, RegionPCAResult,
+        HubOrientationPCADrawResult, HubPairPCAResult,
+        SubregionWeightMetrics, SelectedNeuronSet, SelectedNeuronResidual,
+):
+    setattr(sys.modules['__main__'], _cls.__name__, _cls)
 
 try:
     import mat73  # noqa: F401  (transitively required by cross_trial_type_cca_analysis's own imports)
 except Exception:
     warnings.warn("mat73 not importable -- cross_trial_type_cca_analysis.py may fail to "
-                  "import; this script itself never reads a .mat file directly.")
+                  "import; this script's own Task 7 reload also needs it.")
 
 
 # =============================================================================
-# 1.  USER-CONFIGURABLE PARAMETERS
+# 1.  USER-CONFIGURABLE PARAMETERS -- copied from v1 unless noted.
 # =============================================================================
 
-# ---- trial_type / align_mode -- specified DIRECTLY (item 4 of the request),
-#      feeding PrivateLatentAnalyzer(trial_type=..., align_mode=ALIGN_MODE)
-#      the same way pCCA_all_regions_out_behaviour.py's own
-#      mat_subdir_name(trial_type, align_mode) / out_subdir_name(trial_type,
-#      align_mode) take both as explicit arguments -- neither is derived
-#      from the other, and ALIGN_MODE is a single global shared by every
-#      entry of ACTIVE_TRIAL_TYPES (mirroring ALIGN's own single-global role
-#      upstream). --------------------------------------------------------
 REFERENCE_TYPE: str = 'cued_hit_long'
 ACTIVE_TRIAL_TYPES: List[str] = [
     'cued_hit_long',
     # 'spont_hit_long',
     # 'spont_miss_long',
 ]
-HUB_MODE_ENRICHMENT_YLIM_C: Optional[Tuple[float, float]] = [-0.05,1.8]
-HUB_MODE_ENRICHMENT_YLIM_SC: Optional[Tuple[float, float]] = [0,2.1]
+HUB_MODE_ENRICHMENT_YLIM_C: Optional[Tuple[float, float]] = [-0.05, 1.8]
+HUB_MODE_ENRICHMENT_YLIM_SC: Optional[Tuple[float, float]] = [0, 2.1]
 
-ALIGN_MODE: str = 'default_move_onset' #default_move_onset cue_onset
+ALIGN_MODE: str = 'default_move_onset'  # default_move_onset | cue_onset | ...
 Align_type_value = ALIGN_MODE.replace("_", " ")
 if ALIGN_MODE == 'default_move_onset':
     Align_type_value = 'Move onset'
 
-# Per-alignment-mode trial window (seconds, relative to the aligned event) --
-# must match segment_mdl_to_trials.m (neural), t_approach_python.py, and
-# pCCA_all_regions_out_behaviour.py's own ALIGNMENT_WINDOWS_S EXACTLY, since
-# BEHAVIOR_TIME_RANGE_S below crops both the neural latent and the
-# behavioural tensors to this same window (`_prepare_regression_inputs`).
 ALIGNMENT_WINDOWS_S: Dict[str, Tuple[float, float]] = {
     "default_move_onset": (-1.0, 2.0),
     "cue_onset":           (-0.8, 2.2),
@@ -256,17 +206,13 @@ ALIGNMENT_WINDOWS_S: Dict[str, Tuple[float, float]] = {
     "reward_onset":        (-1.2, 1.8),
 }
 
-# Task 3 (behavioural-variance bars against a fixed reward kernel) is only
-# meaningful in a mode where "time since reward" is well defined for every
-# trial without per-trial adjustment; in every OTHER alignment mode it is
-# skipped entirely (see hubmode_plot_task3_bars's caller in main()).
 TASK3_ALIGN_MODES: Tuple[str, ...] = ("default_move_onset",)
 
 # ---- Paths ------------------------------------------------------------
 BASE_DIR = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
 BEHAVIOR_DIR = BASE_DIR / "Paper_output" / f"tapproach_sessions_{ALIGN_MODE}"
 OUTPUT_DIR = (BASE_DIR / "Paper_output"
-              / f"pcca_all_regions_hubmode_{REFERENCE_TYPE}_{ALIGN_MODE}")
+              / f"pcca_all_regions_hubmode_v2_{REFERENCE_TYPE}_{ALIGN_MODE}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---- Sessions -----------------------------------------------------------
@@ -281,28 +227,9 @@ SESSIONS: List[str] = [
     'yp021_220405', 'yp021_220407',
 ]
 
-# ---- pCCA dimensionality (Part 2c) -- COMPONENT_INDICES bounded by
-#      N_COMPONENTS, imported from pCCA_all_regions_out_behaviour.py itself
-#      (the K every PrivateLatentPairResult was actually fit with), not
-#      redeclared, so there is no second constant to drift out of sync. ---
 COMPONENT_INDICES: List[int] = [0]
-
 MIN_SESSIONS: int = MIN_SESSIONS_THRESHOLD
 
-# ---- Tasks 3/4: behavioural variance. Two "regress-out" variants of Part
-#      2c's private latent are now available upstream (`.pairs` =
-#      AllRegions+Behaviour, `.pairs_regions_only` = AllRegions only -- see
-#      pCCA_all_regions_out_behaviour.py's own `pairs_regions_only`), and
-#      they warrant DIFFERENT predictor sets here: the AllRegions+Behaviour
-#      latent has already had position/speed regressed out of it, so their
-#      R^2 there is expected near zero and uninformative (the established
-#      hub-mode rationale in pCCA_latent_extrenal_variable_bar.py, unchanged
-#      for that variant); the AllRegions-only latent has NOT had behaviour
-#      removed, so position/speed become meaningful predictors again for
-#      IT specifically -- Task 3's own 4-column display (see
-#      hubmode_plot_task3_bars) is the one place that difference is shown;
-#      every other task (4/5/6) still only ever displays the 2-variable
-#      reward-only view for both variants. ---------------------------------
 PCCA_VARIANTS: Tuple[str, ...] = ('regions_only', 'regions_behavior')
 VARIANT_DISPLAY: Dict[str, str] = {
     'regions_only':     'AllRegions only',
@@ -312,34 +239,18 @@ EXTERNAL_VARIABLES_BY_VARIANT: Dict[str, List[str]] = {
     'regions_behavior': ['reward_presence', 'reward_consumption'],
     'regions_only':      ['position', 'speed', 'reward_presence', 'reward_consumption'],
 }
-# Reward-only view shared by Tasks 4/5/6 regardless of variant (see above).
 EXTERNAL_VARIABLES: List[str] = EXTERNAL_VARIABLES_BY_VARIANT['regions_behavior']
 
 BEHAVIOR_TIME_RANGE_S: Tuple[float, float] = ALIGNMENT_WINDOWS_S[ALIGN_MODE]
 LAMBDA_R2: float = 1e-4
 VARIANCE_METHOD: str = 'marginal'  # 'marginal' | 'leave_one_out'
 
-# Reward-kernel construction -- identical constants to
-# pCCA_latent_extrenal_variable_bar.py's own (see that file's "Reward
-# kernel" docstring note for the fixed-window assumption this inherits),
-# EXCEPT in align_mode == 'default_move_onset': there, per-trial reward
-# timing is actually available (t_approach_python.py's own per-trial
-# `trigger_times['reward_onset']`, seconds relative to movement onset), so
-# `build_reward_presence_design` / `build_reward_consumption_design` use
-# THAT instead of these fixed windows -- see their own docstrings. These
-# two constants remain the fallback for every other alignment mode (where
-# t=0 already IS the aligned event the window is defined relative to, so a
-# fixed window is correct without any per-trial adjustment).
 REWARD_PRESENCE_WINDOW_S: Tuple[float, float] = (0.0, 0.5)
 REWARD_CONSUMPTION_WINDOW_S: Tuple[float, float] = (0.5, 1.5)
-REWARD_CONSUMPTION_DURATION_S: float = 1.0  # default_move_onset only: window = (reward_onset, reward_onset + this)
+REWARD_CONSUMPTION_DURATION_S: float = 1.0
 N_REWARD_CONSUMPTION_BASIS: int = 7
 REWARD_SPLINE_DEGREE: int = 2
 
-# ---- Hub-mode row layout -- one band per HUB_MODE_HUB_REGIONS entry, each
-#      paired against every OTHER region in HUB_MODE_ROI_REGIONS. Both
-#      default to the same 4-hub / 7-ROI choice used throughout this
-#      project's other hub-mode figures. ----------------------------------
 HUB_MODE_HUB_REGIONS: List[str] = ['MOs', 'MOp', 'VALVM', 'VPMPO']
 HUB_MODE_ROI_REGIONS: List[str] = sorted(
     {r for pair in REGION_PAIRS for r in pair}, key=get_anatomical_index)
@@ -352,12 +263,12 @@ HUB_MODE_BAND_COLORS: Dict[str, str] = {
 }
 
 EXTERNAL_VAR_COLORS: Dict[str, str] = {
-    'position':           "#DE6E4B",  # matches pCCA_latent_extrenal_variable_bar.py's own EXTERNAL_VAR_COLORS
-    'speed':              "#4B7DDE",  # (Task 3's regions_only variant only -- see EXTERNAL_VARIABLES_BY_VARIANT)
+    'position':           "#DE6E4B",
+    'speed':              "#4B7DDE",
     'reward_presence':    "#55A868",
     'reward_consumption': "#B07AA1",
 }
-BAR_LEN: float = 0.2  # single-trial R^2 x-axis half-scale, matches pCCA_latent_extrenal_variable_bar.py
+BAR_LEN: float = 0.2
 HUB_MODE_BAR_XLIM_SINGLE_TRIAL: Dict[str, Tuple[float, float]] = {
     'position':           (0.0, BAR_LEN),
     'speed':              (0.0, BAR_LEN),
@@ -371,26 +282,13 @@ HUB_MODE_BAR_XLIM_TRIAL_AVG: Dict[str, Tuple[float, float]] = {
     'reward_consumption': (0.0, 0.75),
 }
 
-# ---- Task 6 (enrichment-ratio boxplots) styling -- a categorical palette
-#      reused from this project's own PAIR_CATEGORY_COLORS/CATEGORY_COLORS
-#      hue set (pcca_cross_session_mi_bar.py / pCCA_latent_extrenal_
-#      variable_bar.py's own 7-colour category palette), so a group's
-#      colour reads consistently with the rest of the pipeline's figures
-#      even though it now encodes a laminar/subregion GROUP, not a pair
-#      category. -----------------------------------------------------------
 ENRICHMENT_GROUP_PALETTE: List[str] = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52",
     "#8172B2", "#937860", "#64B5CD", "#CCB974",
 ]
 ENRICHMENT_BOX_WIDTH: float = 0.6
 ENRICHMENT_DOT_JITTER: float = 0.16
-# None = matplotlib autoscale; set e.g. (0.0, 4.0) to pin every Task-6 panel
-# to the same y-range.
 
-# Fixed category order/labels for a cortical hub -- 'Superficial' matches
-# the request's own wording ("superficial and deep layers"); the underlying
-# dict key is still 'layer-shallow', matching LAMINAR_DEPTH_MAP in
-# pCCA_all_regions_out_behaviour.py.
 LAMINAR_GROUP_ORDER: List[str] = ['layer-shallow', 'layer-deep']
 LAMINAR_GROUP_DISPLAY_NAMES: Dict[str, str] = {
     'layer-shallow': 'Superficial',
@@ -408,10 +306,6 @@ def _display_name(region: str) -> str:
 
 
 def _lighten(hex_color: str, amount: float = 0.45) -> str:
-    """Blend `hex_color` toward white by `amount` -- copied verbatim from
-    pCCA_latent_extrenal_variable_bar.py's own helper. Used by Task 6's
-    boxplot engine so a box's pale fill is a lightened tint of its dots'
-    full-saturation colour, matching the attached reference figure's style."""
     hex_color = hex_color.lstrip('#')
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     r = int(r + (255 - r) * amount)
@@ -429,14 +323,52 @@ TICK_FONTSIZE = 18
 LEGEND_FONTSIZE = 15
 CLUSTER_HATCH_CYCLE = [None, "///", "xxx"]
 
-# ---- Caching / output -----------------------------------------------------
 SAVE_DPI: int = 400
+
+# ---- Tasks 7/8 (NEW) -- top-pCCA-weight neuron PSTH heatmaps ------------
+# The "hub region I select" (item 4's singular hub, not every
+# HUB_MODE_HUB_REGIONS entry the way Tasks 3-6 sweep) -- change this to
+# retarget Tasks 7/8 at a different hub, then rerun.
+
+
+
+TASK78_HUB_REGION: str = 'MOp'
+TASK78_TRIAL_TYPE: str = REFERENCE_TYPE
+TASK78_PANEL_WIDTH: float = 3.4
+TASK78_PANEL_HEIGHT: float = 5.2
+# Rastermap fit knobs -- same defaults this project already uses
+# (pCCA_sensitive_realsingle_Session_11panel.py's own get_neuron_order).
+TASK78_RASTERMAP_KW: Dict = dict(locality=0.0, time_lag_window=10, grid_upsample=10)
 
 
 # =============================================================================
-# 2.  Low-level primitives, copied verbatim from pCCA_latent_extrenal_
-#     variable_bar.py (project convention: primitives copied, not imported,
-#     so this script stays independently auditable and runnable).
+# 2.  Anatomical / hub-mode helpers -- copied verbatim from v1.
+# =============================================================================
+
+def hubmode_band_pairs(
+        hub_regions: List[str] = HUB_MODE_HUB_REGIONS,
+        roi_regions: List[str] = HUB_MODE_ROI_REGIONS,
+) -> List[Tuple[str, List[Tuple[str, str]]]]:
+    """One band per hub region (anatomically ordered), each listing every
+    (hub, partner) row for every OTHER region in `roi_regions`."""
+    ordered_hubs = sorted(dict.fromkeys(hub_regions), key=get_anatomical_index)
+    ordered_rois = sorted(dict.fromkeys(roi_regions), key=get_anatomical_index)
+    return [
+        (hub, [(hub, partner) for partner in ordered_rois if partner != hub])
+        for hub in ordered_hubs
+    ]
+
+
+def _hub_region_role(hub: str, pair_key: Tuple[str, str]) -> str:
+    """Which of a canonical pair's two slots `hub` occupies."""
+    return 'region_i' if pair_key[0] == hub else 'region_j'
+
+
+# =============================================================================
+# 3.  Behavioural regressors + variance-explained primitives -- copied
+#     verbatim from v1 (Tasks 3/4's own machinery; nothing about the
+#     10-draws change touches this section -- it operates on whichever
+#     single (n_trials, T) latent it is handed, one draw at a time).
 # =============================================================================
 
 def load_behavior_regressors(
@@ -446,36 +378,17 @@ def load_behavior_regressors(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Load per-trial position (x, y, z), speed, and (align_mode ==
     'default_move_onset' only) each trial's own reward-onset time for one
-    session, filtered to trials matching `trial_label`.
-
-    Reads t_approach_python.py's consolidated `{session}.pkl` (one dict per
-    session: "pos", "task_label", "movement_label", "speed", "time",
-    "trigger_times") -- the SAME format pCCA_all_regions_out_behaviour.py's
-    own `load_behavior_regressors` now reads, replacing the four separate
-    `{session}_*.npy` files this function used to read directly.
-
-    Returns
-    -------
-    pos_sel          : (n, 3, T)  float32,  channels = [x, y, z]
-    speed_sel        : (n, 1, T)  float32
-    t_behav          : (T,)  seconds, this alignment mode's own window
-    reward_onset_sel : (n,) float64 or None -- per-trial reward-onset time,
-                       seconds relative to movement onset (t=0 in that
-                       frame); None unless the pkl's "trigger_times" is
-                       populated, which t_approach_python.py only does for
-                       align_mode == 'default_move_onset'. NaN for a trial
-                       with no recorded reward (e.g. a miss).
-    """
+    session -- copied verbatim from v1's own function of the same name."""
     pkl_path = Path(behavior_dir) / f"{session_name}.pkl"
     if not pkl_path.exists():
         raise FileNotFoundError(f"Behaviour file not found: {pkl_path}")
     with open(pkl_path, "rb") as fh:
         session_data = pickle.load(fh)
 
-    pos     = np.asarray(session_data["pos"])                      # (N, 3, T)
-    speed   = np.asarray(session_data["speed"])                     # (N, T)
-    labels  = np.asarray(session_data["task_label"], dtype=object)  # (N,)
-    t_behav = np.asarray(session_data["time"], dtype=np.float64)    # (T,)
+    pos     = np.asarray(session_data["pos"])
+    speed   = np.asarray(session_data["speed"])
+    labels  = np.asarray(session_data["task_label"], dtype=object)
+    t_behav = np.asarray(session_data["time"], dtype=np.float64)
     trigger_times = session_data.get("trigger_times")
 
     if speed.ndim == 2:
@@ -512,10 +425,8 @@ def _load_behavior_safe(
 
 def variance_explained(latent_2d: np.ndarray, design_3d: np.ndarray,
                        lam: float = LAMBDA_R2) -> float:
-    r"""Ridge R^2 for a latent (n_trials, T) explained by a behavioural design
-    (n_trials, C, T). Flattened over (trial, time), finite-masked, ridge-
-    regularised. R^2 in [0, 1], clipped; invariant to a global sign flip of
-    the latent (so no flip-alignment step is required upstream)."""
+    """Ridge R^2 for a latent (n_trials, T) explained by a behavioural
+    design (n_trials, C, T) -- copied verbatim from v1."""
     n_tr, T = latent_2d.shape
     ell = latent_2d.reshape(-1).astype(np.float64)
     Z = np.transpose(design_3d, (0, 2, 1)).reshape(n_tr * T, -1).astype(np.float64)
@@ -539,7 +450,8 @@ def variance_explained_unique_loo(
         latent_2d: np.ndarray, design_dict: Dict[str, np.ndarray],
         lam: float = LAMBDA_R2,
 ) -> Dict[str, float]:
-    """Unique (leave-one-out, 'no-refit') R^2 per predictor block."""
+    """Unique (leave-one-out, 'no-refit') R^2 per predictor block -- copied
+    verbatim from v1."""
     n_tr, T = latent_2d.shape
     ell = latent_2d.reshape(-1).astype(np.float64)
 
@@ -582,7 +494,8 @@ def variance_explained_unique_loo(
 
 
 def _bspline_basis_matrix(t: np.ndarray, n_basis: int, degree: int = REWARD_SPLINE_DEGREE) -> np.ndarray:
-    """Cubic B-spline basis (matching R's bs()) evaluated at t."""
+    """Cubic B-spline basis (matching R's bs()) evaluated at t -- copied
+    verbatim from v1."""
     t_min, t_max = float(t.min()), float(t.max())
     n_basis = n_basis + 2
     n_interior = max(n_basis - degree - 1, 0)
@@ -596,7 +509,7 @@ def _bspline_basis_matrix(t: np.ndarray, n_basis: int, degree: int = REWARD_SPLI
         c[i] = 0.5
         spline = BSpline(knots, c, degree, extrapolate=False)
         basis[i] = np.nan_to_num(spline(t), nan=0.0)
-    return basis[1:-1, :]  # (n_basis, T)
+    return basis[1:-1, :]
 
 
 def build_reward_presence_design(
@@ -604,16 +517,8 @@ def build_reward_presence_design(
         presence_window: Tuple[float, float] = REWARD_PRESENCE_WINDOW_S,
         reward_onset_per_trial: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    """(n_trials, 1, T) step-function 'reward presence' regressor.
-
-    `reward_onset_per_trial` (align_mode == 'default_move_onset' only,
-    seconds relative to movement onset): when given, trial i's own kernel
-    is (0, reward_onset_per_trial[i]) instead of the fixed
-    `presence_window` -- "kernel length (0, reward onset)", per-trial,
-    rather than one window shared by every trial. Trials with no recorded
-    reward (NaN) are expected to already have been dropped by
-    `_prepare_regression_inputs`/`_prepare_averaged_regression_inputs`
-    before this is called, so every row here gets a real kernel."""
+    """(n_trials, 1, T) step-function 'reward presence' regressor -- copied
+    verbatim from v1."""
     if reward_onset_per_trial is not None:
         out = np.zeros((n_trials, 1, t_behav.size), dtype=float)
         for i in range(n_trials):
@@ -632,16 +537,8 @@ def build_reward_consumption_design(
         reward_onset_per_trial: Optional[np.ndarray] = None,
         consumption_duration: float = REWARD_CONSUMPTION_DURATION_S,
 ) -> np.ndarray:
-    """(n_trials, n_basis, T) cubic B-spline 'reward consumption' kernel.
-
-    `reward_onset_per_trial` (align_mode == 'default_move_onset' only):
-    when given, trial i's own window is (reward_onset_per_trial[i],
-    reward_onset_per_trial[i] + consumption_duration) instead of the fixed
-    `consumption_window` -- "(reward onset, reward onset + 1s)", per trial.
-    Trials with no recorded reward (NaN) are expected to already have
-    been dropped by `_prepare_regression_inputs`/`_prepare_averaged_
-    regression_inputs` before this is called, same as
-    `build_reward_presence_design`."""
+    """(n_trials, n_basis, T) cubic B-spline 'reward consumption' kernel --
+    copied verbatim from v1."""
     if reward_onset_per_trial is not None:
         out = np.zeros((n_trials, n_basis, t_behav.size), dtype=float)
         for i in range(n_trials):
@@ -666,11 +563,6 @@ def _build_predictor_designs(
         reward_onset_per_trial: Optional[np.ndarray] = None,
         external_variables: Optional[List[str]] = None,
 ) -> Dict[str, np.ndarray]:
-    """Map `external_variables` names (default: EXTERNAL_VARIABLES, the
-    reward-only view) to (n_trials, C, T) design blocks. `position`/`speed`
-    (Task 3's regions_only variant only -- EXTERNAL_VARIABLES_BY_VARIANT)
-    are the raw traces themselves, matching pCCA_latent_extrenal_variable_
-    bar.py's own `_build_predictor_designs`."""
     variables = external_variables if external_variables is not None else EXTERNAL_VARIABLES
     out: Dict[str, np.ndarray] = {}
     if 'position' in variables:
@@ -696,12 +588,6 @@ def _prepare_regression_inputs(
         reward_onset_per_trial: Optional[np.ndarray] = None,
         external_variables: Optional[List[str]] = None,
 ) -> Optional[Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]]:
-    """Crop the per-trial neural latent (n_trials, T_neural) and the
-    behavioural tensors to BEHAVIOR_TIME_RANGE_S, match trial/time counts
-    (shorter-of-the-two truncation), drop any trial with a missing
-    (NaN) `reward_onset_per_trial` -- from the latent AND position/speed
-    alike, not just from the reward regressors -- and build the predictor
-    design dict from what remains."""
     lo, hi = BEHAVIOR_TIME_RANGE_S
     neural_mask = (time_bins >= lo - 1e-6) & (time_bins <= hi + 1e-6)
     behav_mask = (t_behav >= lo - 1e-6) & (t_behav <= hi + 1e-6)
@@ -741,26 +627,6 @@ def _prepare_averaged_regression_inputs(
         reward_onset_per_trial: Optional[np.ndarray] = None,
         external_variables: Optional[List[str]] = None,
 ) -> Optional[Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]]:
-    """Trial-averaged counterpart of `_prepare_regression_inputs`: regresses
-    one session's TRIAL-AVERAGED latent trace against this session's own
-    trial-averaged position/speed-derived design -- feeds the 'trial_avg'
-    metric split, distinct from the 'single_trial' regression above (see
-    pCCA_latent_extrenal_variable_bar.py's own identical helper for why
-    these are two different statistics, not a duplicate computation).
-
-    Takes the per-trial `latent` (not yet averaged) so that, exactly as in
-    `_prepare_regression_inputs`, any trial with a missing (NaN)
-    `reward_onset_per_trial` can be dropped -- from the latent AND
-    position/speed alike -- *before* averaging, rather than the average
-    silently baking in trials with no recorded reward.
-
-    There is no single "trial-averaged" reward-onset time the way there is
-    for position/speed (every trial's own reward lands at a different
-    moment); when `reward_onset_per_trial` is given, this session's own
-    MEDIAN reward-onset time (over the surviving trials) stands in for it
-    here -- one scalar window, reused the same way REWARD_PRESENCE_
-    WINDOW_S/REWARD_CONSUMPTION_WINDOW_S already are for align modes with
-    no per-trial timing at all."""
     lo, hi = BEHAVIOR_TIME_RANGE_S
     neural_mask = (time_bins >= lo - 1e-6) & (time_bins <= hi + 1e-6)
     behav_mask = (t_behav_full >= lo - 1e-6) & (t_behav_full <= hi + 1e-6)
@@ -842,47 +708,33 @@ def _r2_by_var_for_averaged_latent(
 
 
 class _PrivateLatentSessionAdapter:
-    """Minimal duck-typed stand-in for CrossTrialTypeCCAAnalyzer, exposing
-    only what CrossSessionCCAAnalyzer.add_session_result actually reads
-    (.projections, .statistical_results, .time_bins), copied verbatim from
-    pCCA_latent_extrenal_variable_bar.py's own identically-named class."""
+    """Minimal duck-typed stand-in for CrossTrialTypeCCAAnalyzer -- copied
+    verbatim from v1."""
     def __init__(self, projections: Dict[str, Dict[str, np.ndarray]], time_bins: np.ndarray):
         self.projections = projections
         self.statistical_results: Dict = {}
         self.time_bins = time_bins
 
 
-def hubmode_band_pairs(
-        hub_regions: List[str] = HUB_MODE_HUB_REGIONS,
-        roi_regions: List[str] = HUB_MODE_ROI_REGIONS,
-) -> List[Tuple[str, List[Tuple[str, str]]]]:
-    """One band per hub region (anatomically ordered), each listing every
-    (hub, partner) row for every OTHER region in `roi_regions`."""
-    ordered_hubs = sorted(dict.fromkeys(hub_regions), key=get_anatomical_index)
-    ordered_rois = sorted(dict.fromkeys(roi_regions), key=get_anatomical_index)
-    return [
-        (hub, [(hub, partner) for partner in ordered_rois if partner != hub])
-        for hub in ordered_hubs
-    ]
-
-
-def _hub_region_role(hub: str, pair_key: Tuple[str, str]) -> str:
-    """Which of a canonical pair's two slots `hub` occupies."""
-    return 'region_i' if pair_key[0] == hub else 'region_j'
-
-
 # =============================================================================
-# 3.  Data gathering -- ONE pass over (session, hub-mode pair, trial type,
-#     PCCA_VARIANT) that reads BOTH Part 2c result sets straight out of
-#     PrivateLatentAnalyzer.get_pair(..., regions_only=True/False) and feeds
-#     THREE outputs, each now carrying a `variant` tag ('regions_only' /
-#     'regions_behavior'): `cross_session_analyzers` (Task 5's sign-aligned
-#     traces, one dict PER VARIANT since the two variants' Wx/Wy are
-#     genuinely different fits, not just a relabelling), `behavior_records`
-#     (Tasks 3/4's R^2), `subregion_records` (Task 6's enrichment ratios).
-#     Only the pairs that can actually appear as a hub-mode row (some member
-#     in HUB_MODE_HUB_REGIONS) are iterated, rather than the full
-#     REGION_PAIRS set.
+# 4.  Data gathering -- ONE pass over (session, hub-mode pair, trial type,
+#     PCCA_VARIANT), now reading `PrivateLatentPairResult.draws` (10
+#     items) instead of a single fixed-neuron-set fit. Per this revision's
+#     request:
+#       - Task 5's `per_trial_type[trial_type]['u_mean'/'v_mean']` is the
+#         mean over the CONCATENATED (N_SAMPLE_DRAWS * n_trials) block
+#         (item 2's "only the underlying per-session data is now 10x
+#         larger" -- the dark line's own FORMULA, mean-of-session-means,
+#         does not change); `['u_trials'/'v_trials']` is that same
+#         concatenated block, now the light-line source Task 5 itself
+#         reads (see Section 7).
+#       - Tasks 3/4's R^2 is computed ONCE PER DRAW (matching v1's own
+#         per-session fit, just repeated on each draw's OWN (n_trials, T)
+#         latent -- NOT on the concatenated block, since a ridge fit is
+#         not linear in the sample set the way a plain mean is) and then
+#         averaged into ONE value per session (item 1).
+#       - Task 6's per-group `enrichment_ratio` is likewise averaged
+#         across the 10 draws into one value per session (item 3).
 # =============================================================================
 
 def run_hubmode_analysis(
@@ -893,7 +745,11 @@ def run_hubmode_analysis(
         align_mode: str = ALIGN_MODE,
         component_indices: List[int] = COMPONENT_INDICES,
         min_sessions: int = MIN_SESSIONS,
-) -> Tuple[Dict[str, Dict[Tuple[str, str], CrossSessionCCAAnalyzer]], List[dict], List[dict]]:
+) -> Tuple[
+    Dict[str, Dict[Tuple[str, str], CrossSessionCCAAnalyzer]],
+    List[dict], List[dict],
+    Dict[str, PrivateLatentAnalyzer],
+]:
     hub_bands = hubmode_band_pairs()
     pair_list = sorted({sort_pair_by_anatomy(hub, partner)
                         for _, rows in hub_bands for hub, partner in rows})
@@ -920,7 +776,7 @@ def run_hubmode_analysis(
 
     for s_idx, session_name in enumerate(all_session_names, 1):
         print("\n" + "=" * 70)
-        print(f"[hub-mode] SESSION {s_idx}/{len(all_session_names)}: {session_name}")
+        print(f"[hub-mode v2] SESSION {s_idx}/{len(all_session_names)}: {session_name}")
         print("=" * 70)
 
         behavior_cache: Dict[str, Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]]] = {}
@@ -942,17 +798,24 @@ def run_hubmode_analysis(
                         continue
                     table = session_result.pairs_regions_only if regions_only else session_result.pairs
                     pr = table.get(pair_key)
-                    if pr is None:
+                    if pr is None or not pr.draws:
                         continue
                     pr_by_trial_type[trial_type] = pr
-                    n_tr = pr.z_i_lat.shape[0]
+
+                    # ---- Concatenate every draw's per-trial latent along
+                    #      the trial axis: (N_SAMPLE_DRAWS * n_trials, T, K).
+                    #      Task 5's dark-line mean/SEM and light-line pool
+                    #      both come from this one array -- see Section 7. --
+                    u_all = np.concatenate([d.z_i_lat for d in pr.draws], axis=0)
+                    v_all = np.concatenate([d.z_j_lat for d in pr.draws], axis=0)
+                    n_tr_total = u_all.shape[0]
                     per_trial_type[trial_type] = dict(
-                        u_mean=pr.z_i_lat.mean(axis=0), v_mean=pr.z_j_lat.mean(axis=0),
-                        u_trials=pr.z_i_lat, v_trials=pr.z_j_lat,
-                        u_std=pr.z_i_lat.std(axis=0), v_std=pr.z_j_lat.std(axis=0),
-                        u_sem=pr.z_i_lat.std(axis=0) / np.sqrt(max(n_tr, 1)),
-                        v_sem=pr.z_j_lat.std(axis=0) / np.sqrt(max(n_tr, 1)),
-                        n_trials=n_tr,
+                        u_mean=u_all.mean(axis=0), v_mean=v_all.mean(axis=0),
+                        u_trials=u_all, v_trials=v_all,
+                        u_std=u_all.std(axis=0), v_std=v_all.std(axis=0),
+                        u_sem=u_all.std(axis=0) / np.sqrt(max(n_tr_total, 1)),
+                        v_sem=v_all.std(axis=0) / np.sqrt(max(n_tr_total, 1)),
+                        n_trials=n_tr_total,
                     )
                     if time_vec_for_session is None or trial_type == reference_type:
                         time_vec_for_session = session_result.time_vec
@@ -975,10 +838,10 @@ def run_hubmode_analysis(
                     session_name, adapter, swap_uv=False,
                 )
 
-                # ---- Tasks 3/4 data path (R^2 against reward regressors,
-                #      PLUS position/speed for the regions_only variant --
-                #      EXTERNAL_VARIABLES_BY_VARIANT) -----------------------
-                for trial_type, proj in per_trial_type.items():
+                # ---- Tasks 3/4 data path: R^2 per DRAW, averaged into ONE
+                #      value per (session, pair, role, trial_type,
+                #      component, predictor, metric) -- item 1. ------------
+                for trial_type, pr in pr_by_trial_type.items():
                     if trial_type not in behavior_cache:
                         behavior_cache[trial_type] = _load_behavior_safe(session_name, trial_type)
                     behav = behavior_cache[trial_type]
@@ -987,63 +850,89 @@ def run_hubmode_analysis(
                     pos_full, speed_full, t_behav_full, reward_onset_full = behav
 
                     for comp_idx in component_indices:
-                        for region_role, region_name, trials in (
-                                ('region_i', pair_key[0], proj['u_trials']),
-                                ('region_j', pair_key[1], proj['v_trials'])):
-                            if comp_idx >= trials.shape[2]:
-                                continue
-                            latent = trials[:, :, comp_idx]
-                            r2_by_var = _r2_by_var_for_latent(
-                                latent, time_vec_for_session, pos_full, speed_full, t_behav_full,
-                                reward_onset_full=reward_onset_full, external_variables=external_vars)
-                            if r2_by_var is not None:
-                                for var_name, r2_val in r2_by_var.items():
-                                    behavior_records.append(dict(
-                                        session=session_name, pair=pair_key, region_role=region_role,
-                                        region=region_name, trial_type=trial_type, component=comp_idx,
-                                        predictor=var_name, r2=r2_val, metric='single_trial',
-                                        variant=variant,
-                                    ))
+                        for region_role, region_name, draw_attr in (
+                                ('region_i', pair_key[0], 'z_i_lat'),
+                                ('region_j', pair_key[1], 'z_j_lat')):
 
-                            r2_by_var_avg = _r2_by_var_for_averaged_latent(
-                                trials, comp_idx, time_vec_for_session, pos_full, speed_full, t_behav_full,
-                                reward_onset_full=reward_onset_full, external_variables=external_vars)
-                            if r2_by_var_avg is not None:
-                                for var_name, r2_val in r2_by_var_avg.items():
-                                    behavior_records.append(dict(
-                                        session=session_name, pair=pair_key, region_role=region_role,
-                                        region=region_name, trial_type=trial_type, component=comp_idx,
-                                        predictor=var_name, r2=r2_val, metric='trial_avg',
-                                        variant=variant,
-                                    ))
-
-                # ---- Task 6 data path (subregion/laminar ENRICHMENT ratio,
-                #      one record per session x GROUP -- not collapsed to a
-                #      single "dominant" scalar, since Task 6 shows every
-                #      group's own cross-session distribution side by side). -
-                for trial_type, pr in pr_by_trial_type.items():
-                    for region_role, region_name, metrics_list in (
-                            ('region_i', pair_key[0], pr.subregion_weight_metrics_i),
-                            ('region_j', pair_key[1], pr.subregion_weight_metrics_j)):
-                        for comp_idx in component_indices:
-                            if comp_idx >= len(metrics_list):
-                                continue
-                            m = metrics_list[comp_idx]
-                            for group, ratio in m.enrichment_ratio.items():
-                                if ratio is None or not np.isfinite(ratio) or ratio < 0:
+                            single_trial_r2_per_draw: List[Dict[str, float]] = []
+                            trial_avg_r2_per_draw: List[Dict[str, float]] = []
+                            for d in pr.draws:
+                                trials = getattr(d, draw_attr)   # (n_trials, T, K)
+                                if comp_idx >= trials.shape[2]:
                                     continue
+                                latent = trials[:, :, comp_idx]
+                                r2 = _r2_by_var_for_latent(
+                                    latent, time_vec_for_session, pos_full, speed_full, t_behav_full,
+                                    reward_onset_full=reward_onset_full, external_variables=external_vars)
+                                if r2 is not None:
+                                    single_trial_r2_per_draw.append(r2)
+
+                                r2_avg = _r2_by_var_for_averaged_latent(
+                                    trials, comp_idx, time_vec_for_session, pos_full, speed_full, t_behav_full,
+                                    reward_onset_full=reward_onset_full, external_variables=external_vars)
+                                if r2_avg is not None:
+                                    trial_avg_r2_per_draw.append(r2_avg)
+
+                            if single_trial_r2_per_draw:
+                                for var_name in single_trial_r2_per_draw[0]:
+                                    mean_r2 = float(np.mean(
+                                        [d.get(var_name, 0.0) for d in single_trial_r2_per_draw]))
+                                    behavior_records.append(dict(
+                                        session=session_name, pair=pair_key, region_role=region_role,
+                                        region=region_name, trial_type=trial_type, component=comp_idx,
+                                        predictor=var_name, r2=mean_r2, metric='single_trial',
+                                        variant=variant, n_draws=len(single_trial_r2_per_draw),
+                                    ))
+                            if trial_avg_r2_per_draw:
+                                for var_name in trial_avg_r2_per_draw[0]:
+                                    mean_r2 = float(np.mean(
+                                        [d.get(var_name, 0.0) for d in trial_avg_r2_per_draw]))
+                                    behavior_records.append(dict(
+                                        session=session_name, pair=pair_key, region_role=region_role,
+                                        region=region_name, trial_type=trial_type, component=comp_idx,
+                                        predictor=var_name, r2=mean_r2, metric='trial_avg',
+                                        variant=variant, n_draws=len(trial_avg_r2_per_draw),
+                                    ))
+
+                # ---- Task 6 data path: per-group enrichment_ratio,
+                #      averaged across the 10 draws into ONE value per
+                #      (session, group, ...) -- item 3. --------------------
+                for trial_type, pr in pr_by_trial_type.items():
+                    for region_role, region_name, metrics_attr in (
+                            ('region_i', pair_key[0], 'subregion_weight_metrics_i'),
+                            ('region_j', pair_key[1], 'subregion_weight_metrics_j')):
+                        for comp_idx in component_indices:
+                            per_group_ratios: Dict[str, List[float]] = {}
+                            is_cortical_flag: Optional[bool] = None
+                            n_resolved_vals: List[int] = []
+                            n_total_vals: List[int] = []
+                            for d in pr.draws:
+                                metrics_list = getattr(d, metrics_attr)
+                                if comp_idx >= len(metrics_list):
+                                    continue
+                                m = metrics_list[comp_idx]
+                                is_cortical_flag = m.is_cortical
+                                n_resolved_vals.append(m.n_neurons_resolved)
+                                n_total_vals.append(m.n_neurons_total)
+                                for group, ratio in m.enrichment_ratio.items():
+                                    if ratio is None or not np.isfinite(ratio) or ratio < 0:
+                                        continue
+                                    per_group_ratios.setdefault(group, []).append(float(ratio))
+                            for group, ratios in per_group_ratios.items():
                                 subregion_records.append(dict(
                                     session=session_name, pair=pair_key, region_role=region_role,
                                     region=region_name, trial_type=trial_type, component=comp_idx,
-                                    group=group, enrichment_ratio=float(ratio),
-                                    is_cortical=m.is_cortical,
-                                    n_neurons_resolved=m.n_neurons_resolved,
-                                    n_neurons_total=m.n_neurons_total,
-                                    variant=variant,
+                                    group=group, enrichment_ratio=float(np.mean(ratios)),
+                                    is_cortical=is_cortical_flag,
+                                    n_neurons_resolved=(int(round(np.mean(n_resolved_vals)))
+                                                        if n_resolved_vals else 0),
+                                    n_neurons_total=(int(round(np.mean(n_total_vals)))
+                                                    if n_total_vals else 0),
+                                    variant=variant, n_draws=len(ratios),
                                 ))
 
     print("\n" + "=" * 70)
-    print("[hub-mode] CROSS-SESSION AGGREGATION (sign alignment + mean/SEM across sessions)")
+    print("[hub-mode v2] CROSS-SESSION AGGREGATION (sign alignment + mean/SEM across sessions)")
     print("=" * 70)
     for variant, variant_analyzers in cross_session_analyzers.items():
         for pair_key, cs in variant_analyzers.items():
@@ -1054,25 +943,24 @@ def run_hubmode_analysis(
             cs.aggregate_projections()
 
     print("\n" + "=" * 70)
-    print("[hub-mode] DATA-GATHERING COMPLETE")
+    print("[hub-mode v2] DATA-GATHERING COMPLETE")
     for variant in PCCA_VARIANTS:
         print(f"  [{variant}] pairs with >=1 session : {len(cross_session_analyzers[variant])}")
     print(f"  behavioural-variance records   : {len(behavior_records)}")
     print(f"  subregion-ratio records        : {len(subregion_records)}")
     print("=" * 70)
-    return cross_session_analyzers, behavior_records, subregion_records
+    return cross_session_analyzers, behavior_records, subregion_records, analyzers_by_trial_type
 
 
 # =============================================================================
-# 4.  Aggregation
+# 5.  Aggregation -- copied verbatim from v1 (operates purely on the
+#     records list, agnostic to how each record's `r2`/`enrichment_ratio`
+#     scalar was derived upstream).
 # =============================================================================
 
 def aggregate_behavior_variance(
         behavior_records: List[dict],
 ) -> Dict[Tuple[Tuple[str, str], str, str], Dict[str, dict]]:
-    """Returns {(pair, region_role, trial_type): {predictor: {mean, sem,
-    values, n}}}, pooled across sessions -- copied verbatim from
-    pCCA_latent_extrenal_variable_bar.py's own aggregator."""
     grouped: Dict[Tuple[Tuple[str, str], str, str, str], List[float]] = {}
     for rec in behavior_records:
         key = (rec['pair'], rec['region_role'], rec['trial_type'], rec['predictor'])
@@ -1092,12 +980,6 @@ def aggregate_behavior_variance(
 def aggregate_enrichment_ratio(
         subregion_records: List[dict],
 ) -> Dict[Tuple[Tuple[str, str], str, str, str], np.ndarray]:
-    """Returns {(pair, region_role, trial_type, group): values}, one array
-    of per-session enrichment_ratio values per GROUP, pooled across
-    sessions -- feeds Task 6's boxplots directly. A boxplot's own
-    median/IQR/whiskers ARE the requested "cross-session statistical
-    result", so no mean/SEM reduction happens here, unlike Tasks 3/4's
-    `aggregate_behavior_variance` (which feeds a bar+errorbar, not a box)."""
     grouped: Dict[Tuple[Tuple[str, str], str, str, str], List[float]] = {}
     for rec in subregion_records:
         key = (rec['pair'], rec['region_role'], rec['trial_type'], rec['group'])
@@ -1113,15 +995,7 @@ def aggregate_enrichment_ratio(
 
 
 # =============================================================================
-# 5.  Shared hub-mode plotting engine -- copied-and-extended from
-#     pCCA_latent_extrenal_variable_bar.py's own `hubmode_plot_multipanel_
-#     bars`: the only addition is `panel_vline_zero`, an optional per-panel
-#     dashed zero-reference line. Used by Tasks 3/4 (which simply leave it
-#     off, so behaviour there is identical to the copied original); Task 6
-#     has its OWN, box-plot-based engine (`_boxplot_one_panel` /
-#     `hubmode_plot_task6_enrichment_boxplots`, Section 8) since a per-group
-#     cross-session distribution needs a different visual grammar than a
-#     mean+SEM bar.
+# 6.  Shared hub-mode bar-plotting engine -- copied verbatim from v1.
 # =============================================================================
 
 def hubmode_plot_multipanel_bars(
@@ -1136,8 +1010,6 @@ def hubmode_plot_multipanel_bars(
         panel_width: float = 4.6,
         dpi: int = SAVE_DPI,
 ) -> Optional[plt.Figure]:
-    """ONE figure per hub region, ONE row per partner ROI, panels given by
-    `panel_titles`/`panel_xlims`. Shared by Tasks 3, 4, and 6."""
     def _footprint(clusters: List[List[dict]]) -> float:
         if not clusters:
             return 1.0
@@ -1225,17 +1097,10 @@ def hubmode_plot_multipanel_bars(
 
 
 # =============================================================================
-# 6.  Tasks 3 & 4 -- behavioural variance bars, reproduced from pCCA_latent_
-#     extrenal_variable_bar.py's own hub-mode section (same row layout, same
-#     two-panel/reward-only display, same single-trial / trial-averaged
-#     split, same file-naming convention) -- now each called ONCE PER PCCA
-#     VARIANT (`PCCA_VARIANTS`). Task 3's own `external_variables` differs
-#     by variant (EXTERNAL_VARIABLES_BY_VARIANT: 4 panels -- position,
-#     speed, reward_presence, reward_consumption -- for regions_only, since
-#     that latent has NOT had behaviour regressed out of it; unchanged
-#     2-panel reward-only view for regions_behavior); Task 4 keeps the
-#     2-panel reward-only view for BOTH variants (renamed 4.1/4.2 per this
-#     version's request, not 4-column -- see module docstring).
+# 7.  Tasks 3 & 4 -- behavioural variance bars, copied verbatim from v1.
+#     Both consume `behavior_records`, which now already carries the
+#     10-draws-averaged-to-one R^2 per session (Section 4) -- nothing
+#     about the plotting code itself needed to change.
 # =============================================================================
 
 def hubmode_plot_task3_bars(
@@ -1247,14 +1112,6 @@ def hubmode_plot_task3_bars(
         external_variables: List[str] = EXTERNAL_VARIABLES,
         file_suffix: str = '',
 ) -> Dict[str, Dict[str, Optional[plt.Figure]]]:
-    """TWO figures per hub region, reference-condition-only bars: single-
-    trial R^2 (from `summary`) and trial-averaged R^2 (from
-    `summary_trial_avg`), each with one panel per `external_variables`
-    entry -- 2 panels (reward only) for the regions_behavior variant, 4
-    panels (position, speed, reward_presence, reward_consumption) for
-    regions_only (see EXTERNAL_VARIABLES_BY_VARIANT). `file_suffix`
-    (e.g. '_regions_only' / '_regions_behavior') keeps the two variants'
-    output files apart."""
     metric_specs = (
         ('single_trial', summary, HUB_MODE_BAR_XLIM_SINGLE_TRIAL, ''),
         ('trial_avg', summary_trial_avg, HUB_MODE_BAR_XLIM_TRIAL_AVG, 'Trialavg'),
@@ -1298,13 +1155,6 @@ def hubmode_plot_task4_bars(
         reference_type: str = REFERENCE_TYPE,
         task_label: str = 'task4',
 ) -> Dict[str, Dict[str, Optional[plt.Figure]]]:
-    """Task-4 counterpart of `hubmode_plot_task3_bars`: every row holds one
-    CLUSTER per non-reference trial type (hatch-coded). Always the 2-panel
-    reward-only view (EXTERNAL_VARIABLES), regardless of variant -- only the
-    caller-supplied `task_label` ('task4_1' for regions_only, 'task4_2' for
-    regions_behavior, per this version's request) and `summary`/
-    `summary_trial_avg` (already filtered to one variant by the caller)
-    differ between the two calls."""
     non_ref = [t for t in active_trial_types if t != reference_type]
     metric_specs = (
         ('single_trial', summary, HUB_MODE_BAR_XLIM_SINGLE_TRIAL, ''),
@@ -1348,12 +1198,29 @@ def hubmode_plot_task4_bars(
 
 
 # =============================================================================
-# 7.  Task 5 -- latent traces across sessions. Reproduces the SAME trace
-#     styling as pCCA_latent_extrenal_variable_bar.py's own
-#     `hubmode_plot_task5_latent_traces`, but split into ONE FIGURE PER HUB
-#     REGION (per this version's request) instead of one figure pooling
-#     every hub's rows together -- saved as
-#     `hubmode_task5_latent_traces_comp{component_idx}_{hub}.png`.
+# 8.  Task 5 -- latent traces across sessions. Layout/styling copied from
+#     v1's own `_hubmode_plot_task5_one_hub`: ONE light line per session
+#     (its own mean across ALL trials x N_SAMPLE_DRAWS draws combined --
+#     e.g. 100 trials x 10 draws -> one line averaged over 1000 values),
+#     not one line per individual (draw, trial) sample -- an earlier
+#     revision of this function drew every individual sample (up to
+#     several thousand per panel: N_SAMPLE_DRAWS x n_trials x n_sessions),
+#     and even at a low per-line alpha that many overlapping same-colour
+#     lines saturate to full opacity almost immediately (compositing N
+#     layers at alpha a leaves only (1-a)^N of the background showing
+#     through -- already under 3% at a=0.035, N=100), which is what
+#     produced the solid-colour block hiding the dashed t=0 line and the
+#     mean trace itself in that revision's plots. Reverting to one line
+#     per session removes that failure mode by construction.
+#
+#     That per-session line is exactly `CrossSessionCCAAnalyzer.
+#     aggregate_projections()`'s own `u_sessions`/`v_sessions` -- each
+#     session's `u_mean`/`v_mean` (already the mean over the concatenated
+#     N_SAMPLE_DRAWS x n_trials pool, built in Section 4 above), sign-
+#     aligned by that method's own Z2 spectral sync -- so this needs no
+#     separate sign-recovery step; it is simply what v1's own light lines
+#     already plotted (`agg[sessions_key]`), now sourced from a 10x
+#     larger per-session pool upstream.
 # =============================================================================
 
 def _hubmode_plot_task5_one_hub(
@@ -1367,7 +1234,7 @@ def _hubmode_plot_task5_one_hub(
         fig_width: float,
         dpi: int,
 ) -> Optional[plt.Figure]:
-    rows: List[Tuple[Tuple[str, str], str, str]] = []  # (pair_key, partner, role)
+    rows: List[Tuple[Tuple[str, str], str, str]] = []
     for hub_r, partner in hub_partner_pairs:
         pair_key = sort_pair_by_anatomy(hub_r, partner)
         cs = cross_session_analyzers.get(pair_key)
@@ -1388,30 +1255,41 @@ def _hubmode_plot_task5_one_hub(
         ax = axes[r]
         cs = cross_session_analyzers[pair_key]
         ax.set_facecolor(HUB_MODE_BAND_COLORS.get(hub, '#888888'))
-        ax.patch.set_alpha(0.07)
+        ax.patch.set_alpha(0.001)
 
         mean_key, sem_key, sessions_key = (
             ('u_mean', 'u_sem', 'u_sessions') if role == 'region_i'
             else ('v_mean', 'v_sem', 'v_sessions')
         )
+
+        n_light_lines_total = 0
         for trial_type in active_trial_types:
             if trial_type not in cs.aggregated_projections:
                 continue
             agg = cs.aggregated_projections[trial_type]
             color = TRIAL_TYPE_COLORS.get(trial_type, 'gray')
 
+            # ---- Light lines: ONE per session -- that session's own mean
+            #      across ALL trials x N_SAMPLE_DRAWS draws combined,
+            #      already sign-aligned by aggregate_projections() (see
+            #      section docstring). ------------------------------------
             session_traces = agg[sessions_key][:, :, component_idx]
+            n_light_lines_total += session_traces.shape[0]
             for sess_trace in session_traces:
-                ax.plot(cs.time_bins, sess_trace, color=color, linewidth=0.5, alpha=0.2, zorder=1)
+                ax.plot(cs.time_bins, sess_trace, color=color, linewidth=0.5,
+                        alpha=0.2, zorder=1)
 
             mean_trace = agg[mean_key][:, component_idx]
             sem_trace = agg[sem_key][:, component_idx]
             is_ref = (trial_type == REFERENCE_TYPE)
             ax.plot(cs.time_bins, mean_trace, color=color, linewidth=2.0 if is_ref else 1.4,
-                    alpha=0.85 if is_ref else 0.75,
-                    label=f"{trial_type.replace('_', ' ')} (n={agg['n_sessions']})", zorder=3)
+                    alpha=0.9 if is_ref else 0.8,
+                    label=f"{trial_type.replace('_', ' ')} (n={agg['n_sessions']} sess)", zorder=3)
             ax.fill_between(cs.time_bins, mean_trace - sem_trace, mean_trace + sem_trace,
-                            color=color, alpha=0.15, zorder=2)
+                            color=color, alpha=0.18, zorder=2)
+
+        print(f"    [{save_path.stem}] {_display_name(hub)} <-> {_display_name(partner)}: "
+              f"{n_light_lines_total} light lines (1/session)")
 
         ax.axvline(x=0, color='black', linestyle='--', alpha=0.4, linewidth=1.2, zorder=0)
         ax.set_xlim(cs.time_bins[0], cs.time_bins[-1])
@@ -1447,12 +1325,6 @@ def hubmode_plot_task5_latent_traces(
         dpi: int = SAVE_DPI,
         task_label: str = 'task5',
 ) -> Dict[str, Optional[plt.Figure]]:
-    """ONE figure PER HUB REGION: one row per (hub, partner) combination,
-    showing the hub's own latent trace for that pairing. Saved as
-    `hubmode_{task_label}_latent_traces_comp{component_idx}_{hub}.png`
-    ('task5_1' for regions_only, 'task5_2' for regions_behavior, per this
-    version's request -- `cross_session_analyzers` is already the ONE
-    variant's own dict, picked by the caller)."""
     figs: Dict[str, Optional[plt.Figure]] = {}
     for hub, hub_partner_pairs in hub_bands:
         save_path = output_dir / f"{task_label}_hubmode_latent_traces_comp{component_idx}_{hub}.png"
@@ -1464,14 +1336,9 @@ def hubmode_plot_task5_latent_traces(
 
 
 # =============================================================================
-# 8.  Task 6 (NEW) -- subregion/laminar-depth weight ENRICHMENT-ratio
-#     boxplots. Its own, dedicated plotting engine (NOT
-#     `hubmode_plot_multipanel_bars` -- a per-group cross-session
-#     distribution needs boxes, not a mean+SEM bar): ONE figure per hub
-#     region, laid out 1xn -- one PANEL per partner ROI region, each panel
-#     one box per group ('Superficial'/'Deep' for a cortical hub, one box
-#     per observed subregion label for a subcortical hub). See module
-#     docstring for the full layout rationale.
+# 9.  Task 6 -- subregion/laminar enrichment-ratio boxplots, copied
+#     verbatim from v1. `subregion_records` now already carries the
+#     10-draws-averaged-to-one ratio per session (Section 4).
 # =============================================================================
 
 def _boxplot_one_panel(
@@ -1481,14 +1348,6 @@ def _boxplot_one_panel(
         colors_by_category: Dict[str, str],
         rng: np.random.Generator,
 ) -> None:
-    """Draw one panel's worth of category boxplots + jittered dots, in the
-    style of the attached reference figure: a pale, category-tinted box
-    fill (`_lighten`) with a black outline/median/whiskers, and solid,
-    category-coloured dots scattered within the box width -- one call per
-    category present in `values_by_category` (a category missing from this
-    particular panel, e.g. a subregion label never observed for THIS
-    partner even though it was observed for a sibling partner in the same
-    figure, is simply left blank, not zero-filled)."""
     for j, cat in enumerate(categories):
         vals = values_by_category.get(cat)
         color = colors_by_category.get(cat, '#888888')
@@ -1519,19 +1378,6 @@ def hubmode_plot_task6_enrichment_boxplots(
         dpi: int = SAVE_DPI,
         file_suffix: str = '',
 ) -> Dict[str, Optional[plt.Figure]]:
-    """ONE figure per hub region, 1xn panels (n = number of partner ROI
-    regions with any data for that hub), reference-condition-only. Category
-    order/colours are fixed per hub (cortical: ['Superficial', 'Deep'];
-    subcortical: every subregion label observed for that hub across ANY
-    partner, alphabetically ordered) and shared across every panel in the
-    figure, so a given colour/x-position always means the same group no
-    matter which partner's panel it appears in. `subregion_records` is
-    expected to already be filtered to ONE pCCA variant by the caller (see
-    PCCA_VARIANTS / main()); `file_suffix` (e.g. '_regions_only' /
-    '_regions_behavior') keeps the two variants' output files apart. No
-    log2(dominant-group weight ratio) reduction here -- this plots
-    `enrichment_ratio` directly, per group, as it already did before this
-    variant split (see module docstring)."""
     grouped = aggregate_enrichment_ratio(subregion_records)
     figs: Dict[str, Optional[plt.Figure]] = {}
     rng = np.random.default_rng(0)
@@ -1620,7 +1466,294 @@ def hubmode_plot_task6_enrichment_boxplots(
 
 
 # =============================================================================
-# 9.  CSV I/O
+# 10. Tasks 7 & 8 (NEW) -- top-pCCA-weight-neuron PSTH heatmaps, pooled
+#     across sessions, for ONE user-selected hub region
+#     (`TASK78_HUB_REGION`) against every region it pairs with.
+#
+#     Neuron identification is already done -- `PrivateLatentPairResult.
+#     selected_neurons_i`/`_j` (a `SelectedNeuronSet`, item 4's "these
+#     have already been saved"). Task 7 shows these neurons' ORIGINAL
+#     (pre-residualization, z-scored) activity; Task 8 shows their already
+#     -saved RESIDUALIZED activity (`SelectedNeuronResidual.residual`).
+#
+#     Rastermap sorting (item 7d) is applied PER SESSION BLOCK, not across
+#     the pooled matrix: different sessions generally have different
+#     trial counts, so their raw "continuous cross-trial" traces
+#     (T*n_trials samples, this project's own established Rastermap input
+#     convention -- see pCCA_sensitive_realsingle_Session_11panel.py's own
+#     `get_neuron_order`) are different lengths and cannot be fit jointly.
+#     Only the trial-AVERAGED PSTH (one shared T per align_mode) can be
+#     pooled across sessions into the single (total_neurons, T) matrix
+#     item 7b describes -- so each session's own block is independently
+#     Rastermap-sorted on ITS OWN continuous data, then session blocks are
+#     stacked (session order = `SESSIONS`) to build that matrix.
+# =============================================================================
+
+def get_neuron_order_2d(mat: np.ndarray) -> np.ndarray:
+    """Rastermap sort order for an already-flattened (n_neurons, n_obs)
+    continuous cross-trial matrix. Falls back to peak-time ordering if
+    rastermap is unavailable or too few neurons are present -- same
+    fallback convention as this project's own `get_neuron_order`
+    (pCCA_sensitive_realsingle_Session_11panel.py)."""
+    n = mat.shape[0]
+    if n < 2:
+        return np.arange(n)
+    if _RASTERMAP_OK and n >= 5:
+        try:
+            z = zscore(mat, axis=1, nan_policy="omit")
+            np.nan_to_num(z, nan=0.0, copy=False)
+            mdl = Rastermap(n_PCs=min(50, n, mat.shape[1]), **TASK78_RASTERMAP_KW)
+            mdl.fit(z)
+            return np.asarray(mdl.isort)
+        except Exception as exc:
+            warnings.warn(f"Rastermap failed ({exc}); using peak-time ordering.")
+    return np.argsort(np.argmax(mat, axis=1))
+
+
+_raw_region_cache: Dict[Tuple[str, str, str, str], Optional[Tuple[np.ndarray, np.ndarray]]] = {}
+
+
+def _load_raw_zscored_region(
+        session_name: str, region: str,
+        trial_type: str = TASK78_TRIAL_TYPE, align_mode: str = ALIGN_MODE,
+) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """Reload ONE region's RAW (pre-residualization), z-scored, cross-trial
+    activity for one session -- Task 7's "original firing rate" source,
+    which `pCCA_all_regions_out_behaviour_v2.py` never persists
+    (`region_flat_full` is transient there). Reproduces that script's OWN
+    load -> crop -> behaviour-truncate -> z-score sequence with its OWN
+    functions, in the SAME order, so the returned matrix's neuron axis
+    lines up EXACTLY with `SelectedNeuronResidual.neuron_idx`. Cached per
+    (session, region, trial_type, align_mode) -- reused across every
+    partner pairing this hub appears in, since the hub's own raw data
+    does not depend on which partner a given panel is about.
+
+    Returns (region_flat, time_vec) -- (T*n_trials, n_full_neurons) and
+    (T,) -- or None if unavailable (mirrors v2's own skip conditions).
+    """
+    key = (session_name, region, trial_type, align_mode)
+    if key in _raw_region_cache:
+        return _raw_region_cache[key]
+
+    mat_dir = V2_BASE_DIR / v2_mat_subdir_name(trial_type, align_mode)
+    session_file = mat_dir / f"{session_name}_analysis_results.mat"
+    if not session_file.exists():
+        _raw_region_cache[key] = None
+        return None
+
+    region_spikes_full, _labels_full, n_trials, T = v2_load_region_spikes_full(str(session_file))
+    if region not in region_spikes_full:
+        _raw_region_cache[key] = None
+        return None
+
+    window = ALIGNMENT_WINDOWS_S[align_mode]
+    time_vec_raw = np.linspace(window[0], window[1], T)
+    try:
+        region_spikes_full, time_vec = v2_crop_time_window(region_spikes_full, time_vec_raw, window)
+    except ValueError:
+        _raw_region_cache[key] = None
+        return None
+    T = time_vec.shape[0]
+
+    try:
+        pos_sel, speed_sel, _t_behav = v2_load_behavior_regressors(
+            session_name, trial_label=_trial_type_to_behavior_label(trial_type))
+    except (FileNotFoundError, ValueError) as exc:
+        warnings.warn(f"[{session_name}] {region}: behaviour unavailable for Task 7/8 "
+                      f"raw reload ({exc}); skipping.")
+        _raw_region_cache[key] = None
+        return None
+
+    n_trials_behav, T_behav = pos_sel.shape[0], pos_sel.shape[-1]
+    n_common = min(n_trials, n_trials_behav)
+    T_common = min(T, T_behav)
+    if n_common < 1 or T_common < 2:
+        _raw_region_cache[key] = None
+        return None
+    X = region_spikes_full[region][:n_common, :, :T_common]
+    time_vec = time_vec[:T_common]
+
+    X_flat = v2_zscore_flat(X, subtract_psth=V2_SUBTRACT_PSTH, shuffle_trials=V2_SHUFFLE_TRIALS)
+    result = (X_flat, time_vec)
+    _raw_region_cache[key] = result
+    return result
+
+
+def _gather_task78_matrix(
+        analyzer: PrivateLatentAnalyzer,
+        hub: str,
+        partner: str,
+        sessions: List[str],
+        data_source: str,             # 'raw' (Task 7) | 'residual' (Task 8)
+        regions_only: bool,
+        trial_type: str = TASK78_TRIAL_TYPE,
+        align_mode: str = ALIGN_MODE,
+) -> Optional[Tuple[np.ndarray, np.ndarray, List[str], List[int]]]:
+    """Pool one (hub, partner) pairing's already-selected top-pCCA-weight
+    neurons across every session, session block by session block (each
+    block independently Rastermap-sorted -- see section docstring).
+
+    Returns (matrix, time_vec, session_labels, session_neuron_counts):
+    matrix is (total_neurons, T); the last two describe each contiguous
+    block's session name / neuron count in matrix-row order (provenance
+    only). None if no session contributed any selected neuron.
+    """
+    pair_key = sort_pair_by_anatomy(hub, partner)
+    role = _hub_region_role(hub, pair_key)
+
+    blocks: List[np.ndarray] = []
+    session_labels: List[str] = []
+    session_counts: List[int] = []
+    time_vec_common: Optional[np.ndarray] = None
+
+    for session_name in sessions:
+        session_result = analyzer.sessions.get(session_name)
+        if session_result is None:
+            continue
+        table = session_result.pairs_regions_only if regions_only else session_result.pairs
+        pr = table.get(pair_key)
+        if pr is None:
+            continue
+        selected = pr.selected_neurons_i if role == 'region_i' else pr.selected_neurons_j
+        if selected is None or not selected.neurons:
+            continue
+
+        if data_source == 'residual':
+            # `.residual` is (n_trials, T) per neuron -- trial-averaged for
+            # the displayed PSTH row; the SAME T-major flatten convention
+            # `_select_top_weight_neurons` in v2 used (col.reshape(T,
+            # n_trials).T) is inverted (.T.reshape(-1)) on the UN-averaged
+            # array to recover the continuous cross-trial vector Rastermap
+            # sorts on.
+            psth_rows = np.stack(
+                [nr.residual.mean(axis=0) for nr in selected.neurons], axis=0)   # (n, T)
+            cont_rows = np.stack(
+                [nr.residual.T.reshape(-1) for nr in selected.neurons], axis=0)  # (n, T*n_trials)
+            time_vec = session_result.time_vec
+        elif data_source == 'raw':
+            loaded = _load_raw_zscored_region(session_name, hub, trial_type, align_mode)
+            if loaded is None:
+                continue
+            X_flat, raw_time_vec = loaded
+            idx = np.asarray([nr.neuron_idx for nr in selected.neurons], dtype=int)
+            if idx.size == 0 or idx.max() >= X_flat.shape[1]:
+                warnings.warn(f"[{session_name}] {hub}: selected neuron index out of range "
+                              f"for reloaded raw data; skipping this session.")
+                continue
+            T_raw = raw_time_vec.shape[0]
+            n_trials_raw = X_flat.shape[0] // T_raw
+            cols = X_flat[:, idx]                        # (T_raw*n_trials_raw, n)
+            cont_rows = cols.T                            # (n, T_raw*n_trials_raw)
+            psth_rows = np.stack(
+                [cols[:, k].reshape(T_raw, n_trials_raw).T.mean(axis=0)
+                 for k in range(cols.shape[1])], axis=0)  # (n, T_raw)
+            time_vec = raw_time_vec
+        else:
+            raise ValueError(f"Unknown data_source: {data_source!r}")
+
+        order = get_neuron_order_2d(cont_rows)
+        psth_rows = psth_rows[order]
+
+        if time_vec_common is None:
+            time_vec_common = time_vec
+        elif time_vec.shape[0] != time_vec_common.shape[0]:
+            T_min = min(time_vec.shape[0], time_vec_common.shape[0])
+            psth_rows = psth_rows[:, :T_min]
+            time_vec_common = time_vec_common[:T_min]
+
+        blocks.append(psth_rows.astype(np.float64))
+        session_labels.append(session_name)
+        session_counts.append(psth_rows.shape[0])
+
+    if not blocks:
+        return None
+
+    T_final = time_vec_common.shape[0]
+    blocks = [b[:, :T_final] for b in blocks]
+    matrix = np.concatenate(blocks, axis=0)
+    return matrix, time_vec_common, session_labels, session_counts
+
+
+def hubmode_plot_task78_heatmaps(
+        analyzer: PrivateLatentAnalyzer,
+        hub: str,
+        partners: List[str],
+        sessions: List[str],
+        output_dir: Path,
+        data_source: str,             # 'raw' (Task 7) | 'residual' (Task 8)
+        task_label: str,              # 'task7' | 'task8'
+        variant: str,                 # 'regions_only' | 'regions_behavior'
+        panel_width: float = TASK78_PANEL_WIDTH,
+        panel_height: float = TASK78_PANEL_HEIGHT,
+        dpi: int = SAVE_DPI,
+) -> Optional[plt.Figure]:
+    """ONE figure for `hub`: 1xn panels, one per partner region with any
+    selected-neuron data (item 7a: 5 partners -> 1x5)."""
+    regions_only = (variant == 'regions_only')
+    gathered_by_partner = [
+        (partner, _gather_task78_matrix(analyzer, hub, partner, sessions, data_source, regions_only))
+        for partner in partners
+    ]
+    present = [(p, g) for p, g in gathered_by_partner if g is not None]
+    if not present:
+        print(f"  [plot] nothing to plot for hub={hub} task={task_label} variant={variant}; skipping.")
+        return None
+
+    n_panels = len(present)
+    fig, axes = plt.subplots(1, n_panels, figsize=(panel_width * n_panels, panel_height))
+    axes = np.atleast_1d(axes)
+    cbar_label = 'z-scored firing rate' if data_source == 'raw' else 'residualized activity'
+
+    for panel_idx, (ax, (partner, (matrix, time_vec, sess_labels, sess_counts))) in enumerate(
+            zip(axes, present)):
+        vmax = float(np.nanpercentile(np.abs(matrix), 99)) if matrix.size else 1.0
+        vmax = vmax if vmax > 0 else 1.0
+        im = ax.imshow(
+            matrix, aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax,
+            extent=[time_vec[0], time_vec[-1], matrix.shape[0], 0], origin='upper',
+        )
+        ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, alpha=0.7)
+        for boundary in np.cumsum(sess_counts[:-1]):
+            ax.axhline(boundary, color='black', linewidth=0.5, alpha=0.3)
+        ax.set_title(f"{_display_name(partner)}\n"
+                      f"n={matrix.shape[0]} neurons / {len(sess_labels)} sessions",
+                      fontsize=TICK_FONTSIZE - 5)
+        ax.set_xlabel("Time (s)", fontsize=TICK_FONTSIZE - 4)
+        ax.tick_params(labelsize=TICK_FONTSIZE - 6)
+        for sp in ('top', 'right'):
+            ax.spines[sp].set_visible(False)
+        # One colorbar per panel (matches this project's own established
+        # per-panel-colorbar PSTH convention) -- a single shared colorbar
+        # added across multiple Axes fights with tight_layout/suptitle
+        # spacing and tends to overlap the last panel's title.
+        cbar = fig.colorbar(im, ax=ax, pad=0.02, shrink=0.85)
+        cbar.ax.tick_params(labelsize=TICK_FONTSIZE - 8)
+        if panel_idx == n_panels - 1:
+            cbar.set_label(cbar_label, fontsize=TICK_FONTSIZE - 6)
+        print(f"    [{task_label}/{variant}] {_display_name(hub)} <-> {_display_name(partner)}: "
+              f"{matrix.shape[0]} neurons from {len(sess_labels)} sessions "
+              f"({dict(zip(sess_labels, sess_counts))})")
+
+    axes[0].set_ylabel("Neurons (Rastermap-sorted per session)", fontsize=TICK_FONTSIZE - 4)
+
+    label = 'original firing rate' if data_source == 'raw' else 'residual activity'
+    fig.suptitle(
+        f"Hub: {_display_name(hub)} -- {label}, top-{int(round(TOP_WEIGHT_FRACTION * 100))}% "
+        f"pCCA-weight neurons ({VARIANT_DISPLAY[variant]})\n{Align_type_value}",
+        fontsize=TICK_FONTSIZE)
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
+
+    suffix = VARIANT_FILE_SUFFIX[variant]
+    save_path = output_dir / f"{suffix}_hubmode_{task_label}_psth_{hub}.png"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+    print(f"  [plot] saved: {save_path}")
+    plt.close(fig)
+    return fig
+
+
+# =============================================================================
+# 11. CSV I/O -- copied verbatim from v1.
 # =============================================================================
 
 def _write_records_csv(records: List[dict], path: Path) -> None:
@@ -1665,48 +1798,42 @@ def _write_enrichment_summary_csv(
 
 
 # =============================================================================
-# 10.  Driver
+# 12. Driver
 # =============================================================================
 
-# Filename suffix / display label for each pCCA variant, used throughout
-# main() to keep the two variants' output files and console messages apart.
 VARIANT_FILE_SUFFIX: Dict[str, str] = {
     'regions_only':     'regions_only',
     'regions_behavior': 'regions_behavior',
 }
-# Task 4/5's own renumbering, per this version's request ("Task 4 and 5
-# become 4.1, 4.2, 5.1, 5.2"): variant order follows PCCA_VARIANTS
-# ('regions_only' first, matching the request's own "one using the
-# 'regress out only all other regions' result, one using the 'regress out
-# all other regions and behavior' result" ordering).
 TASK4_LABEL_BY_VARIANT: Dict[str, str] = {'regions_only': 'regions_only', 'regions_behavior': 'regions_behavior'}
 TASK5_LABEL_BY_VARIANT: Dict[str, str] = {'regions_only': 'regions_only', 'regions_behavior': 'regions_behavior'}
 
 
 def main() -> None:
     print("=" * 70)
-    print("HUB-MODE TASKS 3-6 -- PART 2c / 2c' PRIVATE pCCA (two regress-out variants)")
-    print("(sourced exclusively from pCCA_all_regions_out_behaviour.py's own")
-    print(" pcca_all_regions_out_behaviour_sessions_{trial_type}_{align_mode}_results pickles)")
+    print("HUB-MODE v2 TASKS 3-8 -- PART 2c/2c' PRIVATE pCCA (10-draw resampled)")
+    print("(sourced exclusively from pCCA_all_regions_out_behaviour_v2.py's own")
+    print(" pcca_all_regions_out_behaviour_v2_sampled_sessions_{trial_type}_{align_mode}_results pickles)")
     print("=" * 70)
     print(f"  reference type     : {REFERENCE_TYPE}")
     print(f"  active trial types : {ACTIVE_TRIAL_TYPES}")
     print(f"  align mode         : {ALIGN_MODE}")
     print(f"  pcca variants      : {[VARIANT_DISPLAY[v] for v in PCCA_VARIANTS]}")
     print(f"  component indices  : {COMPONENT_INDICES}  (of {N_COMPONENTS} fit)")
+    print(f"  samples per pair   : {N_SAMPLE_DRAWS} draws/session (v2 resampling)")
     print(f"  behaviour window   : {BEHAVIOR_TIME_RANGE_S}")
     print(f"  variance method    : {VARIANCE_METHOD}")
-    print(f"  external variables : {EXTERNAL_VARIABLES_BY_VARIANT}")
     print(f"  hub-mode hubs      : {HUB_MODE_HUB_REGIONS}")
     print(f"  hub-mode ROIs      : {HUB_MODE_ROI_REGIONS}")
+    print(f"  task 7/8 hub       : {TASK78_HUB_REGION}")
     print(f"  output directory   : {OUTPUT_DIR}")
     print("=" * 70)
 
-    cross_session_analyzers, behavior_records, subregion_records = run_hubmode_analysis()
+    cross_session_analyzers, behavior_records, subregion_records, analyzers_by_trial_type = run_hubmode_analysis()
     hub_bands = hubmode_band_pairs()
 
     # ---- Tasks 3 & 4 --------------------------------------------------------
-    print("\n--- Tasks 3-4: behavioural variance explained (hub-mode) ---")
+    print("\n--- Tasks 3-4: behavioural variance explained (hub-mode, 10-draw averaged) ---")
     _write_records_csv(behavior_records, OUTPUT_DIR / "hubmode_behavior_variance_records.csv")
     single_trial_records = [r for r in behavior_records if r.get('metric', 'single_trial') == 'single_trial']
     trial_avg_records = [r for r in behavior_records if r.get('metric') == 'trial_avg']
@@ -1722,13 +1849,6 @@ def main() -> None:
         _write_variance_summary_csv(
             variance_summary_trial_avg, OUTPUT_DIR / f"hubmode_task3_4_variance_summary_trial_avg{suffix}.csv")
 
-        # Task 3: default_move_onset only (TASK3_ALIGN_MODES) -- a fixed
-        # reward kernel is only well defined there without per-trial
-        # adjustment for every OTHER alignment mode's own t=0 (see
-        # TASK3_ALIGN_MODES's own docstring comment). regions_only gets the
-        # 4-column view (position, speed, reward_presence,
-        # reward_consumption); regions_behavior keeps the original 2-column
-        # reward-only view.
         if ALIGN_MODE in TASK3_ALIGN_MODES:
             hubmode_plot_task3_bars(
                 variance_summary, variance_summary_trial_avg, hub_bands, OUTPUT_DIR,
@@ -1738,14 +1858,13 @@ def main() -> None:
             print(f"  [task 3] skipped for align_mode={ALIGN_MODE!r} "
                   f"(only runs for {TASK3_ALIGN_MODES}) -- variant={variant}")
 
-        # Task 4 -- renamed 4.1 (regions_only) / 4.2 (regions_behavior).
         hubmode_plot_task4_bars(
             variance_summary, variance_summary_trial_avg, hub_bands, OUTPUT_DIR,
             task_label=TASK4_LABEL_BY_VARIANT[variant],
         )
 
-    # ---- Task 5 -- renamed 5.1 (regions_only) / 5.2 (regions_behavior) ------
-    print("\n--- Task 5: latent traces across sessions (hub-mode, per hub) ---")
+    # ---- Task 5 ---------------------------------------------------------------
+    print("\n--- Task 5: latent traces across sessions (hub-mode, per hub, all draws x trials) ---")
     for variant in PCCA_VARIANTS:
         for comp_idx in COMPONENT_INDICES:
             hubmode_plot_task5_latent_traces(
@@ -1753,8 +1872,8 @@ def main() -> None:
                 task_label=TASK5_LABEL_BY_VARIANT[variant],
             )
 
-    # ---- Task 6 -------------------------------------------------------------
-    print("\n--- Task 6: subregion/laminar ENRICHMENT-ratio boxplots (hub-mode) ---")
+    # ---- Task 6 -----------------------------------------------------------------
+    print("\n--- Task 6: subregion/laminar ENRICHMENT-ratio boxplots (hub-mode, 10-draw averaged) ---")
     _write_records_csv(subregion_records, OUTPUT_DIR / "hubmode_enrichment_ratio_records.csv")
     for variant in PCCA_VARIANTS:
         suffix = VARIANT_FILE_SUFFIX[variant]
@@ -1764,6 +1883,29 @@ def main() -> None:
             enrichment_grouped, OUTPUT_DIR / f"hubmode_task6_enrichment_ratio_summary{suffix}.csv")
         hubmode_plot_task6_enrichment_boxplots(
             variant_subregion, hub_bands, OUTPUT_DIR, file_suffix=suffix)
+
+    # ---- Tasks 7 & 8 (NEW) -------------------------------------------------------
+    print(f"\n--- Tasks 7-8: top-{int(round(TOP_WEIGHT_FRACTION*100))}%-pCCA-weight-neuron "
+          f"PSTH heatmaps (hub={TASK78_HUB_REGION}) ---")
+    az78 = analyzers_by_trial_type.get(TASK78_TRIAL_TYPE)
+    if az78 is None:
+        az78 = PrivateLatentAnalyzer(base_dir=BASE_DIR, trial_type=TASK78_TRIAL_TYPE, align_mode=ALIGN_MODE)
+        az78.load_all()
+
+    task78_bands = hubmode_band_pairs(hub_regions=[TASK78_HUB_REGION])
+    partners78 = [p for _, p in task78_bands[0][1]] if task78_bands else []
+    if not partners78:
+        print(f"  [task 7/8] {TASK78_HUB_REGION!r} has no partners in HUB_MODE_ROI_REGIONS; skipping.")
+    else:
+        for variant in PCCA_VARIANTS:
+            hubmode_plot_task78_heatmaps(
+                az78, TASK78_HUB_REGION, partners78, SESSIONS, OUTPUT_DIR,
+                data_source='raw', task_label='task7', variant=variant,
+            )
+            hubmode_plot_task78_heatmaps(
+                az78, TASK78_HUB_REGION, partners78, SESSIONS, OUTPUT_DIR,
+                data_source='residual', task_label='task8', variant=variant,
+            )
 
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")

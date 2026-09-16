@@ -7,9 +7,9 @@ Per-session, per-region / per-pair PCA and PRIVATE pCCA LATENT decomposition
 under the "AllRegions + Behaviour" nuisance condition, computed natively in
 Python and cached to disk as one pickle file per session.
 
-Five quantities are computed and stored SEPARATELY, for every hub region
+Six quantities are computed and stored SEPARATELY, for every hub region
 (Parts 1a/1b) and every hub-region/partner-region combination (Parts 2a/2b/
-2c) in `REGION_PAIRS`:
+2c/2c') in `REGION_PAIRS`:
 
     1a. PCA on each hub region's raw (z-scored) activity.
     1b. PCA on each hub region's activity AFTER regressing out behaviour
@@ -22,8 +22,16 @@ Five quantities are computed and stored SEPARATELY, for every hub region
         left that the rest of the network does NOT account for".
     2c. The private pCCA latent between hub and partner, jointly
         residualized against BOTH the rest of the network AND behaviour in
-        one ridge fit -- UNCHANGED from the previous version of this
-        script (see "Mathematical framework, Part 2c" below).
+        one ridge fit, with the ridge fit and CCA weights now K-fold
+        cross-validated (see "Mathematical framework, Part 2c" below and
+        `pcca`'s own docstring -- this revision's fix for the "no
+        cross-validation" divergence from the original MATLAB pCCA,
+        `perform_session_pcca.m`).
+    2c'. The SAME private pCCA computation as 2c, but residualized against
+        ONLY the rest of the network -- behaviour is never part of the
+        nuisance Z here -- so a caller can compare the pair's coupling with
+        and without behaviour partialled out (`pairs_regions_only`, see
+        "Storage" below).
 
 --------------------------------------------------------------------------------
 Relationship to the rest of the pipeline
@@ -111,17 +119,35 @@ orientations' explained/residual split (see `_compute_hub_pair_pca_
 result`), each independently reduced to Part-1-style PCA loadings and
 latents exactly as in Part 1a/1b.
 
-**Part 2c (existing, unchanged) -- private pCCA.** Z_full = [ Z_h , Bhv ]
-(the SAME AllRegions nuisance as above, but with behaviour concatenated
-back on, and BOTH regions of the pair jointly residualized against it in a
-single ridge fit -- not sequentially, the way Part 1b -> 2a/2b proceeds):
+**Part 2c -- private pCCA.** Z_full = [ Z_h , Bhv ] (the SAME AllRegions
+nuisance as above, but with behaviour concatenated back on, and BOTH
+regions of the pair jointly residualized against it in a single ridge fit
+-- not sequentially, the way Part 1b -> 2a/2b proceeds), now fit with
+K-FOLD CROSS-VALIDATION (`pcca`, `CV_FOLDS` trial-based folds -- see that
+function's own docstring): within each fold, Beta_X/Beta_Y below are fit
+on the TRAIN trials only and applied unchanged to the held-out TEST
+trials; `Wx`/`Wy` are the sign-aligned, fold-averaged canonical weights;
+`rho` is the held-out (test-fold) canonical correlation, averaged across
+folds. The projected latent z_i^(k) still uses a single ridge fit on
+EVERY sample (not the CV folds) for X_hat, applied through the
+fold-averaged Wx -- only the weight vectors and rho are cross-validated:
 
     X_hat = X - Z_full (Z_full^T Z_full + lam_hat * n * I)^(-1) Z_full^T X
-    Cxx = X_hat_i^T X_hat_i / (n-1),  Cyy, Cxy analogous
-    A = Cxx^(-1/2)_{lam_cca},  B = Cyy^(-1/2)_{lam_cca}
+    Cxx = X_hat_i^T X_hat_i / (n-1),  Cyy, Cxy analogous     (per fold, on
+    A = Cxx^(-1/2)_{lam_cca},  B = Cyy^(-1/2)_{lam_cca}       TRAIN rows)
     U, S, V^T = SVD(A Cxy B)
-    Wx = A U[:, :K],  Wy = B V^T[:, :K],  rho = clip(S[:K], 0, 1)
-    z_i^(k)(trial, t) = [X_hat_i Wx]_{(trial, t), k}
+    Wx_fold = A U[:, :K],  Wy_fold = B V^T[:, :K]
+    Wx = mean_folds(sign_align(Wx_fold)),  Wy analogous
+    rho = mean_folds(corr(X_hat_i^test Wx_fold, X_hat_j^test Wy_fold))
+    z_i^(k)(trial, t) = [X_hat_i Wx]_{(trial, t), k}          (X_hat_i from
+                                                                 the FULL-data fit)
+
+This replaces a single in-sample (non-cross-validated) fit used by an
+earlier revision of this file, which was identified as a source of
+downward-biased behavioural R^2 relative to the original MATLAB-computed
+pCCA (`perform_session_pcca.m`, which always cross-validates its own
+region-only nuisance fit) -- see `pcca`'s docstring for the full
+rationale.
 
 The joint fit above and the sequential Part 1b -> 2a/2b route are NOT
 algebraically equivalent unless the behavioural design Bhv happens to be
@@ -153,13 +179,15 @@ directly mirroring the naming convention of `pcca_sessions_{trial_type}_
 results` (the folder this script's own neural input already lives in); the
 only difference is the file format -- .pkl, loaded with `pickle`, in place
 of .mat, loaded with `mat73`. Each session's `PrivateLatentSessionResult`
-holds FIVE separately-named result sets (Parts 1a, 1b, 2a+2b, and 2c are
-each independently addressable, per this version's storage requirement):
+holds SIX separately-named result sets (Parts 1a, 1b, 2a+2b, 2c, and 2c'
+are each independently addressable, per this version's storage
+requirement):
 
     .region_pca_raw           Dict[region -> RegionPCAResult]        Part 1a
     .region_pca_out_behaviour Dict[region -> RegionPCAResult]        Part 1b
     .hub_pca_pairs  Dict[(region_i,region_j) -> HubPairPCAResult]    Parts 2a+2b
-    .pairs      Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c (unchanged)
+    .pairs      Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c  (AllRegions+Behaviour, now cross-validated)
+    .pairs_regions_only Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c' (AllRegions only, NEW)
 
 `.region_pca_raw` / `.region_pca_out_behaviour` are keyed by region name
 alone -- one entry per hub region, since Part 1 has no partner. `.hub_pca_
@@ -172,9 +200,13 @@ Part-2b (`*_residual`) PCA side by side -- the pairing the next task's
 `PCA_latent_extrenal_variable_bar.py` modification is expected to build its
 "paired display" from, by analogy with how `pCCA_latent_extrenal_variable_
 bar.py` already displays region_i next to region_j for Part 2c.
-`PrivateLatentAnalyzer.get_region_pca` / `.get_hub_pca` provide
-canonicalization-aware lookups for all four new result sets, mirroring the
-existing `.get_pair` for Part 2c.
+`.pairs_regions_only` is keyed IDENTICALLY to `.pairs` too, and holds the
+SAME `_compute_pair_result` computation with `behavior_Z_flat=None` -- so a
+caller can directly compare, pair by pair, what changes once behaviour is
+also regressed out. `PrivateLatentAnalyzer.get_region_pca` / `.get_hub_pca`
+provide canonicalization-aware lookups for all four Part-1/2a/2b result
+sets, and `.get_pair(..., regions_only=True/False)` for both Part 2c
+variants.
 
 `PrivateLatentAnalyzer`, defined at the bottom of this file, is the
 Python-native counterpart of `OxfordAdvancedAnalyzer` (Useful_definition.py)
@@ -267,7 +299,7 @@ ALIGNMENT_WINDOWS_S: Dict[str, Tuple[float, float]] = {
     "reward_onset":        (-1.2, 1.8),
 }
 
-ALIGN: str = "reward_onset"
+ALIGN: str = "default_move_onset"
 if ALIGN not in ALIGN_MODES:
     raise ValueError(
         f"ALIGN={ALIGN!r} is not a supported alignment mode; "
@@ -281,6 +313,38 @@ BEHAVIOR_DIR: Path = BASE_DIR / "Paper_output" / f"tapproach_sessions_{ALIGN}"
 N_COMPONENTS: int = 1
 LAMBDA_CCA: float = 1e-4
 LAMBDA_HAT: float = 1e-4
+
+# ---- Part 2c/2c' cross-validation -- matches oxford_session_pipeline_mdl.m's
+#      analysis_config.cv_folds (10), the config actually fed to MATLAB's
+#      perform_session_pcca.m. Part 2c's private pCCA is now fit the SAME
+#      way that file fits it: nuisance-regression coefficients and CCA
+#      weights are estimated on a train fold and evaluated on a held-out
+#      test fold (see `pcca`'s own docstring for exactly how), instead of
+#      a single in-sample fit on every sample at once -- an in-sample fit
+#      is optimistically biased (it can lock onto session-specific shared
+#      noise between the two residualized regions that has nothing to do
+#      with behaviour) and was identified as the leading cause of this
+#      script's private-latent behavioural R^2 reading LOWER than the
+#      original MATLAB-computed pCCA's. Folds are split by TRIAL (every
+#      timepoint of a held-out trial stays in the same fold), not by raw
+#      flattened sample index the way MATLAB's own fold split happens to
+#      -- a within-trial train/test split would leak autocorrelated
+#      timepoints across the CV boundary, which is not what "held-out"
+#      is supposed to mean.
+CV_FOLDS: int = 10
+CV_RNG_SEED: int = 12345   # fixed seed -> deterministic, reproducible fold assignment
+
+# ---- Nuisance-region eligibility -- matches oxford_session_pipeline_mdl.m's
+#      analysis_config.min_neurons_per_region (50), the threshold MATLAB's
+#      perform_session_pcca.m applies before a region is allowed into its
+#      nuisance matrix Z (region_matrices, Step 1 of that file). This
+#      script previously had NO such threshold: `_other_region_nuisance_
+#      list` let every recorded region into Z regardless of how few
+#      neurons it contributed, which both adds noise columns to the
+#      nuisance regression AND is a straightforward divergence from how
+#      MATLAB originally defined "AllRegions" nuisance for the
+#      regress-region-only case.
+MIN_NEURONS_PER_REGION: int = 50
 
 # ---- PCA dimensionality for Parts 1a/1b/2a/2b (region-level and hub-
 #      orientation PCA) -- deliberately a SEPARATE knob from N_COMPONENTS
@@ -612,17 +676,53 @@ def ridge_cca(
     return Wx, Wy, rho
 
 
+def _fit_ridge_beta(
+        X_flat: np.ndarray,
+        Z_flat: Optional[np.ndarray],
+        lam_hat: float = LAMBDA_HAT,
+) -> Optional[np.ndarray]:
+    """Ridge hat-matrix regression coefficients of X_flat onto Z_flat,
+    fit on whatever ROWS of X_flat/Z_flat are passed in:
+
+        Beta = (Z^T Z + lam_hat * n * I)^(-1) Z^T X     (m, n_features)
+
+    `n` is the number of rows actually passed in -- e.g. one CV train
+    fold's samples, not necessarily the full dataset -- so the same Beta
+    can be fit on a train fold and applied UNCHANGED to that fold's own
+    held-out test rows via `_apply_ridge_beta` (see `pcca`'s docstring for
+    why this matters). None if there is no nuisance to regress out."""
+    if Z_flat is None or Z_flat.ndim < 2 or Z_flat.shape[1] == 0:
+        return None
+    n, m = Z_flat.shape
+    ZtZ  = Z_flat.T @ Z_flat + lam_hat * n * np.eye(m)
+    return np.linalg.solve(ZtZ, Z_flat.T @ X_flat)
+
+
+def _apply_ridge_beta(
+        X_flat: np.ndarray,
+        Z_flat: Optional[np.ndarray],
+        beta: Optional[np.ndarray],
+) -> np.ndarray:
+    """Apply a Beta already fit by `_fit_ridge_beta` (on possibly DIFFERENT
+    rows -- e.g. a train fold) to `X_flat`/`Z_flat`. `beta=None` (nothing
+    was fit, e.g. Z_flat was empty) returns X_flat unchanged."""
+    if beta is None:
+        return X_flat.copy()
+    return X_flat - Z_flat @ beta
+
+
 def residualize(
         X_flat: np.ndarray,
         Z_flat: Optional[np.ndarray],
         lam_hat: float = LAMBDA_HAT,
 ) -> np.ndarray:
-    if Z_flat is None or Z_flat.ndim < 2 or Z_flat.shape[1] == 0:
-        return X_flat.copy()
-    n, m  = Z_flat.shape
-    ZtZ   = Z_flat.T @ Z_flat + lam_hat * n * np.eye(m)
-    Beta  = np.linalg.solve(ZtZ, Z_flat.T)
-    return X_flat - Z_flat @ (Beta @ X_flat)
+    """Single ridge fit-and-apply on the SAME rows (no train/test split) --
+    `_fit_ridge_beta` + `_apply_ridge_beta` composed for the common
+    (non-cross-validated) case: Part 1b's behaviour regression, Part
+    2a/2b's network regression, and Part 2c/2c's own full-dataset
+    residualization used for the final latent projection (see `pcca`)."""
+    beta = _fit_ridge_beta(X_flat, Z_flat, lam_hat)
+    return _apply_ridge_beta(X_flat, Z_flat, beta)
 
 
 def residualize_with_explained(
@@ -631,45 +731,215 @@ def residualize_with_explained(
         lam_hat: float = LAMBDA_HAT,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Joint ridge hat-matrix regression of X_flat onto Z_flat -- structurally
-    identical to `residualize` immediately above, but returning BOTH halves
-    of the decomposition instead of only the residual:
+    Same joint ridge hat-matrix regression as `residualize`, but returning
+    BOTH halves of the decomposition instead of only the residual:
 
-        Beta      = (Z^T Z + lam_hat * n * I)^(-1) Z^T      (m, n_samples)
-        explained = Z_flat @ (Beta @ X_flat)                 -- Part 2a
+        Beta      = (Z^T Z + lam_hat * n * I)^(-1) Z^T X    -- `_fit_ridge_beta`
+        explained = Z_flat @ Beta                            -- Part 2a
         residual  = X_flat - explained                       -- Part 2b,
                      numerically identical to residualize(X_flat, Z_flat,
                      lam_hat)'s own return value (same Beta, same solve).
 
-    Kept as its own function, rather than folded into `residualize`, so
-    every EXISTING call to `residualize` in this file -- Part 1b's
-    behaviour regression, and Part 2c's `pcca` internals -- is completely
-    untouched and still returns exactly one array. `Z_flat=None`/empty
-    degenerates the same way `residualize` does: nothing to explain, so
-    explained = 0 and residual = X_flat unchanged.
+    `Z_flat=None`/empty degenerates the same way `residualize` does:
+    nothing to explain, so explained = 0 and residual = X_flat unchanged.
     """
-    if Z_flat is None or Z_flat.ndim < 2 or Z_flat.shape[1] == 0:
+    beta = _fit_ridge_beta(X_flat, Z_flat, lam_hat)
+    if beta is None:
         return np.zeros_like(X_flat), X_flat.copy()
-    n, m  = Z_flat.shape
-    ZtZ   = Z_flat.T @ Z_flat + lam_hat * n * np.eye(m)
-    Beta  = np.linalg.solve(ZtZ, Z_flat.T)
-    explained = Z_flat @ (Beta @ X_flat)
+    explained = Z_flat @ beta
     residual  = X_flat - explained
     return explained, residual
+
+
+def _trial_kfold_indices(
+        n_trials: int,
+        T: int,
+        n_samples: int,
+        n_folds: int = CV_FOLDS,
+        seed: int = CV_RNG_SEED,
+) -> List[Tuple[np.ndarray, np.ndarray]]:
+    """Partition the `n_trials` trials underlying a `_zscore_flat`-produced
+    (T * n_trials, n_neurons) matrix into `n_folds` folds, and return, for
+    each fold, (train_row_idx, test_row_idx) into that flattened row axis.
+
+    Row `r` of a `_zscore_flat` output belongs to trial `r % n_trials`
+    (that function's own flatten order is time-major: `r = t * n_trials +
+    trial`). Folds are built by RANDOMLY partitioning trials (fixed `seed`
+    -> deterministic across runs, so results are reproducible and every
+    region pair/variant in a session is evaluated against the SAME
+    held-out trials), then including EVERY timepoint of a held-out trial's
+    row range in that fold's test set -- never splitting one trial's own
+    timepoints across the train/test boundary, since that would leak
+    within-trial autocorrelation into a metric meant to be held-out.
+
+    This deliberately does NOT reproduce `perform_session_pcca.m`'s own
+    fold split, which slices the flattened MATLAB sample axis into
+    contiguous blocks with no explicit trial-boundary guarantee -- a
+    trial-aware split is the more rigorous choice and is not a MATLAB-
+    parity requirement (see `pcca`'s own docstring).
+    """
+    n_folds = max(2, min(int(n_folds), n_trials))
+    rng = np.random.default_rng(seed)
+    trial_perm = rng.permutation(n_trials)
+    trial_of_row = np.tile(np.arange(n_trials), T)
+    if trial_of_row.size != n_samples:
+        raise ValueError(
+            f"_trial_kfold_indices: n_trials*T ({trial_of_row.size}) != "
+            f"n_samples ({n_samples}) -- caller passed a flattened matrix "
+            f"whose row count does not match n_trials/T."
+        )
+
+    fold_bounds = np.linspace(0, n_trials, n_folds + 1).astype(int)
+    folds: List[Tuple[np.ndarray, np.ndarray]] = []
+    for f in range(n_folds):
+        test_trials = trial_perm[fold_bounds[f]:fold_bounds[f + 1]]
+        if test_trials.size == 0:
+            continue
+        test_mask = np.isin(trial_of_row, test_trials)
+        train_idx = np.flatnonzero(~test_mask)
+        test_idx  = np.flatnonzero(test_mask)
+        if train_idx.size == 0 or test_idx.size == 0:
+            continue
+        folds.append((train_idx, test_idx))
+    return folds
 
 
 def pcca(
         X_flat: np.ndarray,
         Y_flat: np.ndarray,
         Z_flat: Optional[np.ndarray],
+        n_trials: int,
+        T: int,
         lam_cca: float = LAMBDA_CCA,
         lam_hat: float = LAMBDA_HAT,
         n_components: int = N_COMPONENTS,
+        n_folds: int = CV_FOLDS,
+        seed: int = CV_RNG_SEED,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    X_res = residualize(X_flat, Z_flat, lam_hat)
-    Y_res = residualize(Y_flat, Z_flat, lam_hat)
-    Wx, Wy, rho = ridge_cca(X_res, Y_res, lam_cca, n_components)
-    return Wx, Wy, rho, X_res, Y_res
+    """K-fold cross-validated private pCCA between X_flat and Y_flat,
+    conditioning on nuisance Z_flat -- the trial-aware Python counterpart
+    of `perform_session_pcca.m`'s `run_pcca_pair`:
+
+      * the nuisance-regression coefficients (Beta_X, Beta_Y) are fit on
+        each fold's TRAIN rows only and applied, UNCHANGED, to that fold's
+        own held-out TEST rows (`perform_session_pcca.m`'s own "WITHIN-
+        FOLD NUISANCE REGRESSION" -- prevents test-fold leakage into the
+        residuals CCA is then evaluated on);
+      * ridge CCA (`ridge_cca`) is fit on the TRAIN fold's residuals only;
+      * the reported canonical correlation `rho` is the HELD-OUT, test-fold
+        correlation between the two projections, averaged across folds --
+        not the in-sample correlation of a single full-data fit, which is
+        optimistically biased upward (see module docstring, "no
+        cross-validation" divergence from the original MATLAB pCCA);
+      * the returned Wx/Wy (and therefore every downstream latent
+        projection) is the fold-averaged canonical weight matrix, SIGN-
+        ALIGNED against the first successful fold before averaging --
+        `ridge_cca`'s (Wx, Wy) pair for a given component is only defined
+        up to a joint sign flip (an SVD sign ambiguity), so averaging
+        un-aligned folds can partially cancel the very signal the CV is
+        meant to recover. `perform_session_pcca.m`'s own Wx_mean/Wy_mean
+        average skips this alignment step; this implementation
+        deliberately does not reproduce that, since silently cancelling
+        signal across folds is a bug to fix, not a MATLAB-parity
+        requirement.
+
+    The RESIDUALS returned for downstream projection (`X_res`, `Y_res`,
+    and therefore every `z_i_lat`/`z_j_lat` persisted by
+    `_compute_pair_result`) come from a SEPARATE, single ridge fit on the
+    FULL dataset (not the CV folds) -- matching
+    `perform_session_pcca.m`'s own `calculate_pcca_projections`, which
+    always re-residualizes on every sample before projecting through the
+    fold-averaged weights. Only the CCA WEIGHT VECTORS and the reported
+    `rho` come from cross-validation; the projected traces plotted/
+    regressed downstream use every available sample.
+
+    Falls back to a single in-sample fit (with a printed warning) only if
+    every fold degenerates (e.g. a session with too few trials for
+    `n_folds` non-empty train/test splits) -- expected to be rare given
+    this project's typical trial counts.
+    """
+    N = X_flat.shape[0]
+    p, q = X_flat.shape[1], Y_flat.shape[1]
+    k = max(1, min(n_components, p, q))
+
+    def _full_data_residuals() -> Tuple[np.ndarray, np.ndarray]:
+        """Single ridge fit-and-apply on every sample -- the residuals
+        every returned latent projection is built from (see docstring)."""
+        beta_X = _fit_ridge_beta(X_flat, Z_flat, lam_hat)
+        beta_Y = _fit_ridge_beta(Y_flat, Z_flat, lam_hat)
+        X_res = _apply_ridge_beta(X_flat, Z_flat, beta_X)
+        Y_res = _apply_ridge_beta(Y_flat, Z_flat, beta_Y)
+        return X_res, Y_res
+
+    def _full_data_fit() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """In-sample fallback used only when every CV fold degenerates."""
+        X_res, Y_res = _full_data_residuals()
+        Wx, Wy, rho = ridge_cca(X_res, Y_res, lam_cca, k)
+        return Wx, Wy, rho, X_res, Y_res
+
+    folds = _trial_kfold_indices(n_trials, T, N, n_folds, seed)
+
+    Wx_sum = np.zeros((p, k))
+    Wy_sum = np.zeros((q, k))
+    Wx_ref: Optional[np.ndarray] = None
+    rho_folds: List[np.ndarray] = []
+    n_fit = 0
+
+    for train_idx, test_idx in folds:
+        X_tr, Y_tr = X_flat[train_idx], Y_flat[train_idx]
+        X_te, Y_te = X_flat[test_idx], Y_flat[test_idx]
+
+        if Z_flat is not None:
+            Z_tr, Z_te = Z_flat[train_idx], Z_flat[test_idx]
+        else:
+            Z_tr = Z_te = None
+
+        beta_X = _fit_ridge_beta(X_tr, Z_tr, lam_hat)
+        beta_Y = _fit_ridge_beta(Y_tr, Z_tr, lam_hat)
+        X_tr_res = _apply_ridge_beta(X_tr, Z_tr, beta_X)
+        Y_tr_res = _apply_ridge_beta(Y_tr, Z_tr, beta_Y)
+        X_te_res = _apply_ridge_beta(X_te, Z_te, beta_X)   # SAME beta as train fold
+        Y_te_res = _apply_ridge_beta(Y_te, Z_te, beta_Y)   # -- no test-fold leakage
+
+        Wx_f, Wy_f, _ = ridge_cca(X_tr_res, Y_tr_res, lam_cca, k)
+        if Wx_f.shape[1] < k or Wy_f.shape[1] < k:
+            continue  # degenerate fold (rank-deficient train residual) -- skip it
+
+        if Wx_ref is None:
+            Wx_ref = Wx_f.copy()
+        else:
+            for c in range(k):
+                if np.dot(Wx_f[:, c], Wx_ref[:, c]) < 0.0:
+                    Wx_f[:, c] *= -1.0
+                    Wy_f[:, c] *= -1.0
+
+        Wx_sum += Wx_f
+        Wy_sum += Wy_f
+        n_fit += 1
+
+        u_te = X_te_res @ Wx_f
+        v_te = Y_te_res @ Wy_f
+        fold_rho = np.full(k, np.nan)
+        for c in range(k):
+            if u_te[:, c].std() > 0 and v_te[:, c].std() > 0:
+                fold_rho[c] = np.corrcoef(u_te[:, c], v_te[:, c])[0, 1]
+        rho_folds.append(fold_rho)
+
+    if n_fit == 0:
+        warnings.warn(
+            "pcca: every CV fold degenerated (too few trials / "
+            "rank-deficient residual) -- falling back to a single "
+            "in-sample fit for this pair."
+        )
+        return _full_data_fit()
+
+    Wx_mean = Wx_sum / n_fit
+    Wy_mean = Wy_sum / n_fit
+    rho = np.nanmean(np.stack(rho_folds, axis=0), axis=0)
+    rho = np.clip(np.nan_to_num(rho, nan=0.0), 0.0, 1.0)
+
+    X_res, Y_res = _full_data_residuals()
+    return Wx_mean.astype(np.float64), Wy_mean.astype(np.float64), rho, X_res, Y_res
 
 
 def latent_projections(X_flat: np.ndarray, W: np.ndarray, n_trials: int, T: int) -> np.ndarray:
@@ -1026,21 +1296,31 @@ class PrivateLatentSessionResult:
     pickled to {session}_analysis_results.pkl, mirroring the
     one-.mat-file-per-session granularity of pcca_sessions_{trial_type}_
     results (each of whose files holds a `cca_results['pair_results']`
-    list spanning every pair). Five result sets, each independently
+    list spanning every pair). Six result sets, each independently
     addressable (per this version's storage requirement that Parts 1a,
     1b, 2a+2b, and 2c be stored separately):
 
         region_pca_raw            Dict[region -> RegionPCAResult]       Part 1a
         region_pca_out_behaviour  Dict[region -> RegionPCAResult]       Part 1b
         hub_pca_pairs   Dict[(region_i,region_j) -> HubPairPCAResult]   Parts 2a+2b
-        pairs      Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c
+        pairs      Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c ("AllRegions+Behaviour")
+        pairs_regions_only Dict[(region_i,region_j) -> PrivateLatentPairResult] Part 2c' ("AllRegions" only, no behaviour)
 
     `region_pca_raw`/`region_pca_out_behaviour` are keyed by region name
     alone (Part 1 has no partner). `hub_pca_pairs` is keyed IDENTICALLY to
     `pairs` (canonicalized, region_i anatomically earlier) so the two dicts
     can be zipped on the same key; each HubPairPCAResult then splits into
-    its two hub orientations internally. `pairs` itself -- Part 2c -- is
-    UNCHANGED from the previous version of this file."""
+    its two hub orientations internally. `pairs` itself -- Part 2c -- uses
+    the same `_compute_pair_result` computation as every prior version of
+    this file, now fit via K-fold cross-validation (`pcca`) rather than a
+    single in-sample fit -- see that function's docstring.
+    `pairs_regions_only` is the SAME (now also cross-validated)
+    `_compute_pair_result` computation, keyed identically, but
+    with `behavior_Z_flat=None` -- i.e. the nuisance Z only ever contains
+    every OTHER recorded region, never behaviour -- so the two dicts can
+    also be zipped on the same key, and a caller can directly compare "what
+    changes about this pair's private latent once behaviour is also
+    regressed out" by looking up the same (region_i, region_j) in both."""
     session: str
     trial_type: str
     time_vec: np.ndarray                 # (T,) seconds, BEHAVIOR_TIME_RANGE_S-cropped
@@ -1051,6 +1331,7 @@ class PrivateLatentSessionResult:
     excluded_regions: List[str] = field(default_factory=list)
     config: Dict[str, Any] = field(default_factory=dict)
     pairs: Dict[Tuple[str, str], PrivateLatentPairResult] = field(default_factory=dict)
+    pairs_regions_only: Dict[Tuple[str, str], PrivateLatentPairResult] = field(default_factory=dict)
     region_pca_raw: Dict[str, RegionPCAResult] = field(default_factory=dict)
     region_pca_out_behaviour: Dict[str, RegionPCAResult] = field(default_factory=dict)
     hub_pca_pairs: Dict[Tuple[str, str], HubPairPCAResult] = field(default_factory=dict)
@@ -1090,6 +1371,23 @@ def config_fingerprint() -> Dict[str, Any]:
         subtract_psth=SUBTRACT_PSTH,
         shuffle_trials=SHUFFLE_TRIALS,
         require_behavior=REQUIRE_BEHAVIOR,
+        min_neurons_per_region=MIN_NEURONS_PER_REGION,
+        cv_folds=CV_FOLDS,
+        cv_rng_seed=CV_RNG_SEED,
+        # Bumped whenever a field is added to PrivateLatentSessionResult, OR
+        # the numerical procedure behind an existing field changes, so an
+        # existing cached .pkl is always detected as stale and recomputed,
+        # rather than silently reused against a result it no longer matches.
+        # v2: added `pairs_regions_only` (Part 2c', AllRegions-only
+        # nuisance, no behaviour) alongside the existing `pairs`
+        # (AllRegions+Behaviour). v3: Part 2c/2c' pCCA (`pcca`) is now
+        # trial-aware K-fold cross-validated (previously a single in-sample
+        # fit) and `_other_region_nuisance_list` now applies
+        # `min_neurons_per_region`, matching `perform_session_pcca.m`'s
+        # original MATLAB logic on both counts -- every existing `.pairs`/
+        # `.pairs_regions_only` value computed before this revision is
+        # numerically different from what this version would compute.
+        result_schema_version=3,
     )
 
 
@@ -1098,9 +1396,13 @@ def config_fingerprint() -> Dict[str, Any]:
 #     `_compute_region_pca`; Parts 2a/2b use `_compute_hub_orientation_pca`
 #     (one hub orientation) and `_compute_hub_pair_pca_result` (both
 #     orientations of one canonicalized pair); Part 2c's
-#     `_compute_pair_result` is UNCHANGED except for now sourcing its
-#     nuisance-region list from the shared `_other_region_nuisance_list`
-#     helper below (previously computed inline). Parts 2a/2b's "AllRegions"
+#     `_compute_pair_result` now sources its nuisance-region list from the
+#     shared `_other_region_nuisance_list` helper below (previously
+#     computed inline), which itself now applies `min_neurons_per_region`
+#     (matching `perform_session_pcca.m`'s own Step-1 region filter), and
+#     delegates its actual fit to `pcca`, which is now K-fold
+#     cross-validated instead of a single in-sample fit -- see that
+#     function's docstring. Parts 2a/2b's "AllRegions"
 #     nuisance set is built from that SAME helper, so the two conditions
 #     are guaranteed to agree on which regions count as nuisance for a
 #     given pair.
@@ -1110,23 +1412,36 @@ def _other_region_nuisance_list(
         region_i: str,
         region_j: str,
         region_flat: Dict[str, np.ndarray],
+        min_neurons_per_region: int = MIN_NEURONS_PER_REGION,
 ) -> List[str]:
     """Every anatomically-ordered region recorded this session, other than
-    {region_i, region_j} and not in EXCLUDED_REGIONS -- the "AllRegions"
-    nuisance set shared by Part 2c's Z = AllRegions+Behaviour
-    (`_compute_pair_result`) and Part 2a/2b's Z = AllRegions-only
-    (`_compute_hub_orientation_pca`). Factored out into its own function
-    (rather than computed inline in each caller, as Part 2c's version
-    originally was) specifically so the two conditions cannot silently
-    drift apart -- this project's own working notes flag pair
-    canonicalisation as "a frequent source of silent bugs when not
-    enforced at both write and lookup time", and an inconsistent nuisance
-    set between 2a/2b and 2c would be exactly that kind of bug."""
+    {region_i, region_j}, not in EXCLUDED_REGIONS, and with AT LEAST
+    `min_neurons_per_region` neurons -- the "AllRegions" nuisance set
+    shared by Part 2c's Z = AllRegions+Behaviour (`_compute_pair_result`)
+    and Part 2a/2b's Z = AllRegions-only (`_compute_hub_orientation_pca`).
+    Factored out into its own function (rather than computed inline in
+    each caller, as Part 2c's version originally was) specifically so the
+    two conditions cannot silently drift apart -- this project's own
+    working notes flag pair canonicalisation as "a frequent source of
+    silent bugs when not enforced at both write and lookup time", and an
+    inconsistent nuisance set between 2a/2b and 2c would be exactly that
+    kind of bug.
+
+    The neuron-count threshold matches
+    `perform_session_pcca.m`'s own Step-1 region filter
+    (`config.min_neurons_per_region`, 50 in oxford_session_pipeline_mdl.m):
+    that MATLAB function excludes a thin, noisy region from its nuisance
+    matrix entirely before the pair loop even starts. This function's
+    caller passes `region_flat[r]` (or, for Part 2a/2b, that region's
+    Part-1b behaviour residual -- same neuron axis, since residualizing
+    does not change neuron count), so `region_flat[r].shape[1]` is exactly
+    that region's neuron count."""
     return [
         r for r in ANATOMICAL_ORDER
         if r in region_flat
         and r not in (region_i, region_j)
         and r not in EXCLUDED_REGIONS
+        and region_flat[r].shape[1] >= min_neurons_per_region
     ]
 
 
@@ -1406,18 +1721,26 @@ def _compute_pair_result(
     nuisance_all = _other_region_nuisance_list(region_i, region_j, region_flat)
 
     z_parts = [region_flat[r] for r in nuisance_all]
+    if z_parts is None:
+        # A missing nuisance region here would otherwise silently shrink
+        # Z_full (or, if every part were None, drop it to None entirely),
+        # letting `pcca` quietly degrade to plain CCA for this pair instead
+        # of failing loudly. Raise so the per-session try/except in the
+        # caller treats this session as skipped rather than mis-fit.
+        raise ValueError(
+            f"[{region_i}-{region_j}] missing nuisance data for one or more "
+            f"regions in {nuisance_all}; skipping session"
+        )
     if behavior_Z_flat is not None:
         z_parts.append(behavior_Z_flat)
-    if not z_parts:
-        # Neither other regions nor behaviour available for this session:
-        # there is nothing to partial out, so AllRegions+Behaviour is not
-        # defined for this pair here.
-        return None
-    Z_full = np.concatenate(z_parts, axis=1)
+
+    Z_full = np.concatenate(z_parts, axis=1) if z_parts else None
 
     Wx, Wy, rho, X_i_res, X_j_res = pcca(
         region_flat[region_i], region_flat[region_j], Z_full,
+        n_trials=n_trials, T=T,
         lam_cca=LAMBDA_CCA, lam_hat=LAMBDA_HAT, n_components=N_COMPONENTS,
+        n_folds=CV_FOLDS, seed=CV_RNG_SEED,
     )
 
     z_i_lat = latent_projections(X_i_res, Wx, n_trials, T)   # (n_trials, T, K)
@@ -1434,7 +1757,7 @@ def _compute_pair_result(
         n_neurons_i=int(region_flat[region_i].shape[1]),
         n_neurons_j=int(region_flat[region_j].shape[1]),
         nuisance_regions=nuisance_all,
-        z_dim_total=int(Z_full.shape[1]),
+        z_dim_total=int(Z_full.shape[1]) if Z_full is not None else 0,
         subregion_weight_metrics_i=compute_subregion_weight_metrics(region_i, Wx, labels_i),
         subregion_weight_metrics_j=compute_subregion_weight_metrics(region_j, Wy, labels_j),
     )
@@ -1550,9 +1873,13 @@ def compute_private_latents_for_session(
             labels=region_subregion_labels.get(region))
 
     # ---- Part 2: every pair in REGION_PAIRS -- 2a/2b (hub-orientation
-    #      PCA, both directions) computed side by side with 2c (existing,
-    #      UNCHANGED private pCCA) ------------------------------------------
+    #      PCA, both directions) computed side by side with 2c (now
+    #      cross-validated private pCCA, Z=AllRegions+Behaviour) AND 2c'
+    #      (Z=AllRegions only -- same `_compute_pair_result` call, just
+    #      with `behavior_Z_flat` replaced by None so behaviour is never
+    #      part of the nuisance regressed out of this pair) --------------
     pairs: Dict[Tuple[str, str], PrivateLatentPairResult] = {}
+    pairs_regions_only: Dict[Tuple[str, str], PrivateLatentPairResult] = {}
     hub_pca_pairs: Dict[Tuple[str, str], HubPairPCAResult] = {}
     for ri_raw, rj_raw in REGION_PAIRS:
         # (3) storage-convention optimisation, applied defensively here (not
@@ -1568,6 +1895,14 @@ def compute_private_latents_for_session(
         if result is not None:
             pairs[(region_i, region_j)] = result
 
+        result_regions_only = _compute_pair_result(
+            region_i, region_j, region_flat, None, n_trials, T,
+            labels_i=region_subregion_labels.get(region_i),
+            labels_j=region_subregion_labels.get(region_j),
+        )
+        if result_regions_only is not None:
+            pairs_regions_only[(region_i, region_j)] = result_regions_only
+
         hub_result = _compute_hub_pair_pca_result(
             region_i, region_j, region_flat, behav_res_by_region, n_trials, T,
             region_subregion_labels=region_subregion_labels,
@@ -1576,7 +1911,9 @@ def compute_private_latents_for_session(
             hub_pca_pairs[(region_i, region_j)] = hub_result
 
     print(
-        f"  [{session_name}] 2c pCCA {len(pairs)}/{len(REGION_PAIRS)} pairs, "
+        f"  [{session_name}] 2c pCCA {len(pairs)}/{len(REGION_PAIRS)} pairs "
+        f"(AllRegions+Behaviour), 2c' pCCA {len(pairs_regions_only)}/{len(REGION_PAIRS)} "
+        f"pairs (AllRegions only), "
         f"2a/2b hub-PCA {len(hub_pca_pairs)}/{len(REGION_PAIRS)} pairs, "
         f"1a/1b region-PCA {len(region_pca_raw)}/{len(HUB_REGIONS)} regions  "
         f"(n_trials={n_trials}, T={T}, behaviour="
@@ -1594,6 +1931,7 @@ def compute_private_latents_for_session(
         excluded_regions=list(EXCLUDED_REGIONS),
         config=config_fingerprint(),
         pairs=pairs,
+        pairs_regions_only=pairs_regions_only,
         region_pca_raw=region_pca_raw,
         region_pca_out_behaviour=region_pca_out_behaviour,
         hub_pca_pairs=hub_pca_pairs,
@@ -1671,7 +2009,8 @@ def run_all_sessions(
             continue
 
         has_any_result = result is not None and (
-            result.pairs or result.hub_pca_pairs or result.region_pca_raw
+            result.pairs or result.pairs_regions_only or result.hub_pca_pairs
+            or result.region_pca_raw
         )
         if not has_any_result:
             n_skipped += 1
@@ -1774,14 +2113,20 @@ class PrivateLatentAnalyzer:
 
     def get_pair(
             self, session_name: str, region_i: str, region_j: str,
+            regions_only: bool = False,
     ) -> Optional[PrivateLatentPairResult]:
-        """Look up one pair's Part 2c result for one loaded session. Region
-        order does not matter -- looked up via the same canonicalisation
-        used at write time."""
+        """Look up one pair's Part 2c result for one loaded session: the
+        default `regions_only=False` returns the "AllRegions+Behaviour"
+        result (`.pairs`); `regions_only=True` returns the "AllRegions
+        only" result (`.pairs_regions_only`) -- same pair, same
+        canonicalisation, nuisance Z differs only in whether behaviour was
+        included. Region order does not matter -- looked up via the same
+        canonicalisation used at write time."""
         session = self.sessions.get(session_name)
         if session is None:
             return None
-        return session.pairs.get(sort_pair_by_anatomy(region_i, region_j))
+        table = session.pairs_regions_only if regions_only else session.pairs
+        return table.get(sort_pair_by_anatomy(region_i, region_j))
 
     def get_region_pca(
             self, session_name: str, region: str, out_behaviour: bool = False,

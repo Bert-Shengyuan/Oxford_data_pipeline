@@ -683,6 +683,15 @@ def plot_session_grid(
     if show_trials == 1:
         axes = axes[None, :]
 
+    # Pin every (shared) x-axis to exactly this alignment mode's window --
+    # without this, a trigger line drawn outside `t`'s range (e.g. a
+    # bar_off time later than the window's own upper bound) would silently
+    # widen the shared x-axis via autoscale instead of simply not showing,
+    # sizing the whole plot to whichever trial has the most extreme trigger
+    # rather than to the configured window.
+    for ax in axes.flat:
+        ax.set_xlim(t[0], t[-1])
+
     for row_idx, i in enumerate(show_idx):
         for c in range(n_channels):                # <-- was range(3)
             ax = axes[row_idx, c]
@@ -701,12 +710,16 @@ def plot_session_grid(
                 ax.axvline(0.0, color=EVENT_DISPLAY["default_move_onset"][1], lw=0.6)
                 for mode in ("cue_onset", "reward_onset", "bar_off_onset"):
                     trig = trigger_times_s[mode][i]
-                    if np.isfinite(trig):
+                    # Only draw triggers that actually fall inside this
+                    # alignment mode's window -- e.g. a bar_off time past
+                    # the window's own end should simply not be shown,
+                    # never pull the axis out to fit it.
+                    if np.isfinite(trig) and t[0] <= trig <= t[-1]:
                         ax.axvline(trig, color=EVENT_DISPLAY[mode][1], lw=0.6)
             else:
-                ax.axvline(0.0, color="0", lw=0.5, ls=":")
-                ax.axvline(1.5, color="0", lw=0.5, ls=":")
-                ax.axvline(2, color="0", lw=0.5, ls=":")
+                for marker in (0.0, 1.5, 2.0):
+                    if t[0] <= marker <= t[-1]:
+                        ax.axvline(marker, color="0", lw=0.5, ls=":")
             ax.set_xticks([])
             ax.set_yticks([])
 
@@ -760,7 +773,7 @@ def main():
                         default="/Users/shengyuancai/Downloads/Oxford_dataset/Paper_output/tapproach_sessions",
                         help="Path to the output directory (a suffix for --alignment_mode "
                              "is appended, e.g. '..._default', '..._cue')")
-    parser.add_argument("--alignment_mode", type=str, default="default_move_onset",
+    parser.add_argument("--alignment_mode", type=str, default="reward_onset",  #default_move_onset
                         choices=list(ALIGNMENT_FIELDS),
                         help="Trial time-zero reference: 'default' uses movement onset "
                              "(start_time) directly; 'cue'/'bar_off'/'drop_time' "

@@ -77,7 +77,7 @@ trial_type_folder = strrep(analysis_config.trial_type, ' ', '_');
 %   'cue_onset'           - align to cue onset:     start_time - t_approach.cue,       [-0.8, 2.2]
 %   'bar_off_onset'       - align to bar-off onset: start_time + t_approach.bar_off,   [-2.0, 1.0]
 %   'reward_onset'        - align to reward onset:  start_time + t_approach.drop_time, [-1.2, 1.8]
-analysis_config.alignment_mode = 'bar_off_onset';
+analysis_config.alignment_mode = 'default_move_onset';
 
 alignment_windows_s = struct( ...
     'cue_onset',          [-0.8, 2.2], ...
