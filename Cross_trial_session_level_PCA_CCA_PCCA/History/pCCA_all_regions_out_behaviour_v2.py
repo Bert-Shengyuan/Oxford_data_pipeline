@@ -247,7 +247,7 @@ SAMPLE_RNG_SEED: int = 20260916
 # fraction of pooled |pCCA weight| magnitudes (pooled across ALL
 # N_SAMPLE_DRAWS draws) counted as "top" -- e.g. 0.2 = top 20%. See
 # `_select_top_weight_neurons`.
-TOP_WEIGHT_FRACTION: float = 0.2
+TOP_WEIGHT_FRACTION: float = 0.10
 
 
 def mat_subdir_name(trial_type: str, align_mode: str = ALIGN) -> str:

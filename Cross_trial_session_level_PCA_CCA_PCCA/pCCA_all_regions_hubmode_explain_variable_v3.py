@@ -65,12 +65,15 @@ their residualized activity already saved
 residualization, z-scored) firing-rate PSTH across every session that
 contributed any, one heatmap per (hub, partner) pairing; Task 8 is the
 same layout with RESIDUALIZED activity instead (already saved, no reload
-needed). See Section 9 below for the full design, including why Rastermap
-sorting is applied PER SESSION BLOCK rather than across the pooled matrix
-as a whole (sessions generally have different trial counts, so their raw
-continuous-cross-trial traces are not directly comparable in one joint
-Rastermap fit -- only the trial-AVERAGED PSTH, sharing one common T, can
-be pooled across sessions).
+needed). Like Tasks 3-6, Tasks 7/8 sweep every hub in
+``HUB_MODE_HUB_REGIONS`` (one figure per hub), not a single hard-coded
+hub. See Section 10 below for the full design, including why Rastermap is
+now fit ONCE on the fully pooled (all sessions, all selected neurons)
+trial-averaged PSTH matrix rather than per session block (sessions
+generally have different trial counts, so their raw continuous-cross-trial
+traces are not directly comparable in one joint Rastermap fit -- only the
+trial-AVERAGED PSTH, sharing one common T, can be pooled across sessions
+BEFORE the single Rastermap fit).
 
 Everything else -- data source (``PrivateLatentAnalyzer`` reading v2's own
 ``pcca_all_regions_out_behaviour_v2_sampled_sessions_{trial_type}_
@@ -130,6 +133,7 @@ from cross_trial_type_cca_analysis import (   # noqa: E402
     CrossSessionCCAAnalyzer,
     TRIAL_TYPE_COLORS,
     MIN_SESSIONS_THRESHOLD,
+    align_signs_spectral,
 )
 from pCCA_all_regions_out_behaviour_v2 import (  # noqa: E402
     PrivateLatentAnalyzer,
@@ -326,13 +330,10 @@ CLUSTER_HATCH_CYCLE = [None, "///", "xxx"]
 SAVE_DPI: int = 400
 
 # ---- Tasks 7/8 (NEW) -- top-pCCA-weight neuron PSTH heatmaps ------------
-# The "hub region I select" (item 4's singular hub, not every
-# HUB_MODE_HUB_REGIONS entry the way Tasks 3-6 sweep) -- change this to
-# retarget Tasks 7/8 at a different hub, then rerun.
+# Sweeps every hub in HUB_MODE_HUB_REGIONS (same hub-mode band layout
+# Tasks 3-6 use, via `hubmode_band_pairs()`), one figure per hub -- NOT
+# limited to a single hard-coded hub.
 
-
-
-TASK78_HUB_REGION: str = 'MOp'
 TASK78_TRIAL_TYPE: str = REFERENCE_TYPE
 TASK78_PANEL_WIDTH: float = 3.4
 TASK78_PANEL_HEIGHT: float = 5.2
@@ -735,7 +736,59 @@ class _PrivateLatentSessionAdapter:
 #         averaged into ONE value per session (item 1).
 #       - Task 6's per-group `enrichment_ratio` is likewise averaged
 #         across the 10 draws into one value per session (item 3).
+#
+#     Sign alignment across draws: each of the N_SAMPLE_DRAWS=10 draws is
+#     an INDEPENDENT pCCA fit (`pcca()` in pCCA_all_regions_out_behaviour_
+#     v2.py only sign-aligns its OWN internal CV folds via a `Wx_ref`
+#     dot-product check -- that alignment is local to one draw and does
+#     NOT extend across draws), so two draws can land on opposite signs
+#     for the same component. Concatenating/averaging `z_i_lat`/`z_j_lat`
+#     across draws without correcting for that would let those draws
+#     partially cancel instead of reinforcing each other. `_sign_align_
+#     and_pool_draws` below fixes this by reusing the SAME Z2 spectral-
+#     sync `CrossSessionCCAAnalyzer` already applies across SESSIONS
+#     (`align_signs_spectral`, imported from cross_trial_type_cca_
+#     analysis.py), applied here across the 10 DRAWS instead -- BEFORE
+#     the per-session concatenation/averaging this section performs.
 # =============================================================================
+
+
+def _sign_align_and_pool_draws(
+        draws: List[PrivateLatentPairDrawResult],
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Pool every draw's (n_trials, T, K) `z_i_lat`/`z_j_lat` into one
+    (N_SAMPLE_DRAWS * n_trials, T, K) array each -- first sign-aligning
+    the N_SAMPLE_DRAWS draws PER COMPONENT via `align_signs_spectral`
+    (see the section docstring above for why this is needed: each draw is
+    an independent pCCA fit with its own unrelated sign ambiguity that
+    `pcca()`'s own fold-alignment does not resolve across draws).
+
+    `align_signs_spectral` aligns u (`z_i_lat`) and v (`z_j_lat`)
+    independently -- same convention `CrossSessionCCAAnalyzer` itself
+    uses when aligning across sessions (separate eigendecompositions of
+    the u/v correlation matrices) -- so a draw can be flipped on its u
+    side, its v side, both, or neither.
+    """
+    u_draw_means = np.stack([d.z_i_lat.mean(axis=0) for d in draws], axis=0)  # (n_draws, T, K)
+    v_draw_means = np.stack([d.z_j_lat.mean(axis=0) for d in draws], axis=0)
+    T = u_draw_means.shape[1]
+    _, _, flip_decisions = align_signs_spectral(u_draw_means, v_draw_means, epoch=(0, T))
+
+    u_signed: List[np.ndarray] = []
+    v_signed: List[np.ndarray] = []
+    for i, d in enumerate(draws):
+        u_arr = d.z_i_lat.copy()
+        v_arr = d.z_j_lat.copy()
+        for comp_idx, decision in flip_decisions[i].items():
+            if decision['u_flip']:
+                u_arr[:, :, comp_idx] *= -1.0
+            if decision['v_flip']:
+                v_arr[:, :, comp_idx] *= -1.0
+        u_signed.append(u_arr)
+        v_signed.append(v_arr)
+
+    return np.concatenate(u_signed, axis=0), np.concatenate(v_signed, axis=0)
+
 
 def run_hubmode_analysis(
         sessions: List[str] = SESSIONS,
@@ -802,12 +855,13 @@ def run_hubmode_analysis(
                         continue
                     pr_by_trial_type[trial_type] = pr
 
-                    # ---- Concatenate every draw's per-trial latent along
-                    #      the trial axis: (N_SAMPLE_DRAWS * n_trials, T, K).
-                    #      Task 5's dark-line mean/SEM and light-line pool
-                    #      both come from this one array -- see Section 7. --
-                    u_all = np.concatenate([d.z_i_lat for d in pr.draws], axis=0)
-                    v_all = np.concatenate([d.z_j_lat for d in pr.draws], axis=0)
+                    # ---- Sign-align the N_SAMPLE_DRAWS draws (see section
+                    #      docstring), THEN concatenate every draw's per-trial
+                    #      latent along the trial axis:
+                    #      (N_SAMPLE_DRAWS * n_trials, T, K). Task 5's
+                    #      dark-line mean/SEM and light-line pool both come
+                    #      from this one array -- see Section 7. -----------
+                    u_all, v_all = _sign_align_and_pool_draws(pr.draws)
                     n_tr_total = u_all.shape[0]
                     per_trial_type[trial_type] = dict(
                         u_mean=u_all.mean(axis=0), v_mean=v_all.mean(axis=0),
@@ -1467,8 +1521,10 @@ def hubmode_plot_task6_enrichment_boxplots(
 
 # =============================================================================
 # 10. Tasks 7 & 8 (NEW) -- top-pCCA-weight-neuron PSTH heatmaps, pooled
-#     across sessions, for ONE user-selected hub region
-#     (`TASK78_HUB_REGION`) against every region it pairs with.
+#     across sessions, swept over every hub region in
+#     `HUB_MODE_HUB_REGIONS` (same hub-mode band layout Tasks 3-6 use, via
+#     `hubmode_band_pairs()`) -- one figure per hub, each against every
+#     region it pairs with -- NOT limited to a single hard-coded hub.
 #
 #     Neuron identification is already done -- `PrivateLatentPairResult.
 #     selected_neurons_i`/`_j` (a `SelectedNeuronSet`, item 4's "these
@@ -1476,25 +1532,33 @@ def hubmode_plot_task6_enrichment_boxplots(
 #     (pre-residualization, z-scored) activity; Task 8 shows their already
 #     -saved RESIDUALIZED activity (`SelectedNeuronResidual.residual`).
 #
-#     Rastermap sorting (item 7d) is applied PER SESSION BLOCK, not across
-#     the pooled matrix: different sessions generally have different
-#     trial counts, so their raw "continuous cross-trial" traces
-#     (T*n_trials samples, this project's own established Rastermap input
-#     convention -- see pCCA_sensitive_realsingle_Session_11panel.py's own
-#     `get_neuron_order`) are different lengths and cannot be fit jointly.
-#     Only the trial-AVERAGED PSTH (one shared T per align_mode) can be
-#     pooled across sessions into the single (total_neurons, T) matrix
-#     item 7b describes -- so each session's own block is independently
-#     Rastermap-sorted on ITS OWN continuous data, then session blocks are
-#     stacked (session order = `SESSIONS`) to build that matrix.
+#     Rastermap sorting (item 7d) is now applied ONCE, to the FULLY POOLED
+#     matrix -- every selected neuron from every session that contributed
+#     any, stacked first, THEN sorted -- rather than sorting each
+#     session's own block independently before stacking (the earlier
+#     design). Sorting still runs on the trial-AVERAGED PSTH (one shared T
+#     per align_mode), not each session's raw "continuous cross-trial"
+#     trace (T*n_trials samples, this project's own established Rastermap
+#     input convention -- see pCCA_sensitive_realsingle_Session_11panel.py's
+#     own `get_neuron_order`): different sessions generally have different
+#     trial counts, so those raw continuous traces are different lengths
+#     and still cannot be pooled into one joint Rastermap fit -- only the
+#     PSTH's shared T lets every session's selected neurons sit in one
+#     (total_neurons, T) matrix, which is what is now pooled BEFORE the
+#     single Rastermap fit runs. A consequence: since the sort is now
+#     global, rows from a given session are no longer a contiguous block
+#     in the final row order -- `session_labels`/`session_counts` (see
+#     `_gather_task78_matrix`) describe each session's CONTRIBUTION
+#     (provenance) only, not a slice of matrix rows.
 # =============================================================================
 
 def get_neuron_order_2d(mat: np.ndarray) -> np.ndarray:
-    """Rastermap sort order for an already-flattened (n_neurons, n_obs)
-    continuous cross-trial matrix. Falls back to peak-time ordering if
-    rastermap is unavailable or too few neurons are present -- same
-    fallback convention as this project's own `get_neuron_order`
-    (pCCA_sensitive_realsingle_Session_11panel.py)."""
+    """Rastermap sort order for an (n_neurons, n_obs) matrix -- for Tasks
+    7/8 this is the fully pooled, trial-averaged PSTH (n_obs = T), fit
+    ONCE across every session's selected neurons together. Falls back to
+    peak-time ordering if rastermap is unavailable or too few neurons are
+    present -- same fallback convention as this project's own
+    `get_neuron_order` (pCCA_sensitive_realsingle_Session_11panel.py)."""
     n = mat.shape[0]
     if n < 2:
         return np.arange(n)
@@ -1590,13 +1654,17 @@ def _gather_task78_matrix(
         align_mode: str = ALIGN_MODE,
 ) -> Optional[Tuple[np.ndarray, np.ndarray, List[str], List[int]]]:
     """Pool one (hub, partner) pairing's already-selected top-pCCA-weight
-    neurons across every session, session block by session block (each
-    block independently Rastermap-sorted -- see section docstring).
+    neurons' trial-averaged PSTH across EVERY contributing session first,
+    then Rastermap-sort the fully pooled (total_neurons, T) matrix ONCE
+    (see section docstring for why sorting runs on the PSTH rather than
+    each session's own raw continuous trace).
 
     Returns (matrix, time_vec, session_labels, session_neuron_counts):
-    matrix is (total_neurons, T); the last two describe each contiguous
-    block's session name / neuron count in matrix-row order (provenance
-    only). None if no session contributed any selected neuron.
+    matrix is (total_neurons, T), already sorted by the single pooled
+    Rastermap fit; the last two describe how many of those neurons each
+    session contributed (provenance only -- post-sort rows are no longer
+    grouped into contiguous per-session blocks). None if no session
+    contributed any selected neuron.
     """
     pair_key = sort_pair_by_anatomy(hub, partner)
     role = _hub_region_role(hub, pair_key)
@@ -1619,16 +1687,10 @@ def _gather_task78_matrix(
             continue
 
         if data_source == 'residual':
-            # `.residual` is (n_trials, T) per neuron -- trial-averaged for
-            # the displayed PSTH row; the SAME T-major flatten convention
-            # `_select_top_weight_neurons` in v2 used (col.reshape(T,
-            # n_trials).T) is inverted (.T.reshape(-1)) on the UN-averaged
-            # array to recover the continuous cross-trial vector Rastermap
-            # sorts on.
+            # `.residual` is (n_trials, T) per neuron -- trial-averaged
+            # here for the displayed/pooled PSTH row.
             psth_rows = np.stack(
                 [nr.residual.mean(axis=0) for nr in selected.neurons], axis=0)   # (n, T)
-            cont_rows = np.stack(
-                [nr.residual.T.reshape(-1) for nr in selected.neurons], axis=0)  # (n, T*n_trials)
             time_vec = session_result.time_vec
         elif data_source == 'raw':
             loaded = _load_raw_zscored_region(session_name, hub, trial_type, align_mode)
@@ -1643,16 +1705,12 @@ def _gather_task78_matrix(
             T_raw = raw_time_vec.shape[0]
             n_trials_raw = X_flat.shape[0] // T_raw
             cols = X_flat[:, idx]                        # (T_raw*n_trials_raw, n)
-            cont_rows = cols.T                            # (n, T_raw*n_trials_raw)
             psth_rows = np.stack(
                 [cols[:, k].reshape(T_raw, n_trials_raw).T.mean(axis=0)
                  for k in range(cols.shape[1])], axis=0)  # (n, T_raw)
             time_vec = raw_time_vec
         else:
             raise ValueError(f"Unknown data_source: {data_source!r}")
-
-        order = get_neuron_order_2d(cont_rows)
-        psth_rows = psth_rows[order]
 
         if time_vec_common is None:
             time_vec_common = time_vec
@@ -1671,6 +1729,12 @@ def _gather_task78_matrix(
     T_final = time_vec_common.shape[0]
     blocks = [b[:, :T_final] for b in blocks]
     matrix = np.concatenate(blocks, axis=0)
+
+    # ---- Rastermap runs ONCE, on the FULLY POOLED matrix (every session's
+    #      selected neurons stacked first) -- not per session block. -------
+    order = get_neuron_order_2d(matrix)
+    matrix = matrix[order]
+
     return matrix, time_vec_common, session_labels, session_counts
 
 
@@ -1713,10 +1777,11 @@ def hubmode_plot_task78_heatmaps(
             extent=[time_vec[0], time_vec[-1], matrix.shape[0], 0], origin='upper',
         )
         ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, alpha=0.7)
-        for boundary in np.cumsum(sess_counts[:-1]):
-            ax.axhline(boundary, color='black', linewidth=0.5, alpha=0.3)
+        # No per-session boundary lines: Rastermap now sorts the fully
+        # pooled matrix ONCE, so rows from a given session are no longer a
+        # contiguous block (see `_gather_task78_matrix`).
         ax.set_title(f"{_display_name(partner)}\n"
-                      f"n={matrix.shape[0]} neurons / {len(sess_labels)} sessions",
+                      f"n={matrix.shape[0]} neurons",
                       fontsize=TICK_FONTSIZE - 5)
         ax.set_xlabel("Time (s)", fontsize=TICK_FONTSIZE - 4)
         ax.tick_params(labelsize=TICK_FONTSIZE - 6)
@@ -1734,7 +1799,7 @@ def hubmode_plot_task78_heatmaps(
               f"{matrix.shape[0]} neurons from {len(sess_labels)} sessions "
               f"({dict(zip(sess_labels, sess_counts))})")
 
-    axes[0].set_ylabel("Neurons (Rastermap-sorted per session)", fontsize=TICK_FONTSIZE - 4)
+    axes[0].set_ylabel("Neurons pooled across sessions", fontsize=TICK_FONTSIZE - 4)
 
     label = 'original firing rate' if data_source == 'raw' else 'residual activity'
     fig.suptitle(
@@ -1825,7 +1890,7 @@ def main() -> None:
     print(f"  variance method    : {VARIANCE_METHOD}")
     print(f"  hub-mode hubs      : {HUB_MODE_HUB_REGIONS}")
     print(f"  hub-mode ROIs      : {HUB_MODE_ROI_REGIONS}")
-    print(f"  task 7/8 hub       : {TASK78_HUB_REGION}")
+    print(f"  task 7/8 hubs      : {HUB_MODE_HUB_REGIONS}  (same sweep as tasks 3-6)")
     print(f"  output directory   : {OUTPUT_DIR}")
     print("=" * 70)
 
@@ -1885,25 +1950,27 @@ def main() -> None:
             variant_subregion, hub_bands, OUTPUT_DIR, file_suffix=suffix)
 
     # ---- Tasks 7 & 8 (NEW) -------------------------------------------------------
+    # Sweeps every hub in `hub_bands` (== HUB_MODE_HUB_REGIONS), same as
+    # Tasks 3-6 -- NOT limited to a single hard-coded hub.
     print(f"\n--- Tasks 7-8: top-{int(round(TOP_WEIGHT_FRACTION*100))}%-pCCA-weight-neuron "
-          f"PSTH heatmaps (hub={TASK78_HUB_REGION}) ---")
+          f"PSTH heatmaps (hubs={HUB_MODE_HUB_REGIONS}) ---")
     az78 = analyzers_by_trial_type.get(TASK78_TRIAL_TYPE)
     if az78 is None:
         az78 = PrivateLatentAnalyzer(base_dir=BASE_DIR, trial_type=TASK78_TRIAL_TYPE, align_mode=ALIGN_MODE)
         az78.load_all()
 
-    task78_bands = hubmode_band_pairs(hub_regions=[TASK78_HUB_REGION])
-    partners78 = [p for _, p in task78_bands[0][1]] if task78_bands else []
-    if not partners78:
-        print(f"  [task 7/8] {TASK78_HUB_REGION!r} has no partners in HUB_MODE_ROI_REGIONS; skipping.")
-    else:
+    for hub, hub_partner_pairs in hub_bands:
+        partners78 = [p for _, p in hub_partner_pairs]
+        if not partners78:
+            print(f"  [task 7/8] {hub!r} has no partners in HUB_MODE_ROI_REGIONS; skipping.")
+            continue
         for variant in PCCA_VARIANTS:
             hubmode_plot_task78_heatmaps(
-                az78, TASK78_HUB_REGION, partners78, SESSIONS, OUTPUT_DIR,
+                az78, hub, partners78, SESSIONS, OUTPUT_DIR,
                 data_source='raw', task_label='task7', variant=variant,
             )
             hubmode_plot_task78_heatmaps(
-                az78, TASK78_HUB_REGION, partners78, SESSIONS, OUTPUT_DIR,
+                az78, hub, partners78, SESSIONS, OUTPUT_DIR,
                 data_source='residual', task_label='task8', variant=variant,
             )
 
