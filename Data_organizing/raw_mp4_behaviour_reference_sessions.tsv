@@ -1,0 +1,12 @@
+relative_path	animal	session_date	in_reference_session_list	server1_size_bytes	server2_size_bytes	status
+yp020/yp020_220403/figures/yp020_220403_cue_dlc_bar_off.mp4	yp020	220403	True	449624		MISSING_ON_SERVER2
+yp020/yp020_220405/yp020_2022-04-05-145950_rig_frontDLC_resnet50_Front_CameraJun10shuffle1_1320000_filtered_labeled.mp4	yp020	220405	True	1922103416		MISSING_ON_SERVER2
+yp022/yp022_220401/figures/yp022_220401_cue_cue.mp4	yp022	220401	True	24127346		MISSING_ON_SERVER2
+yp022/yp022_220402/figures/yp022_220402_cue_cue.mp4	yp022	220402	True	9309959		MISSING_ON_SERVER2
+yp022/yp022_220403/figures/yp022_220403_cue_cue.mp4	yp022	220403	True	4677351		MISSING_ON_SERVER2
+yp022/yp022_220404/figures/yp022_220404_cue_cue.mp4	yp022	220404	True	3933653		MISSING_ON_SERVER2
+yp022/yp022_220404/figures/yp022_220404cue_cue.mp4	yp022	220404	True	7777136		MISSING_ON_SERVER2
+yp022/yp022_220405/figures/yp022_220405_cue_cue.mp4	yp022	220405	True	0		MISSING_ON_SERVER2
+yp022/yp022_220405/figures/yp022_220405cue_cue.mp4	yp022	220405	True	26349546		MISSING_ON_SERVER2
+yp022/yp022_220405/figures/yp022_220405cue_dlc_bar_off.mp4	yp022	220405	True	22243784		MISSING_ON_SERVER2
+yp022/yp022_220407/figures/yp022_220407_cue_cue.mp4	yp022	220407	True	28889861		MISSING_ON_SERVER2

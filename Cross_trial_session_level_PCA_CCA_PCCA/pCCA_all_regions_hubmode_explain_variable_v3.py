@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
 r"""
-pCCA_all_regions_hubmode_explain_variable_v2.py
+pCCA_all_regions_hubmode_explain_variable_v3.py
 ================================================================================
+
+Version 3.0 of `pCCA_all_regions_hubmode_explain_variable_v2.py` ("v2"):
+same Tasks 3/4/5/6 (behavioural-variance bars, cross-session latent traces,
+subregion/laminar enrichment boxplots) and same plotting logic, reading
+from `pCCA_all_regions_out_behaviour_v3.py`'s pickles instead of v2's --
+EXCEPT that Tasks 7 & 8 (top-pCCA-weight-neuron PSTH heatmaps), which v2
+included, have been extracted OUT of this file entirely, into their own
+standalone script, `pCCA_hubmode_task78_selected_neuron_heatmaps_v3.py`.
+That script sources its neurons and residualized activity from the SAME
+`pCCA_all_regions_out_behaviour_v3.py` pickles this file reads (so the
+neurons it now shows are the ones v3's `_select_cumulative_weight_neurons`
+cumulative-contribution rule picked, not v2's fixed-percentile
+`TOP_WEIGHT_FRACTION` cutoff -- see that script's own docstring for the
+exact rule), but does not import anything from THIS file; its Section 1
+config was copied verbatim from this file's Section 1 instead. This file
+therefore now only ever does Tasks 3-6. Output is written to its own
+directory (see `out_subdir_name`) so v2's and v3's caches never collide.
+Everything else below (originally describing v2 relative to v1, and v2's
+own Tasks 3-6) still applies verbatim to v3.
 
 v2 counterpart of ``pCCA_all_regions_hubmode_explain_variable.py`` ("v1"):
 same Tasks 3/4/5/6 (behavioural-variance bars, cross-session latent traces,
 subregion/laminar enrichment boxplots), reading from
-``pCCA_all_regions_out_behaviour_v2.py``'s pickles instead of v1's --
-PLUS two NEW tasks, 7 and 8, that visualise the top-pCCA-weight neurons v2
-already identifies and saves.
+``pCCA_all_regions_out_behaviour_v2.py``'s pickles instead of v1's -- v2
+also added two NEW tasks, 7 and 8, that visualise the top-pCCA-weight
+neurons v2 already identifies and saves (v3 moves those two tasks to their
+own standalone script -- see the version note above).
 
 --------------------------------------------------------------------------------
 Why a separate script, and what actually changes
@@ -56,28 +76,24 @@ to that "x10" depending on the task (per this revision's request):
                                            group's `enrichment_ratio`
                                            instead of an R^2.
 
-Tasks 7 & 8 are NEW: v2 also identifies, per pair, per session, per
-region side, the neurons whose pCCA weight fell in the top
-`TOP_WEIGHT_FRACTION` (20%) pooled across the 10 draws, deduplicated, with
-their residualized activity already saved
-(``PrivateLatentPairResult.selected_neurons_i`` / ``_j``, a
-``SelectedNeuronSet``). Task 7 pools these neurons' ORIGINAL (pre-
-residualization, z-scored) firing-rate PSTH across every session that
-contributed any, one heatmap per (hub, partner) pairing; Task 8 is the
-same layout with RESIDUALIZED activity instead (already saved, no reload
-needed). Like Tasks 3-6, Tasks 7/8 sweep every hub in
-``HUB_MODE_HUB_REGIONS`` (one figure per hub), not a single hard-coded
-hub. See Section 10 below for the full design, including why Rastermap is
-now fit ONCE on the fully pooled (all sessions, all selected neurons)
-trial-averaged PSTH matrix rather than per session block (sessions
-generally have different trial counts, so their raw continuous-cross-trial
-traces are not directly comparable in one joint Rastermap fit -- only the
-trial-AVERAGED PSTH, sharing one common T, can be pooled across sessions
-BEFORE the single Rastermap fit).
+Tasks 7 & 8 (v2): v2 also identified, per pair, per session, per region
+side, the neurons whose pCCA weight fell in the top `TOP_WEIGHT_FRACTION`
+(20%) pooled across the 10 draws, deduplicated, with their residualized
+activity already saved (``PrivateLatentPairResult.selected_neurons_i`` /
+``_j``, a ``SelectedNeuronSet``), and used those two tasks to pool these
+neurons' ORIGINAL (pre-residualization, z-scored) firing-rate PSTH (Task
+7) and their RESIDUALIZED activity (Task 8) across every session that
+contributed any, one heatmap per (hub, partner) pairing, swept over every
+hub in ``HUB_MODE_HUB_REGIONS``. v3 keeps that same design, including
+fitting Rastermap ONCE on the fully pooled (all sessions, all selected
+neurons) trial-averaged PSTH matrix rather than per session block (see
+that script's own docstring for why) -- but Tasks 7/8 no longer live in
+THIS file; see `pCCA_hubmode_task78_selected_neuron_heatmaps_v3.py`
+instead, along with the neuron-selection-rule change noted above.
 
-Everything else -- data source (``PrivateLatentAnalyzer`` reading v2's own
-``pcca_all_regions_out_behaviour_v2_sampled_sessions_{trial_type}_
-{align_mode}_results`` pickles), the two pCCA regress-out variants
+Everything else -- data source (``PrivateLatentAnalyzer`` reading v3's own
+``pcca_all_regions_out_behaviour_v3_cumulative_sessions_{trial_type}_
+{align_mode}_results`` pickles, per `out_subdir_name`), the two pCCA regress-out variants
 (``PCCA_VARIANTS`` = 'regions_only' / 'regions_behavior', i.e. ``.pairs``
 vs ``.pairs_regions_only``), the reward-kernel/B-spline machinery, the
 hub-mode row/panel layout, and every plot's visual styling -- is copied
@@ -101,32 +117,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from scipy.interpolate import BSpline
-from scipy.stats import zscore
 
 warnings.filterwarnings('ignore')
-
-try:
-    from rastermap import Rastermap
-    _RASTERMAP_OK = True
-except ImportError:
-    _RASTERMAP_OK = False
-    warnings.warn(
-        "rastermap not found; Tasks 7/8 fall back to peak-time neuron ordering."
-    )
 
 # =============================================================================
 # 0.  Imports. `cross_trial_type_cca_analysis` is the same stable library
 #     module v1 uses for Task 5's sign-aligned cross-session aggregator.
-#     `pCCA_all_regions_out_behaviour_v2.py` is this script's ONLY source
-#     of neural data (Tasks 3-6/pCCA weights) and ALSO the source of the
-#     raw-reload primitives Task 7 needs (`load_region_spikes_full` /
-#     `crop_time_window` / `_zscore_flat` / `load_behavior_regressors`) --
-#     the SAME functions v2 itself used to build the region_flat_full pool
-#     `SelectedNeuronSet.neurons[].neuron_idx` indexes into, so reloading
-#     with them (rather than reimplementing the load/crop/truncate
-#     sequence a second, possibly-diverging way) guarantees the neuron
-#     axis lines up. Task 8 needs no such reload -- its data
-#     (`SelectedNeuronResidual.residual`) is already saved.
+#     `pCCA_all_regions_out_behaviour_v3.py` is this script's ONLY source
+#     of neural data (Tasks 3-6/pCCA weights). `SelectedNeuronSet` /
+#     `SelectedNeuronResidual` are imported (and registered under
+#     `__main__` below) purely because they can appear NESTED inside a
+#     pickled `PrivateLatentPairResult` and are therefore required for
+#     unpickling to succeed -- Tasks 3-6 never read their contents; the
+#     raw-reload primitives and Rastermap sorting that DO act on them now
+#     live in `pCCA_hubmode_task78_selected_neuron_heatmaps_v3.py` instead
+#     (see this script's own docstring).
 # =============================================================================
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cross_trial_type_cca_analysis import (   # noqa: E402
@@ -135,7 +140,7 @@ from cross_trial_type_cca_analysis import (   # noqa: E402
     MIN_SESSIONS_THRESHOLD,
     align_signs_spectral,
 )
-from pCCA_all_regions_out_behaviour_v2 import (  # noqa: E402
+from pCCA_all_regions_out_behaviour_v3 import (  # noqa: E402
     PrivateLatentAnalyzer,
     PrivateLatentSessionResult,
     PrivateLatentPairResult,
@@ -149,22 +154,13 @@ from pCCA_all_regions_out_behaviour_v2 import (  # noqa: E402
     REGION_PAIRS,
     N_COMPONENTS,
     N_SAMPLE_DRAWS,
-    TOP_WEIGHT_FRACTION,
     CORTICAL_REGIONS,
     sort_pair_by_anatomy,
     get_anatomical_index,
     out_subdir_name,
-    mat_subdir_name as v2_mat_subdir_name,
-    load_region_spikes_full as v2_load_region_spikes_full,
-    crop_time_window as v2_crop_time_window,
-    _zscore_flat as v2_zscore_flat,
-    load_behavior_regressors as v2_load_behavior_regressors,
-    BASE_DIR as V2_BASE_DIR,
-    SUBTRACT_PSTH as V2_SUBTRACT_PSTH,
-    SHUFFLE_TRIALS as V2_SHUFFLE_TRIALS,
 )
 
-# `pCCA_all_regions_out_behaviour_v2.py` bakes '__main__' into every pickled
+# `pCCA_all_regions_out_behaviour_v3.py` bakes '__main__' into every pickled
 # dataclass instance's module reference (it is normally *run* directly);
 # unpickling those files from THIS script's own '__main__' therefore needs
 # the same classes reachable under `__main__` here too -- every dataclass
@@ -181,8 +177,7 @@ for _cls in (
 try:
     import mat73  # noqa: F401  (transitively required by cross_trial_type_cca_analysis's own imports)
 except Exception:
-    warnings.warn("mat73 not importable -- cross_trial_type_cca_analysis.py may fail to "
-                  "import; this script's own Task 7 reload also needs it.")
+    warnings.warn("mat73 not importable -- cross_trial_type_cca_analysis.py may fail to import.")
 
 
 # =============================================================================
@@ -216,10 +211,11 @@ TASK3_ALIGN_MODES: Tuple[str, ...] = ("default_move_onset",)
 BASE_DIR = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
 BEHAVIOR_DIR = BASE_DIR / "Paper_output" / f"tapproach_sessions_{ALIGN_MODE}"
 OUTPUT_DIR = (BASE_DIR / "Paper_output"
-              / f"pcca_all_regions_hubmode_v2_{REFERENCE_TYPE}_{ALIGN_MODE}")
+              / f"pcca_all_regions_hubmode_v3__cumulative_sessions_{REFERENCE_TYPE}_{ALIGN_MODE}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---- Sessions -----------------------------------------------------------
+
 SESSIONS: List[str] = [
     'yp010_220209', 'yp010_220210', 'yp010_220211', 'yp010_220212',
     'yp012_220208', 'yp012_220209', 'yp012_220210', 'yp012_220211', 'yp012_220212',
@@ -229,7 +225,10 @@ SESSIONS: List[str] = [
     'yp020_220405', 'yp020_220407',
     'yp021_220331', 'yp021_220401', 'yp021_220402', 'yp021_220403', 'yp021_220404',
     'yp021_220405', 'yp021_220407',
+    'yp022_220401', 'yp022_220402', 'yp022_220403', 'yp022_220404', 'yp022_220405',
+    'yp022_220407',
 ]
+
 
 COMPONENT_INDICES: List[int] = [0]
 MIN_SESSIONS: int = MIN_SESSIONS_THRESHOLD
@@ -329,17 +328,10 @@ CLUSTER_HATCH_CYCLE = [None, "///", "xxx"]
 
 SAVE_DPI: int = 400
 
-# ---- Tasks 7/8 (NEW) -- top-pCCA-weight neuron PSTH heatmaps ------------
-# Sweeps every hub in HUB_MODE_HUB_REGIONS (same hub-mode band layout
-# Tasks 3-6 use, via `hubmode_band_pairs()`), one figure per hub -- NOT
-# limited to a single hard-coded hub.
-
-TASK78_TRIAL_TYPE: str = REFERENCE_TYPE
-TASK78_PANEL_WIDTH: float = 3.4
-TASK78_PANEL_HEIGHT: float = 5.2
-# Rastermap fit knobs -- same defaults this project already uses
-# (pCCA_sensitive_realsingle_Session_11panel.py's own get_neuron_order).
-TASK78_RASTERMAP_KW: Dict = dict(locality=0.0, time_lag_window=10, grid_upsample=10)
+# Tasks 7/8's own config (TASK78_TRIAL_TYPE, TASK78_PANEL_WIDTH/HEIGHT,
+# TASK78_RASTERMAP_KW, ...) now lives in
+# `pCCA_hubmode_task78_selected_neuron_heatmaps_v3.py`'s own Section 1
+# (copied verbatim from here when that script was split out).
 
 
 # =============================================================================
@@ -739,7 +731,7 @@ class _PrivateLatentSessionAdapter:
 #
 #     Sign alignment across draws: each of the N_SAMPLE_DRAWS=10 draws is
 #     an INDEPENDENT pCCA fit (`pcca()` in pCCA_all_regions_out_behaviour_
-#     v2.py only sign-aligns its OWN internal CV folds via a `Wx_ref`
+#     v3.py only sign-aligns its OWN internal CV folds via a `Wx_ref`
 #     dot-product check -- that alignment is local to one draw and does
 #     NOT extend across draws), so two draws can land on opposite signs
 #     for the same component. Concatenating/averaging `z_i_lat`/`z_j_lat`
@@ -829,7 +821,7 @@ def run_hubmode_analysis(
 
     for s_idx, session_name in enumerate(all_session_names, 1):
         print("\n" + "=" * 70)
-        print(f"[hub-mode v2] SESSION {s_idx}/{len(all_session_names)}: {session_name}")
+        print(f"[hub-mode v3] SESSION {s_idx}/{len(all_session_names)}: {session_name}")
         print("=" * 70)
 
         behavior_cache: Dict[str, Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]]] = {}
@@ -986,7 +978,7 @@ def run_hubmode_analysis(
                                 ))
 
     print("\n" + "=" * 70)
-    print("[hub-mode v2] CROSS-SESSION AGGREGATION (sign alignment + mean/SEM across sessions)")
+    print("[hub-mode v3] CROSS-SESSION AGGREGATION (sign alignment + mean/SEM across sessions)")
     print("=" * 70)
     for variant, variant_analyzers in cross_session_analyzers.items():
         for pair_key, cs in variant_analyzers.items():
@@ -997,7 +989,7 @@ def run_hubmode_analysis(
             cs.aggregate_projections()
 
     print("\n" + "=" * 70)
-    print("[hub-mode v2] DATA-GATHERING COMPLETE")
+    print("[hub-mode v3] DATA-GATHERING COMPLETE")
     for variant in PCCA_VARIANTS:
         print(f"  [{variant}] pairs with >=1 session : {len(cross_session_analyzers[variant])}")
     print(f"  behavioural-variance records   : {len(behavior_records)}")
@@ -1520,305 +1512,7 @@ def hubmode_plot_task6_enrichment_boxplots(
 
 
 # =============================================================================
-# 10. Tasks 7 & 8 (NEW) -- top-pCCA-weight-neuron PSTH heatmaps, pooled
-#     across sessions, swept over every hub region in
-#     `HUB_MODE_HUB_REGIONS` (same hub-mode band layout Tasks 3-6 use, via
-#     `hubmode_band_pairs()`) -- one figure per hub, each against every
-#     region it pairs with -- NOT limited to a single hard-coded hub.
-#
-#     Neuron identification is already done -- `PrivateLatentPairResult.
-#     selected_neurons_i`/`_j` (a `SelectedNeuronSet`, item 4's "these
-#     have already been saved"). Task 7 shows these neurons' ORIGINAL
-#     (pre-residualization, z-scored) activity; Task 8 shows their already
-#     -saved RESIDUALIZED activity (`SelectedNeuronResidual.residual`).
-#
-#     Rastermap sorting (item 7d) is now applied ONCE, to the FULLY POOLED
-#     matrix -- every selected neuron from every session that contributed
-#     any, stacked first, THEN sorted -- rather than sorting each
-#     session's own block independently before stacking (the earlier
-#     design). Sorting still runs on the trial-AVERAGED PSTH (one shared T
-#     per align_mode), not each session's raw "continuous cross-trial"
-#     trace (T*n_trials samples, this project's own established Rastermap
-#     input convention -- see pCCA_sensitive_realsingle_Session_11panel.py's
-#     own `get_neuron_order`): different sessions generally have different
-#     trial counts, so those raw continuous traces are different lengths
-#     and still cannot be pooled into one joint Rastermap fit -- only the
-#     PSTH's shared T lets every session's selected neurons sit in one
-#     (total_neurons, T) matrix, which is what is now pooled BEFORE the
-#     single Rastermap fit runs. A consequence: since the sort is now
-#     global, rows from a given session are no longer a contiguous block
-#     in the final row order -- `session_labels`/`session_counts` (see
-#     `_gather_task78_matrix`) describe each session's CONTRIBUTION
-#     (provenance) only, not a slice of matrix rows.
-# =============================================================================
-
-def get_neuron_order_2d(mat: np.ndarray) -> np.ndarray:
-    """Rastermap sort order for an (n_neurons, n_obs) matrix -- for Tasks
-    7/8 this is the fully pooled, trial-averaged PSTH (n_obs = T), fit
-    ONCE across every session's selected neurons together. Falls back to
-    peak-time ordering if rastermap is unavailable or too few neurons are
-    present -- same fallback convention as this project's own
-    `get_neuron_order` (pCCA_sensitive_realsingle_Session_11panel.py)."""
-    n = mat.shape[0]
-    if n < 2:
-        return np.arange(n)
-    if _RASTERMAP_OK and n >= 5:
-        try:
-            z = zscore(mat, axis=1, nan_policy="omit")
-            np.nan_to_num(z, nan=0.0, copy=False)
-            mdl = Rastermap(n_PCs=min(50, n, mat.shape[1]), **TASK78_RASTERMAP_KW)
-            mdl.fit(z)
-            return np.asarray(mdl.isort)
-        except Exception as exc:
-            warnings.warn(f"Rastermap failed ({exc}); using peak-time ordering.")
-    return np.argsort(np.argmax(mat, axis=1))
-
-
-_raw_region_cache: Dict[Tuple[str, str, str, str], Optional[Tuple[np.ndarray, np.ndarray]]] = {}
-
-
-def _load_raw_zscored_region(
-        session_name: str, region: str,
-        trial_type: str = TASK78_TRIAL_TYPE, align_mode: str = ALIGN_MODE,
-) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-    """Reload ONE region's RAW (pre-residualization), z-scored, cross-trial
-    activity for one session -- Task 7's "original firing rate" source,
-    which `pCCA_all_regions_out_behaviour_v2.py` never persists
-    (`region_flat_full` is transient there). Reproduces that script's OWN
-    load -> crop -> behaviour-truncate -> z-score sequence with its OWN
-    functions, in the SAME order, so the returned matrix's neuron axis
-    lines up EXACTLY with `SelectedNeuronResidual.neuron_idx`. Cached per
-    (session, region, trial_type, align_mode) -- reused across every
-    partner pairing this hub appears in, since the hub's own raw data
-    does not depend on which partner a given panel is about.
-
-    Returns (region_flat, time_vec) -- (T*n_trials, n_full_neurons) and
-    (T,) -- or None if unavailable (mirrors v2's own skip conditions).
-    """
-    key = (session_name, region, trial_type, align_mode)
-    if key in _raw_region_cache:
-        return _raw_region_cache[key]
-
-    mat_dir = V2_BASE_DIR / v2_mat_subdir_name(trial_type, align_mode)
-    session_file = mat_dir / f"{session_name}_analysis_results.mat"
-    if not session_file.exists():
-        _raw_region_cache[key] = None
-        return None
-
-    region_spikes_full, _labels_full, n_trials, T = v2_load_region_spikes_full(str(session_file))
-    if region not in region_spikes_full:
-        _raw_region_cache[key] = None
-        return None
-
-    window = ALIGNMENT_WINDOWS_S[align_mode]
-    time_vec_raw = np.linspace(window[0], window[1], T)
-    try:
-        region_spikes_full, time_vec = v2_crop_time_window(region_spikes_full, time_vec_raw, window)
-    except ValueError:
-        _raw_region_cache[key] = None
-        return None
-    T = time_vec.shape[0]
-
-    try:
-        pos_sel, speed_sel, _t_behav = v2_load_behavior_regressors(
-            session_name, trial_label=_trial_type_to_behavior_label(trial_type))
-    except (FileNotFoundError, ValueError) as exc:
-        warnings.warn(f"[{session_name}] {region}: behaviour unavailable for Task 7/8 "
-                      f"raw reload ({exc}); skipping.")
-        _raw_region_cache[key] = None
-        return None
-
-    n_trials_behav, T_behav = pos_sel.shape[0], pos_sel.shape[-1]
-    n_common = min(n_trials, n_trials_behav)
-    T_common = min(T, T_behav)
-    if n_common < 1 or T_common < 2:
-        _raw_region_cache[key] = None
-        return None
-    X = region_spikes_full[region][:n_common, :, :T_common]
-    time_vec = time_vec[:T_common]
-
-    X_flat = v2_zscore_flat(X, subtract_psth=V2_SUBTRACT_PSTH, shuffle_trials=V2_SHUFFLE_TRIALS)
-    result = (X_flat, time_vec)
-    _raw_region_cache[key] = result
-    return result
-
-
-def _gather_task78_matrix(
-        analyzer: PrivateLatentAnalyzer,
-        hub: str,
-        partner: str,
-        sessions: List[str],
-        data_source: str,             # 'raw' (Task 7) | 'residual' (Task 8)
-        regions_only: bool,
-        trial_type: str = TASK78_TRIAL_TYPE,
-        align_mode: str = ALIGN_MODE,
-) -> Optional[Tuple[np.ndarray, np.ndarray, List[str], List[int]]]:
-    """Pool one (hub, partner) pairing's already-selected top-pCCA-weight
-    neurons' trial-averaged PSTH across EVERY contributing session first,
-    then Rastermap-sort the fully pooled (total_neurons, T) matrix ONCE
-    (see section docstring for why sorting runs on the PSTH rather than
-    each session's own raw continuous trace).
-
-    Returns (matrix, time_vec, session_labels, session_neuron_counts):
-    matrix is (total_neurons, T), already sorted by the single pooled
-    Rastermap fit; the last two describe how many of those neurons each
-    session contributed (provenance only -- post-sort rows are no longer
-    grouped into contiguous per-session blocks). None if no session
-    contributed any selected neuron.
-    """
-    pair_key = sort_pair_by_anatomy(hub, partner)
-    role = _hub_region_role(hub, pair_key)
-
-    blocks: List[np.ndarray] = []
-    session_labels: List[str] = []
-    session_counts: List[int] = []
-    time_vec_common: Optional[np.ndarray] = None
-
-    for session_name in sessions:
-        session_result = analyzer.sessions.get(session_name)
-        if session_result is None:
-            continue
-        table = session_result.pairs_regions_only if regions_only else session_result.pairs
-        pr = table.get(pair_key)
-        if pr is None:
-            continue
-        selected = pr.selected_neurons_i if role == 'region_i' else pr.selected_neurons_j
-        if selected is None or not selected.neurons:
-            continue
-
-        if data_source == 'residual':
-            # `.residual` is (n_trials, T) per neuron -- trial-averaged
-            # here for the displayed/pooled PSTH row.
-            psth_rows = np.stack(
-                [nr.residual.mean(axis=0) for nr in selected.neurons], axis=0)   # (n, T)
-            time_vec = session_result.time_vec
-        elif data_source == 'raw':
-            loaded = _load_raw_zscored_region(session_name, hub, trial_type, align_mode)
-            if loaded is None:
-                continue
-            X_flat, raw_time_vec = loaded
-            idx = np.asarray([nr.neuron_idx for nr in selected.neurons], dtype=int)
-            if idx.size == 0 or idx.max() >= X_flat.shape[1]:
-                warnings.warn(f"[{session_name}] {hub}: selected neuron index out of range "
-                              f"for reloaded raw data; skipping this session.")
-                continue
-            T_raw = raw_time_vec.shape[0]
-            n_trials_raw = X_flat.shape[0] // T_raw
-            cols = X_flat[:, idx]                        # (T_raw*n_trials_raw, n)
-            psth_rows = np.stack(
-                [cols[:, k].reshape(T_raw, n_trials_raw).T.mean(axis=0)
-                 for k in range(cols.shape[1])], axis=0)  # (n, T_raw)
-            time_vec = raw_time_vec
-        else:
-            raise ValueError(f"Unknown data_source: {data_source!r}")
-
-        if time_vec_common is None:
-            time_vec_common = time_vec
-        elif time_vec.shape[0] != time_vec_common.shape[0]:
-            T_min = min(time_vec.shape[0], time_vec_common.shape[0])
-            psth_rows = psth_rows[:, :T_min]
-            time_vec_common = time_vec_common[:T_min]
-
-        blocks.append(psth_rows.astype(np.float64))
-        session_labels.append(session_name)
-        session_counts.append(psth_rows.shape[0])
-
-    if not blocks:
-        return None
-
-    T_final = time_vec_common.shape[0]
-    blocks = [b[:, :T_final] for b in blocks]
-    matrix = np.concatenate(blocks, axis=0)
-
-    # ---- Rastermap runs ONCE, on the FULLY POOLED matrix (every session's
-    #      selected neurons stacked first) -- not per session block. -------
-    order = get_neuron_order_2d(matrix)
-    matrix = matrix[order]
-
-    return matrix, time_vec_common, session_labels, session_counts
-
-
-def hubmode_plot_task78_heatmaps(
-        analyzer: PrivateLatentAnalyzer,
-        hub: str,
-        partners: List[str],
-        sessions: List[str],
-        output_dir: Path,
-        data_source: str,             # 'raw' (Task 7) | 'residual' (Task 8)
-        task_label: str,              # 'task7' | 'task8'
-        variant: str,                 # 'regions_only' | 'regions_behavior'
-        panel_width: float = TASK78_PANEL_WIDTH,
-        panel_height: float = TASK78_PANEL_HEIGHT,
-        dpi: int = SAVE_DPI,
-) -> Optional[plt.Figure]:
-    """ONE figure for `hub`: 1xn panels, one per partner region with any
-    selected-neuron data (item 7a: 5 partners -> 1x5)."""
-    regions_only = (variant == 'regions_only')
-    gathered_by_partner = [
-        (partner, _gather_task78_matrix(analyzer, hub, partner, sessions, data_source, regions_only))
-        for partner in partners
-    ]
-    present = [(p, g) for p, g in gathered_by_partner if g is not None]
-    if not present:
-        print(f"  [plot] nothing to plot for hub={hub} task={task_label} variant={variant}; skipping.")
-        return None
-
-    n_panels = len(present)
-    fig, axes = plt.subplots(1, n_panels, figsize=(panel_width * n_panels, panel_height))
-    axes = np.atleast_1d(axes)
-    cbar_label = 'z-scored firing rate' if data_source == 'raw' else 'residualized activity'
-
-    for panel_idx, (ax, (partner, (matrix, time_vec, sess_labels, sess_counts))) in enumerate(
-            zip(axes, present)):
-        vmax = float(np.nanpercentile(np.abs(matrix), 99)) if matrix.size else 1.0
-        vmax = vmax if vmax > 0 else 1.0
-        im = ax.imshow(
-            matrix, aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax,
-            extent=[time_vec[0], time_vec[-1], matrix.shape[0], 0], origin='upper',
-        )
-        ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, alpha=0.7)
-        # No per-session boundary lines: Rastermap now sorts the fully
-        # pooled matrix ONCE, so rows from a given session are no longer a
-        # contiguous block (see `_gather_task78_matrix`).
-        ax.set_title(f"{_display_name(partner)}\n"
-                      f"n={matrix.shape[0]} neurons",
-                      fontsize=TICK_FONTSIZE - 5)
-        ax.set_xlabel("Time (s)", fontsize=TICK_FONTSIZE - 4)
-        ax.tick_params(labelsize=TICK_FONTSIZE - 6)
-        for sp in ('top', 'right'):
-            ax.spines[sp].set_visible(False)
-        # One colorbar per panel (matches this project's own established
-        # per-panel-colorbar PSTH convention) -- a single shared colorbar
-        # added across multiple Axes fights with tight_layout/suptitle
-        # spacing and tends to overlap the last panel's title.
-        cbar = fig.colorbar(im, ax=ax, pad=0.02, shrink=0.85)
-        cbar.ax.tick_params(labelsize=TICK_FONTSIZE - 8)
-        if panel_idx == n_panels - 1:
-            cbar.set_label(cbar_label, fontsize=TICK_FONTSIZE - 6)
-        print(f"    [{task_label}/{variant}] {_display_name(hub)} <-> {_display_name(partner)}: "
-              f"{matrix.shape[0]} neurons from {len(sess_labels)} sessions "
-              f"({dict(zip(sess_labels, sess_counts))})")
-
-    axes[0].set_ylabel("Neurons pooled across sessions", fontsize=TICK_FONTSIZE - 4)
-
-    label = 'original firing rate' if data_source == 'raw' else 'residual activity'
-    fig.suptitle(
-        f"Hub: {_display_name(hub)} -- {label}, top-{int(round(TOP_WEIGHT_FRACTION * 100))}% "
-        f"pCCA-weight neurons ({VARIANT_DISPLAY[variant]})\n{Align_type_value}",
-        fontsize=TICK_FONTSIZE)
-    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
-
-    suffix = VARIANT_FILE_SUFFIX[variant]
-    save_path = output_dir / f"{suffix}_hubmode_{task_label}_psth_{hub}.png"
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
-    print(f"  [plot] saved: {save_path}")
-    plt.close(fig)
-    return fig
-
-
-# =============================================================================
-# 11. CSV I/O -- copied verbatim from v1.
+# 10. CSV I/O -- copied verbatim from v1.
 # =============================================================================
 
 def _write_records_csv(records: List[dict], path: Path) -> None:
@@ -1863,7 +1557,7 @@ def _write_enrichment_summary_csv(
 
 
 # =============================================================================
-# 12. Driver
+# 11. Driver
 # =============================================================================
 
 VARIANT_FILE_SUFFIX: Dict[str, str] = {
@@ -1876,21 +1570,20 @@ TASK5_LABEL_BY_VARIANT: Dict[str, str] = {'regions_only': 'regions_only', 'regio
 
 def main() -> None:
     print("=" * 70)
-    print("HUB-MODE v2 TASKS 3-8 -- PART 2c/2c' PRIVATE pCCA (10-draw resampled)")
-    print("(sourced exclusively from pCCA_all_regions_out_behaviour_v2.py's own")
-    print(" pcca_all_regions_out_behaviour_v2_sampled_sessions_{trial_type}_{align_mode}_results pickles)")
+    print("HUB-MODE v3 TASKS 3-6 -- PART 2c/2c' PRIVATE pCCA (10-draw resampled)")
+    print("(sourced exclusively from pCCA_all_regions_out_behaviour_v3.py's own")
+    print(" pcca_all_regions_out_behaviour_v3_cumulative_sessions_{trial_type}_{align_mode}_results pickles)")
     print("=" * 70)
     print(f"  reference type     : {REFERENCE_TYPE}")
     print(f"  active trial types : {ACTIVE_TRIAL_TYPES}")
     print(f"  align mode         : {ALIGN_MODE}")
     print(f"  pcca variants      : {[VARIANT_DISPLAY[v] for v in PCCA_VARIANTS]}")
     print(f"  component indices  : {COMPONENT_INDICES}  (of {N_COMPONENTS} fit)")
-    print(f"  samples per pair   : {N_SAMPLE_DRAWS} draws/session (v2 resampling)")
+    print(f"  samples per pair   : {N_SAMPLE_DRAWS} draws/session (v3 resampling)")
     print(f"  behaviour window   : {BEHAVIOR_TIME_RANGE_S}")
     print(f"  variance method    : {VARIANCE_METHOD}")
     print(f"  hub-mode hubs      : {HUB_MODE_HUB_REGIONS}")
     print(f"  hub-mode ROIs      : {HUB_MODE_ROI_REGIONS}")
-    print(f"  task 7/8 hubs      : {HUB_MODE_HUB_REGIONS}  (same sweep as tasks 3-6)")
     print(f"  output directory   : {OUTPUT_DIR}")
     print("=" * 70)
 
@@ -1948,36 +1641,6 @@ def main() -> None:
             enrichment_grouped, OUTPUT_DIR / f"hubmode_task6_enrichment_ratio_summary{suffix}.csv")
         hubmode_plot_task6_enrichment_boxplots(
             variant_subregion, hub_bands, OUTPUT_DIR, file_suffix=suffix)
-
-    # ---- Tasks 7 & 8 (NEW) -------------------------------------------------------
-    # Sweeps every hub in `hub_bands` (== HUB_MODE_HUB_REGIONS), same as
-    # Tasks 3-6 -- NOT limited to a single hard-coded hub.
-    print(f"\n--- Tasks 7-8: top-{int(round(TOP_WEIGHT_FRACTION*100))}%-pCCA-weight-neuron "
-          f"PSTH heatmaps (hubs={HUB_MODE_HUB_REGIONS}) ---")
-    az78 = analyzers_by_trial_type.get(TASK78_TRIAL_TYPE)
-    if az78 is None:
-        az78 = PrivateLatentAnalyzer(base_dir=BASE_DIR, trial_type=TASK78_TRIAL_TYPE, align_mode=ALIGN_MODE)
-        az78.load_all()
-
-    for hub, hub_partner_pairs in hub_bands:
-        partners78 = [p for _, p in hub_partner_pairs]
-        if not partners78:
-            print(f"  [task 7/8] {hub!r} has no partners in HUB_MODE_ROI_REGIONS; skipping.")
-            continue
-        for variant in PCCA_VARIANTS:
-            hubmode_plot_task78_heatmaps(
-                az78, hub, partners78, SESSIONS, OUTPUT_DIR,
-                data_source='raw', task_label='task7', variant=variant,
-            )
-            hubmode_plot_task78_heatmaps(
-                az78, hub, partners78, SESSIONS, OUTPUT_DIR,
-                data_source='residual', task_label='task8', variant=variant,
-            )
-
-    print("\n" + "=" * 70)
-    print("ANALYSIS COMPLETE")
-    print(f"Figures and CSVs saved to: {OUTPUT_DIR}")
-    print("=" * 70)
 
 
 if __name__ == "__main__":

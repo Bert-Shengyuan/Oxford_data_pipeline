@@ -853,6 +853,130 @@ class CrossTrialTypeCCAAnalyzer:
         return results
 
 # =============================================================================
+# SIGN ALIGNMENT (Z2 spectral synchronisation) -- module-level so it can be
+# reused to sign-align ANY stack of independently-signed latent fits, not
+# just cross-session stacks (e.g. the pCCA_all_regions_hubmode_explain_
+# variable_v2.py / pCCA_hubmode_task5_persession_draw_traces_v2.py hub-mode
+# scripts reuse this to align the N_SAMPLE_DRAWS independent pCCA-draw
+# fits WITHIN one session, before those draws are pooled/averaged --
+# pcca()'s own fold-alignment in pCCA_all_regions_out_behaviour_v2.py only
+# covers CV folds WITHIN one draw, not across draws).
+# =============================================================================
+
+def align_signs_spectral(u_stack_raw, v_stack_raw, epoch=(0, 150)):
+    """
+    Align latent trajectory signs across a stack of independently-signed
+    fits (originally: sessions; also reused for draws -- see module note
+    above) via Z2 spectral synchronisation.
+
+    Parameters
+    ----------
+    u_stack_raw : ndarray, shape (n_units, n_time, n_components)
+    v_stack_raw : ndarray, shape (n_units, n_time, n_components)
+    epoch       : tuple (t_start, t_end) defining the task epoch for
+                  global orientation convention.
+
+    Returns
+    -------
+    u_aligned   : ndarray, same shape as u_stack_raw
+    v_aligned   : ndarray, same shape as v_stack_raw
+    flip_decisions : dict  {unit_idx -> {comp_idx -> {'u_flip': bool, 'v_flip': bool}}}
+    """
+    t_start, t_end = epoch
+    n_sess, n_time, n_comp = u_stack_raw.shape
+
+    u_aligned = np.zeros_like(u_stack_raw)
+    v_aligned = np.zeros_like(v_stack_raw)
+    flip_decisions = {}
+
+    for comp_idx in range(n_comp):
+
+        # ------------------------------------------------------------------ #
+        # Step 1: Build pairwise correlation matrices  C ∈ R^{N x N}         #
+        # ------------------------------------------------------------------ #
+        U = u_stack_raw[:, :, comp_idx]  # (n_sess, n_time)
+        V = v_stack_raw[:, :, comp_idx]
+
+        C_u = np.corrcoef(U)  # (n_sess, n_sess)
+        C_v = np.corrcoef(V)
+
+        C_u = np.nan_to_num(C_u, nan=0.0, posinf=0.0, neginf=0.0)
+        C_v = np.nan_to_num(C_v, nan=0.0, posinf=0.0, neginf=0.0)
+        C_u = (C_u + C_u.T) / 2.0
+        C_v = (C_v + C_v.T) / 2.0
+        np.fill_diagonal(C_u, 1.0)
+        np.fill_diagonal(C_v, 1.0)
+        # ------------------------------------------------------------------ #
+        # Step 2: Z2 synchronisation — signs from leading eigenvector         #
+        #         np.linalg.eigh returns eigenvalues in ascending order;      #
+        #         the last column is therefore the leading eigenvector.       #
+        # ------------------------------------------------------------------ #
+        _, evecs_u = np.linalg.eigh(C_u)
+        s_u = np.sign(evecs_u[:, -1])  # shape (n_sess,)
+
+        _, evecs_v = np.linalg.eigh(C_v)
+        s_v = np.sign(evecs_v[:, -1])
+
+        # Guard: eigh can return 0.0 for degenerate entries (extremely rare).
+        # Fall back to +1 in those cases.
+        s_u[s_u == 0] = 1
+        s_v[s_v == 0] = 1
+
+        # ------------------------------------------------------------------ #
+        # Step 3: Apply session-level signs                                   #
+        # ------------------------------------------------------------------ #
+        u_aligned[:, :, comp_idx] = s_u[:, np.newaxis] * U
+        v_aligned[:, :, comp_idx] = s_v[:, np.newaxis] * V
+
+        # ------------------------------------------------------------------ #
+        # Step 4: Resolve global orientation via group-mean sign convention   #
+        # ------------------------------------------------------------------ #
+        u_epoch_mean = u_aligned[:, t_start:t_end, comp_idx].mean()
+        v_epoch_mean = v_aligned[:, t_start:t_end, comp_idx].mean()
+
+        if u_epoch_mean < 0:
+            s_u *= -1
+            u_aligned[:, :, comp_idx] *= -1
+
+        if v_epoch_mean < 0:
+            s_v *= -1
+            v_aligned[:, :, comp_idx] *= -1
+
+        # ------------------------------------------------------------------ #
+        # Step 5: Fine orientation — peak polarity of the group mean          #
+        u_group_mean = u_aligned[:, :, comp_idx].mean(axis=0)  # (n_time,)
+        v_group_mean = v_aligned[:, :, comp_idx].mean(axis=0)
+
+        u_epoch_window = u_group_mean[t_start:t_end]
+        v_epoch_window = v_group_mean[t_start:t_end]
+
+        # Signed peak: value at the time point of maximum absolute deviation
+        u_peak_val = u_epoch_window[np.argmax(np.abs(u_epoch_window))]
+        v_peak_val = v_epoch_window[np.argmax(np.abs(v_epoch_window))]
+
+        if u_peak_val < 0:
+            s_u *= -1
+            u_aligned[:, :, comp_idx] *= -1
+
+        if v_peak_val < 0:
+            s_v *= -1
+            v_aligned[:, :, comp_idx] *= -1
+
+        # ------------------------------------------------------------------ #
+        # Step 6: Record final flip decisions for cross-trial-type reuse      #
+        # ------------------------------------------------------------------ #
+        for sess_idx in range(n_sess):
+            if sess_idx not in flip_decisions:
+                flip_decisions[sess_idx] = {}
+            flip_decisions[sess_idx][comp_idx] = {
+                'u_flip': bool(s_u[sess_idx] < 0),
+                'v_flip': bool(s_v[sess_idx] < 0),
+            }
+
+    return u_aligned, v_aligned, flip_decisions
+
+
+# =============================================================================
 # CROSS-SESSION AGGREGATION CLASS
 # =============================================================================
 
@@ -1042,115 +1166,12 @@ class CrossSessionCCAAnalyzer:
         return swapped
 
 
-    def _align_signs_spectral(self,u_stack_raw, v_stack_raw, epoch=(0,150)):
-        """
-        Align latent trajectory signs across sessions via Z2 spectral synchronisation.
-
-        Parameters
-        ----------
-        u_stack_raw : ndarray, shape (n_sessions, n_time, n_components)
-        v_stack_raw : ndarray, shape (n_sessions, n_time, n_components)
-        epoch       : tuple (t_start, t_end) defining the task epoch for
-                      global orientation convention.
-
-        Returns
-        -------
-        u_aligned   : ndarray, same shape as u_stack_raw
-        v_aligned   : ndarray, same shape as v_stack_raw
-        flip_decisions : dict  {sess_idx -> {comp_idx -> {'u_flip': bool, 'v_flip': bool}}}
-        """
-        t_start, t_end = epoch
-        n_sess, n_time, n_comp = u_stack_raw.shape
-
-        u_aligned = np.zeros_like(u_stack_raw)
-        v_aligned = np.zeros_like(v_stack_raw)
-        flip_decisions = {}
-
-        for comp_idx in range(n_comp):
-
-            # ------------------------------------------------------------------ #
-            # Step 1: Build pairwise correlation matrices  C ∈ R^{N x N}         #
-            # ------------------------------------------------------------------ #
-            U = u_stack_raw[:, :, comp_idx]  # (n_sess, n_time)
-            V = v_stack_raw[:, :, comp_idx]
-
-            C_u = np.corrcoef(U)  # (n_sess, n_sess)
-            C_v = np.corrcoef(V)
-
-            C_u = np.nan_to_num(C_u, nan=0.0, posinf=0.0, neginf=0.0)
-            C_v = np.nan_to_num(C_v, nan=0.0, posinf=0.0, neginf=0.0)
-            C_u = (C_u + C_u.T) / 2.0
-            C_v = (C_v + C_v.T) / 2.0
-            np.fill_diagonal(C_u, 1.0)
-            np.fill_diagonal(C_v, 1.0)
-            # ------------------------------------------------------------------ #
-            # Step 2: Z2 synchronisation — signs from leading eigenvector         #
-            #         np.linalg.eigh returns eigenvalues in ascending order;      #
-            #         the last column is therefore the leading eigenvector.       #
-            # ------------------------------------------------------------------ #
-            _, evecs_u = np.linalg.eigh(C_u)
-            s_u = np.sign(evecs_u[:, -1])  # shape (n_sess,)
-
-            _, evecs_v = np.linalg.eigh(C_v)
-            s_v = np.sign(evecs_v[:, -1])
-
-            # Guard: eigh can return 0.0 for degenerate entries (extremely rare).
-            # Fall back to +1 in those cases.
-            s_u[s_u == 0] = 1
-            s_v[s_v == 0] = 1
-
-            # ------------------------------------------------------------------ #
-            # Step 3: Apply session-level signs                                   #
-            # ------------------------------------------------------------------ #
-            u_aligned[:, :, comp_idx] = s_u[:, np.newaxis] * U
-            v_aligned[:, :, comp_idx] = s_v[:, np.newaxis] * V
-
-            # ------------------------------------------------------------------ #
-            # Step 4: Resolve global orientation via group-mean sign convention   #
-            # ------------------------------------------------------------------ #
-            u_epoch_mean = u_aligned[:, t_start:t_end, comp_idx].mean()
-            v_epoch_mean = v_aligned[:, t_start:t_end, comp_idx].mean()
-
-            if u_epoch_mean < 0:
-                s_u *= -1
-                u_aligned[:, :, comp_idx] *= -1
-
-            if v_epoch_mean < 0:
-                s_v *= -1
-                v_aligned[:, :, comp_idx] *= -1
-
-            # ------------------------------------------------------------------ #
-            # Step 5: Fine orientation — peak polarity of the group mean          #
-            u_group_mean = u_aligned[:, :, comp_idx].mean(axis=0)  # (n_time,)
-            v_group_mean = v_aligned[:, :, comp_idx].mean(axis=0)
-
-            u_epoch_window = u_group_mean[t_start:t_end]
-            v_epoch_window = v_group_mean[t_start:t_end]
-
-            # Signed peak: value at the time point of maximum absolute deviation
-            u_peak_val = u_epoch_window[np.argmax(np.abs(u_epoch_window))]
-            v_peak_val = v_epoch_window[np.argmax(np.abs(v_epoch_window))]
-
-            if u_peak_val < 0:
-                s_u *= -1
-                u_aligned[:, :, comp_idx] *= -1
-
-            if v_peak_val < 0:
-                s_v *= -1
-                v_aligned[:, :, comp_idx] *= -1
-
-            # ------------------------------------------------------------------ #
-            # Step 6: Record final flip decisions for cross-trial-type reuse      #
-            # ------------------------------------------------------------------ #
-            for sess_idx in range(n_sess):
-                if sess_idx not in flip_decisions:
-                    flip_decisions[sess_idx] = {}
-                flip_decisions[sess_idx][comp_idx] = {
-                    'u_flip': bool(s_u[sess_idx] < 0),
-                    'v_flip': bool(s_v[sess_idx] < 0),
-                }
-
-        return u_aligned, v_aligned, flip_decisions
+    def _align_signs_spectral(self, u_stack_raw, v_stack_raw, epoch=(0, 150)):
+        """Thin wrapper -- the actual Z2 spectral-sync algorithm now lives
+        in the module-level `align_signs_spectral` (defined above this
+        class) so it can be reused outside this class too (see that
+        function's own docstring / the module note above the class)."""
+        return align_signs_spectral(u_stack_raw, v_stack_raw, epoch=epoch)
 
     def aggregate_projections(self) -> bool:
         """

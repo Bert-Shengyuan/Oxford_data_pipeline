@@ -45,7 +45,7 @@ BASE_DIR = Path("/Users/shengyuancai/Downloads/Oxford_dataset")
 
 # Condition label  →  subdirectory name
 RESULTS_SUBDIRS: Dict[str, str] = {
-    "cued_hit_long":   "sessions_cued_hit_long_results",
+    "cued_hit_long":   "cued_hit_long_default_move_onset_results",
     # "spont_hit_long":  "sessions_spont_hit_long_results",
     # "spont_miss_long": "sessions_spont_miss_long_results",
 }
