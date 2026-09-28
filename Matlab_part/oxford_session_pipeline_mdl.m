@@ -56,11 +56,19 @@ fprintf('═══════════════════════�
 server_config = struct();
 server_config.host = 'hpc-login-1.cubi.bihealth.org';
 server_config.username = 'shca10_c';  % Replace with your credentials
-server_config.base_dir = '/data/cephfs-2/unmirrored/groups/peng/YP_Oxford/';
+server_config.base_dir = '/data/cephfs-2/unmirrored/groups/peng/YP_Oxford/';  % Remote HPC path (scp source)
 
 % Analysis Configuration
 analysis_config = struct();
+% Organized outputs (t_approach file, *_results folders) live here
 analysis_config.local_base_dir = '/Users/shengyuancai/Downloads/Oxford_dataset/';
+% Raw downloaded data lives here as {proc_base_dir}/proc/{animal}/{session}/
+% (MDL + cell_metrics files); download, extraction and cleanup all use it
+analysis_config.proc_base_dir = '/Volumes/Shengyuan-i/OXford_proc_data/';
+% region_data keeps EVERY region regardless of neuron count. The two values
+% below are applied only when PCA or a kernel is computed: regions with fewer
+% than min_neurons_per_region neurons are then excluded, and the rest are
+% restricted to target_neurons sampled neurons (restrict_region_data_to_sample_size.m).
 analysis_config.min_neurons_per_region = 50;    % Minimum for statistical reliability
 analysis_config.target_neurons = analysis_config.min_neurons_per_region;            % Standardized count for fair comparison
 analysis_config.n_components = 10;               % Maximum canonical components
@@ -93,6 +101,10 @@ analysis_config.time_window = alignment_windows_s.(analysis_config.alignment_mod
 %   'none'  - skip the kernel step; only region_data (aligned spike data) is saved
 analysis_config.kernel_type = 'none';
 
+% Whether to compute per-region PCA (perform_region_pca). When false, PCA is
+% skipped and any pca_results already saved in the result file are kept.
+analysis_config.compute_pca = false;
+
 % By default, raw MDL/cell-metrics files under proc/{session_id}/{session}
 % are kept after processing. Set to true to delete them once a session is
 % done (success or failure), e.g. to reclaim disk space during large batch runs.
@@ -108,10 +120,12 @@ analysis_config.data_folder = sprintf('%s_%s_results', trial_type_folder, analys
 fprintf('Configuration:\n');
 fprintf('  Server: %s\n', server_config.host);
 fprintf('  Local storage: %s\n', analysis_config.local_base_dir);
-fprintf('  Neuron threshold: %d per region\n', analysis_config.min_neurons_per_region);
+fprintf('  Raw proc storage: %s\n', fullfile(analysis_config.proc_base_dir, 'proc'));
+fprintf('  Neuron threshold (PCA/kernel only): %d per region\n', analysis_config.min_neurons_per_region);
 fprintf('  Target neurons per region: %d\n', analysis_config.target_neurons);
 fprintf('  Alignment mode: %s\n', analysis_config.alignment_mode);
 fprintf('  Kernel type: %s\n', analysis_config.kernel_type);
+fprintf('  Compute PCA: %d\n', analysis_config.compute_pca);
 fprintf('  Delete raw data after processing: %d\n', analysis_config.delete_raw_data);
 fprintf('  Time window: [%.1f, %.1f] seconds\n', ...
         analysis_config.time_window(1), analysis_config.time_window(2));
@@ -177,47 +191,47 @@ end
 %% Session Definition
 % Define experimental sessions to process
 % session_list = {
-% {'yp013', '220211'}};
-% session_list = {
-%     {'yp010', '220209'}, 
-%     {'yp010', '220210'}, 
-%     {'yp010', '220211'}, 
-%     {'yp010', '220212'},
-%     {'yp012', '220208'}, 
-%     {'yp012', '220209'}, 
-%     {'yp012', '220210'}, 
-%     {'yp012', '220211'}, 
-%     {'yp012', '220212'}, 
-%     {'yp013', '220209'}, 
-%     {'yp013', '220210'}, 
-%     {'yp013', '220211'}, 
-%     {'yp013', '220212'},
-%     {'yp014', '220208'}, 
-%     {'yp014', '220209'}, 
-%     {'yp014', '220210'}, 
-%     {'yp014', '220211'}, 
-%     {'yp014', '220212'},
-%     {'yp020', '220331'}, 
-%     {'yp020', '220401'}, 
-%     {'yp020', '220402'}, 
-%     {'yp020', '220403'}, 
-%     {'yp020', '220404'}, 
-%     {'yp020', '220405'}, 
-%     {'yp020', '220407'}, 
-%     {'yp021', '220331'}, 
-%     {'yp021', '220401'}, 
-%     {'yp021', '220402'}, 
-%     {'yp021', '220403'}, 
-%     {'yp021', '220404'}, 
-%     {'yp021', '220405'}, 
-%     {'yp021', '220407'}, 
-%     {'yp022', '220401'}, 
-%     {'yp022', '220402'}, 
-%     {'yp022', '220403'}, 
-%     {'yp022', '220404'}, 
-%     {'yp022', '220405'}, 
-%     {'yp022', '220407'}
-% };
+%      {'yp021', '220331'},};
+session_list = {
+    {'yp010', '220209'}, 
+    {'yp010', '220210'}, 
+    {'yp010', '220211'}, 
+    {'yp010', '220212'},
+    {'yp012', '220208'}, 
+    {'yp012', '220209'}, 
+    {'yp012', '220210'}, 
+    {'yp012', '220211'}, 
+    {'yp012', '220212'}, 
+    {'yp013', '220209'}, 
+    {'yp013', '220210'}, 
+    {'yp013', '220211'}, 
+    {'yp013', '220212'},
+    {'yp014', '220208'}, 
+    {'yp014', '220209'}, 
+    {'yp014', '220210'}, 
+    {'yp014', '220211'}, 
+    {'yp014', '220212'},
+    {'yp020', '220331'}, 
+    {'yp020', '220401'}, 
+    {'yp020', '220402'}, 
+    {'yp020', '220403'}, 
+    {'yp020', '220404'}, 
+    {'yp020', '220405'}, 
+    {'yp020', '220407'}, 
+    {'yp021', '220331'}, 
+    {'yp021', '220401'}, 
+    {'yp021', '220402'}, 
+    {'yp021', '220403'}, 
+    {'yp021', '220404'}, 
+    {'yp021', '220405'}, 
+    {'yp021', '220407'}, 
+    {'yp022', '220401'}, 
+    {'yp022', '220402'}, 
+    {'yp022', '220403'}, 
+    {'yp022', '220404'}, 
+    {'yp022', '220405'}, 
+    {'yp022', '220407'}
+};
 
 % session_list = { 
 % 
@@ -229,9 +243,13 @@ end
 %     {'yp022', '220407'}
 % };
 
-session_list = { 
-    {'yp012', '220210'}
-};
+% session_list = { 
+%     {'yp013', '220209'}, 
+%     {'yp021', '220331'}, 
+%     {'yp013', '220210'}, 
+%     {'yp012', '220211'},
+%     {'yp012', '220212'},
+% };
 
 fprintf('\nSession queue:\n');
 for i = 1:length(session_list)
@@ -250,6 +268,12 @@ if ~exist(analysis_config.local_base_dir, 'dir')
     fprintf('  Created local base directory\n');
 end
 
+% The proc folder is on an external drive: fail early if it is not mounted,
+% rather than letting mkdir create a stray folder under /Volumes
+if ~exist(analysis_config.proc_base_dir, 'dir')
+    error('proc_base_dir not found (is the external drive mounted?): %s', analysis_config.proc_base_dir);
+end
+
 % Validate required functions are in path
 required_functions = {
     'download_oxford_mdl_data', ...       % New MDL download function
@@ -257,6 +281,7 @@ required_functions = {
     'extract_session_data_mdl', ...       % New MDL extraction function
     'cleanup_session_mdl_files', ...      % New cleanup function
     'single_session_oxford_CCA_mdl', ...  % Updated main pipeline function
+    'restrict_region_data_to_sample_size', ... % Neuron-count exclusion for PCA/kernels
     'perform_region_pca', ...             % Existing PCA function
     'perform_session_cca', ...            % Existing CCA kernel
     'perform_session_pcca', ...           % Partial CCA kernel

@@ -69,6 +69,7 @@ addRequired(p, 'base_dir', @ischar);
 addParameter(p, 'ThresholdRange', [30 40 50 60 70 80 100 120 150], @isnumeric);
 addParameter(p, 'SaveResults', true, @islogical);
 addParameter(p, 'OutputDir', '', @ischar);
+addParameter(p, 'ResultsDir', '', @ischar);
 addParameter(p, 'Verbose', true, @islogical);
 parse(p, base_dir, varargin{:});
 
@@ -88,7 +89,11 @@ if save_results && ~exist(output_dir, 'dir')
 end
 
 %% Identify All Analysis Results Files
-results_dir = fullfile(base_dir, 'sessions_spont_miss_long_results');
+if isempty(p.Results.ResultsDir)
+    results_dir = fullfile(base_dir, 'sessions_spont_miss_long_results');
+else
+    results_dir = p.Results.ResultsDir;
+end
 if ~exist(results_dir, 'dir')
     error('Session analysis results directory not found: %s', results_dir);
 end
@@ -111,6 +116,31 @@ if n_sessions == 0
     error('No analysis results files found in: %s', results_dir);
 end
 
+%% Region Name Mapping
+% Maps human-readable display names (used throughout tables and figures)
+% to the raw region code(s) stored in region_data.regions for each
+% session. 'Striatum' combines dorsal (STR) and ventral (STRv) striatum
+% neuron counts into a single combined region; any raw code not listed
+% here is excluded from the analysis.
+region_mapping = { ...
+    'M1 Ctx',       {'MOp'}; ...
+    'preM Ctx',     {'MOs'}; ...
+    'OFC',          {'ORB'}; ...
+    'mPFC',         {'mPFC'}; ...
+    'motorThal',    {'VALVM'}; ...
+    'sensorThal',   {'VPMPO'}; ...
+    'interThal',    {'ILM'}; ...
+    'MDThal',       {'MD'}; ...
+    'Pulvinar',     {'LP'}; ...
+    'Striatum',     {'STR', 'STRv'}; ...
+    'Hippocampus',  {'HIPP'}; ...
+    'Olf area',     {'OLF'}; ...
+    'Hypothalamus', {'HY'} ...
+};
+all_regions = region_mapping(:, 1)';       % fixed display-name order
+raw_region_codes = region_mapping(:, 2)';  % raw code(s) per display name
+n_regions = length(all_regions);
+
 %% Extract Neuron Counts from All Sessions
 if verbose
     fprintf('Phase I: Extracting neuron counts from session data...\n');
@@ -119,7 +149,6 @@ end
 
 % Initialize data structures
 session_names = cell(n_sessions, 1);
-all_regions = {};  % Will collect unique region names
 neuron_count_data = cell(n_sessions, 1);  % Store as cell initially
 
 for i = 1:n_sessions
@@ -149,29 +178,30 @@ for i = 1:n_sessions
             continue;
         end
         
-        regions = fieldnames(data.region_data.regions);
-        session_neuron_counts = struct();
-        
-        % Iterate through all regions in this session
-        for r = 1:length(regions)
-            region_name = regions{r};
-            region_data = data.region_data.regions.(region_name);
-            
-            % Extract spike_data dimensions
-            % CRITICAL: spike_data format is [time * neurons * trial]
-            if isfield(region_data, 'spike_data')
-                spike_data = region_data.spike_data;
-                n_neurons = size(spike_data, 2);  % First dimension = neurons
-                
-                session_neuron_counts.(region_name) = n_neurons;
-                
-                % Accumulate unique region names
-                if ~ismember(region_name, all_regions)
-                    all_regions{end+1} = region_name;
+        % Aggregate neuron counts per display region, summing across any
+        % raw codes that map to the same display region (e.g. Striatum)
+        session_neuron_counts = zeros(1, n_regions);
+
+        for r = 1:n_regions
+            codes = raw_region_codes{r};
+            count_sum = 0;
+
+            for c = 1:length(codes)
+                raw_code = codes{c};
+                if isfield(data.region_data.regions, raw_code)
+                    raw_region = data.region_data.regions.(raw_code);
+
+                    % Extract spike_data dimensions
+                    % CRITICAL: spike_data format is [time * neurons * trial]
+                    if isfield(raw_region, 'spike_data')
+                        count_sum = count_sum + size(raw_region.spike_data, 2);
+                    end
                 end
             end
+
+            session_neuron_counts(r) = count_sum;
         end
-        
+
         neuron_count_data{i} = session_neuron_counts;
         
     catch ME
@@ -179,10 +209,6 @@ for i = 1:n_sessions
         continue;
     end
 end
-
-% Sort region names alphabetically for consistent presentation
-all_regions = sort(all_regions);
-n_regions = length(all_regions);
 
 if verbose
     fprintf('\nData extraction complete.\n');
@@ -196,14 +222,7 @@ neuron_count_matrix = zeros(n_sessions, n_regions);
 
 for i = 1:n_sessions
     if ~isempty(neuron_count_data{i})
-        for r = 1:n_regions
-            region_name = all_regions{r};
-            if isfield(neuron_count_data{i}, region_name)
-                neuron_count_matrix(i, r) = neuron_count_data{i}.(region_name);
-            else
-                neuron_count_matrix(i, r) = 0;  % Region not present in this session
-            end
-        end
+        neuron_count_matrix(i, :) = neuron_count_data{i};
     end
 end
 
@@ -278,12 +297,26 @@ if save_results
     set(gca, 'YTick', 1:n_thresholds, 'YTickLabel', thresholds, ...
         'FontSize', 14, 'FontWeight', 'normal');
     
-    % Add percentage text annotations
+    % Add count text annotations (white text on dark boxes, black on light boxes
+    % for visibility against the flipud(hot) colormap)
+    cmap = colormap(gca);
+    clim_vals = get(gca, 'CLim');
+    cdata_range = max(clim_vals(2) - clim_vals(1), eps);
     for t = 1:n_thresholds
         for r = 1:n_regions
-            text(r, t, sprintf('%.0f', availability_matrix(t, r)), ...
+            value = availability_matrix(t, r);
+            cmap_idx = max(1, min(size(cmap, 1), ...
+                round(1 + (value - clim_vals(1)) / cdata_range * (size(cmap, 1) - 1))));
+            box_color = cmap(cmap_idx, :);
+            box_luminance = 0.299*box_color(1) + 0.587*box_color(2) + 0.114*box_color(3);
+            if box_luminance < 0.5
+                text_color = 'white';
+            else
+                text_color = 'black';
+            end
+            text(r, t, sprintf('%.0f', value), ...
                 'HorizontalAlignment', 'center', 'FontSize', 10, ...
-                'FontWeight', 'bold', 'Color', 'black');
+                'FontWeight', 'bold', 'Color', text_color);
         end
     end
     

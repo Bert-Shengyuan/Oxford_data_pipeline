@@ -49,7 +49,13 @@ function session_data = extract_session_data_mdl(session_id, date_str, config, t
 % - Trial selection based on label == 'cued hit long' in t_approach
 
     session_name = sprintf('%s_%s', session_id, date_str);
-    session_path = fullfile(config.local_base_dir, 'proc', session_id, session_name);
+    % Raw data may live on a separate drive (config.proc_base_dir)
+    if isfield(config, 'proc_base_dir') && ~isempty(config.proc_base_dir)
+        proc_base_dir = config.proc_base_dir;
+    else
+        proc_base_dir = config.local_base_dir;
+    end
+    session_path = fullfile(proc_base_dir, 'proc', session_id, session_name);
     
     fprintf('  Extracting MDL data from: %s\n', session_path);
     

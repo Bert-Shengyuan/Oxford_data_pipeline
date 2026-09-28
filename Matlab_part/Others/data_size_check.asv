@@ -40,7 +40,7 @@ RESULTS_DIR = '/Users/shengyuancai/Downloads/Oxford_dataset/cued_hit_long_defaul
 %   - Lower bound (30): Minimum for reliable PCA/CCA (10-15 components)
 %   - Current practice (50): Established in existing pipeline
 %   - Upper bound (150): Theoretical maximum for single-region analyses
-THRESHOLD_RANGE = [30,40,50, 60, 70, 80, 90,95,100, 120, 150,170,190,200];
+THRESHOLD_RANGE = [30, 40, 50, 60, 70, 80, 90,95,100, 120, 150,170,190,200];
 
 % Output configuration
 SAVE_RESULTS = true;

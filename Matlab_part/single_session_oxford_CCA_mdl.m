@@ -65,10 +65,18 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
     end
 
     % By default, the raw MDL and cell-metrics files downloaded into
-    % {local_base_dir}/proc/{session_id}/{session_name} are kept after
+    % {proc_base_dir}/proc/{session_id}/{session_name} are kept after
     % processing. Set analysis_config.delete_raw_data = true to opt into
     % deleting them (e.g. to reclaim disk space during large batch runs).
     delete_raw_data = isfield(analysis_config, 'delete_raw_data') && analysis_config.delete_raw_data;
+
+    % Raw data (proc/{animal}/{session}) may live outside local_base_dir,
+    % e.g. on an external drive; results are always written under local_base_dir.
+    if isfield(analysis_config, 'proc_base_dir') && ~isempty(analysis_config.proc_base_dir)
+        proc_base_dir = analysis_config.proc_base_dir;
+    else
+        proc_base_dir = analysis_config.local_base_dir;
+    end
 
     fprintf('=== Oxford Single-Session CCA Pipeline (MDL Format) ===\n');
     fprintf('t_approach table loaded: %d rows, %d columns\n', height(t_approach), width(t_approach));
@@ -120,6 +128,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             region_data = [];
             data_source = '';
             existing_analysis_results = struct();
+            legacy_region_data = [];
 
             % Check if results already exist
             if exist(cca_results_file, 'file')
@@ -128,12 +137,21 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                 try
                     saved_results = load(cca_results_file);
 
-                    if isfield(saved_results, 'region_data')
+                    if isfield(saved_results, 'region_data') && ...
+                            isfield(saved_results.region_data, 'all_regions_kept') && ...
+                            saved_results.region_data.all_regions_kept
                         region_data = saved_results.region_data;
                         existing_analysis_results = saved_results;
                         data_source = 'cached_cca_results';
                         fprintf('  Successfully loaded region data from cache\n');
-                        fprintf('  Valid regions: %s\n', strjoin(region_data.valid_regions, ', '));
+                        fprintf('  Regions: %s\n', strjoin(region_data.valid_regions, ', '));
+                    elseif isfield(saved_results, 'region_data')
+                        % Cache built by the old code, which dropped regions
+                        % below the neuron threshold: rebuild region_data so
+                        % every region is kept, but preserve other result fields.
+                        existing_analysis_results = saved_results;
+                        legacy_region_data = saved_results.region_data;
+                        fprintf('  Cached region_data excludes small regions (old format); rebuilding from MDL data\n');
                     else
                         fprintf('  Warning: Cached file missing region_data field\n');
                     end
@@ -149,10 +167,14 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                 try
                     % Use the same verification approach as download_single_session
                     download_success = download_single_session_mdl(session_id, date_str, ...
-                                                              analysis_config.local_base_dir, ...
+                                                              proc_base_dir, ...
                                                               server_config);
                     
-                    if ~download_success
+                    if ~download_success && ~isempty(legacy_region_data)
+                        fprintf('  Warning: rebuild download failed; using old cached region_data (small regions missing)\n');
+                        region_data = legacy_region_data;
+                        data_source = 'cached_cca_results';
+                    elseif ~download_success
                         % Document download failure with specific diagnostic information
                         error_message = sprintf('Server connection failed for session %s_%s', session_id, date_str);
                         fprintf('Download failed for session %s. Skipping...\n', session_name);
@@ -166,11 +188,11 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                         % Legacy tracking for backward compatibility
                         session_stats.failed_sessions{end+1} = {session_name, 'Download failed'};
                         continue;
+                    else
+                        data_source = 'mdl_download';
+                        session_stats.successful_downloads = session_stats.successful_downloads + 1;
                     end
-                    
-                    data_source = 'mdl_download';
-                    session_stats.successful_downloads = session_stats.successful_downloads + 1;
-                    
+
                     
                 catch download_error
                     error_msg = sprintf('Download failed: %s', download_error.message);
@@ -205,7 +227,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                     
                     % Cleanup even on failure (only if opted in)
                     if delete_raw_data
-                        cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, false);
+                        cleanup_session_mdl_files(session_id, date_str, proc_base_dir, false);
                     end
                     continue;
                 end
@@ -218,12 +240,13 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                 try
                     region_data = perform_region_analysis(session_data, analysis_config);
                     
+                    % Every region is kept here; the neuron-count exclusion
+                    % is applied only for PCA/kernels (Phases 4-5).
                     if isempty(region_data.valid_regions)
-                        error('No regions meet minimum neuron threshold (%d)', ...
-                              analysis_config.min_neurons_per_region);
+                        error('No named brain regions found in session');
                     end
-                    
-                    fprintf('  Valid regions: %d (%s)\n', length(region_data.valid_regions), ...
+
+                    fprintf('  Regions kept: %d (%s)\n', length(region_data.valid_regions), ...
                             strjoin(region_data.valid_regions, ', '));
                     
                 catch region_error
@@ -232,17 +255,57 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                     session_stats.failed_sessions{end+1} = {session_name, error_msg};
 
                     if delete_raw_data
-                        cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, false);
+                        cleanup_session_mdl_files(session_id, date_str, proc_base_dir, false);
                     end
                     continue;
                 end
             end
             
-            %% Phase 4: PCA Analysis (if applicable)
+            %% Resolve PCA / kernel settings
+            % PCA is computed only when analysis_config.compute_pca is true
+            % (default true, for backward compatibility).
+            compute_pca = ~isfield(analysis_config, 'compute_pca') || analysis_config.compute_pca;
+
+            kernel_type = 'cca';
+            if isfield(analysis_config, 'kernel_type') && ~isempty(analysis_config.kernel_type)
+                kernel_type = lower(analysis_config.kernel_type);
+            end
+
+            switch kernel_type
+                case 'cca'
+                    kernel_field = 'cca_result';
+                    kernel_fn = @perform_session_cca;
+                case 'pcca'
+                    kernel_field = 'pcca_result';
+                    kernel_fn = @perform_session_pcca;
+                case 'tkcca'
+                    kernel_field = 'tkcca_result';
+                    kernel_fn = @perform_session_tkcca;
+                case 'none'
+                    kernel_field = '';
+                    kernel_fn = [];
+                otherwise
+                    error('Unknown kernel_type "%s" (expected cca, pcca, tkcca, or none)', kernel_type);
+            end
+
+            % region_data keeps every region. The neuron-count exclusion is
+            % applied only here, and only if PCA or a kernel will run:
+            % regions below min_neurons_per_region are dropped and the rest
+            % are restricted to target_neurons sampled neurons.
+            kernel_data = [];
+            if compute_pca || ~isempty(kernel_fn)
+                fprintf('\n[Phase 4/5] Applying sample-size restriction for PCA/kernel...\n');
+                kernel_data = restrict_region_data_to_sample_size(region_data, analysis_config);
+            end
+
+            %% Phase 4: PCA Analysis (optional, analysis_config.compute_pca)
             % When region_data was reused from cache, PCA results are also
             % reused rather than recomputed, so an existing cached file only
             % gains the newly requested kernel's result field.
-            if strcmp(data_source, 'cached_cca_results') && isfield(existing_analysis_results, 'pca_results')
+            pca_results = [];
+            if ~compute_pca
+                fprintf('\n[Phase 4] PCA skipped (compute_pca = false)\n');
+            elseif strcmp(data_source, 'cached_cca_results') && isfield(existing_analysis_results, 'pca_results')
                 fprintf('\n[Phase 4] Reusing cached PCA results...\n');
                 pca_results = existing_analysis_results.pca_results;
             else
@@ -254,12 +317,12 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                 pca_results.config = analysis_config;
 
                 try
-                    % Perform PCA for each valid region
-                    for region_idx = 1:length(region_data.valid_regions)
-                        region_name = region_data.valid_regions{region_idx};
-                        selected_neurons = region_data.regions.(region_name).selected_neurons;
+                    % Perform PCA for each region that passes the sample-size restriction
+                    for region_idx = 1:length(kernel_data.valid_regions)
+                        region_name = kernel_data.valid_regions{region_idx};
+                        selected_neurons = kernel_data.regions.(region_name).selected_neurons;
 
-                        spike_data = region_data.regions.(region_name).spike_data(:, selected_neurons, :);
+                        spike_data = kernel_data.regions.(region_name).spike_data(:, selected_neurons, :);
 
 
                         fprintf('  Performing PCA for region: %s\n', region_name);
@@ -286,37 +349,19 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             end
 
             %% Phase 5: Cross-Regional Kernel Analysis (CCA / pCCA / tkCCA / none)
-            kernel_type = 'cca';
-            if isfield(analysis_config, 'kernel_type') && ~isempty(analysis_config.kernel_type)
-                kernel_type = lower(analysis_config.kernel_type);
-            end
-
-            switch kernel_type
-                case 'cca'
-                    kernel_field = 'cca_result';
-                    kernel_fn = @perform_session_cca;
-                case 'pcca'
-                    kernel_field = 'pcca_result';
-                    kernel_fn = @perform_session_pcca;
-                case 'tkcca'
-                    kernel_field = 'tkcca_result';
-                    kernel_fn = @perform_session_tkcca;
-                case 'none'
-                    kernel_field = '';
-                    kernel_fn = [];
-                otherwise
-                    error('Unknown kernel_type "%s" (expected cca, pcca, tkcca, or none)', kernel_type);
-            end
-
             kernel_result = [];
 
             if isempty(kernel_fn)
                 fprintf('\n[Phase 5] Kernel step skipped (kernel_type = ''none'') — returning aligned spike data only.\n');
+            elseif isempty(kernel_data.region_pairs)
+                fprintf('\n[Phase 5] %s skipped: fewer than 2 regions meet the %d-neuron threshold\n', ...
+                        upper(kernel_type), analysis_config.min_neurons_per_region);
+                kernel_field = '';
             else
                 fprintf('\n[Phase 5] Performing cross-regional %s analysis...\n', upper(kernel_type));
 
                 try
-                    kernel_result = kernel_fn(region_data, session_name, analysis_config);
+                    kernel_result = kernel_fn(kernel_data, session_name, analysis_config);
 
                     if isempty(kernel_result.pair_results)
                         fprintf('  Warning: No valid region pairs for %s\n', upper(kernel_type));
@@ -335,7 +380,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
                     session_stats.failed_sessions{end+1} = {session_name, error_msg};
 
                     if delete_raw_data
-                        cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, false);
+                        cleanup_session_mdl_files(session_id, date_str, proc_base_dir, false);
                     end
                     continue;
                 end
@@ -352,10 +397,14 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             analysis_results.analysis_timestamp = datestr(now);
             analysis_results.pipeline_version = '4.0_configurable_kernel_alignment_subregion';
 
-            % Include PCA results from Phase 4
-            analysis_results.pca_results = pca_results;
+            % Include PCA results from Phase 4 (any previously saved
+            % pca_results are kept when compute_pca = false)
+            if ~isempty(pca_results)
+                analysis_results.pca_results = pca_results;
+            end
 
-            % Include region data (now with subregion labels) for downstream analyses
+            % Include region data (every region, with subregion labels) for
+            % downstream analyses -- not the sample-size-restricted kernel view
             analysis_results.region_data = region_data;
 
             % Append the newly computed kernel result, if any
@@ -382,7 +431,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             % fprintf('\n[Phase 7] Cleaning up raw data files...\n');
             % 
             % if strcmp(data_source, 'mdl_download')
-            %     cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, true);
+            %     cleanup_session_mdl_files(session_id, date_str, proc_base_dir, true);
             % else
             %     fprintf('  Skipping cleanup (data loaded from cache)\n');
             % end
@@ -402,7 +451,7 @@ function single_session_oxford_CCA_mdl(session_list, server_config, analysis_con
             % Attempt cleanup (only if opted in)
             if delete_raw_data
                 try
-                    cleanup_session_mdl_files(session_id, date_str, analysis_config.local_base_dir, false);
+                    cleanup_session_mdl_files(session_id, date_str, proc_base_dir, false);
                 catch
                     % Ignore cleanup errors
                 end
